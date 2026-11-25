@@ -1,0 +1,187 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+  workflow_call:  # the release runs every check before it publishes
+  schedule:
+    - cron: '17 4 * * 1'  # Mondays: the newest releases of the dependencies, with no commit here
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.15'  # of the checks that run once: the newest Python pashe supports
+
+# Every job starts at once: the checks of the code run once each, the tests once per Python and server.
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false  # nothing pushes back to the repository
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: astral-sh/setup-uv@v10.4.0
+      - name: Install just
+        run: uv tool install rust-just
+      - name: Install dependencies
+        run: just install --locked --python ${{ env.PYTHON_VERSION }}
+      - name: Run the linters
+        run: just lint
+
+  types:
+    name: Types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false  # nothing pushes back to the repository
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: astral-sh/setup-uv@v10.4.0
+      - name: Install just
+        run: uv tool install rust-just
+      - name: Install dependencies
+        run: just install --locked --python ${{ env.PYTHON_VERSION }}
+      - name: Run the type checkers
+        run: just types
+
+  deps:
+    name: Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false  # nothing pushes back to the repository
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: astral-sh/setup-uv@v10.4.0
+      - name: Install just
+        run: uv tool install rust-just
+      - name: Install dependencies
+        run: just install --locked --python ${{ env.PYTHON_VERSION }}
+      - name: Check the lock and look for vulnerabilities
+        run: just deps
+
+  examples:
+    name: Examples of the docstrings and the docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false  # nothing pushes back to the repository
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: astral-sh/setup-uv@v10.4.0
+      - name: Install just
+        run: uv tool install rust-just
+      - name: Install dependencies
+        run: just install --locked --python ${{ env.PYTHON_VERSION }}
+      - name: Run the examples of the docstrings
+        run: just doctest
+      - name: Run the examples of the docs
+        run: just docs-check
+
+  test:
+    name: Tests, Python ${{ matrix.python-version }}, ${{ matrix.redis-image }}
+    runs-on: ubuntu-latest
+    # Python 3.16 is in alpha and the free-threaded builds are new: their failures are reported, not blocking.
+    continue-on-error: ${{ matrix.experimental || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.13', '3.14', '3.15']
+        redis-image: ['redis:8-alpine']
+        include:
+          - python-version: '3.15'
+            redis-image: 'redis:6.2-alpine'  # the oldest with CLIENT TRACKING, still offered by clouds
+          - python-version: '3.15'
+            redis-image: 'redis:7.4-alpine'
+          - python-version: '3.15'
+            redis-image: 'valkey/valkey:8-alpine'
+          - python-version: '3.15'
+            redis-image: 'valkey/valkey:9-alpine'
+          - python-version: '3.15'
+            redis-image: 'docker.dragonflydb.io/dragonflydb/dragonfly:latest'
+          - python-version: '3.14t'
+            redis-image: 'redis:8-alpine'
+            free-threaded: true
+            experimental: true
+          - python-version: '3.15t'
+            redis-image: 'redis:8-alpine'
+            free-threaded: true
+            experimental: true
+          - python-version: '3.16'
+            redis-image: 'redis:8-alpine'
+            experimental: true
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false  # nothing pushes back to the repository
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
+      - uses: astral-sh/setup-uv@v10.4.0
+      - name: Install just
+        run: uv tool install rust-just
+      - name: Install dependencies
+        run: just install --locked --python ${{ matrix.python-version }}
+      - name: Prefetch the server image
+        run: docker pull "${{ matrix.redis-image }}"
+      - name: Run the tests
+        run: just test
+        env:
+          PASHE_TEST_REDIS_IMAGE: ${{ matrix.redis-image }}
+          PYTHON_GIL: ${{ matrix.free-threaded && '0' || '1' }}
+
+  bounds:
+    # the two ends of what pyproject.toml allows on every Python: the floors, and the newest releases
+    # past the lock, which a release of a dependency breaks with no commit here
+    name: ${{ matrix.session == 'lowest' && 'Lowest' || 'Highest' }} dependency versions, Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        session: [lowest, highest]
+        python-version: ['3.12', '3.13', '3.14', '3.15']
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false  # nothing pushes back to the repository
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@v10.4.0
+      - name: Install just
+        run: uv tool install rust-just
+      - name: Install nox
+        run: uv sync --locked --only-group test  # nox makes the environment of the run itself
+      - name: Run the tests
+        run: just test-${{ matrix.session }} ${{ matrix.python-version }}
+
+  check:
+    # The one check a branch protection asks for: it passes when every job above passed, the
+    # experimental cells of the tests aside.
+    name: All checks passed
+    if: always()
+    needs: [lint, types, deps, examples, test, bounds]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: re-actors/alls-green@v1.3.0
+        with:
+          jobs: ${{ toJSON(needs) }}

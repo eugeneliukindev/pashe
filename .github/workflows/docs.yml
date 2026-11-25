@@ -1,0 +1,47 @@
+name: Documentation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false  # nothing pushes back to the repository
+          fetch-depth: 0  # the whole history, for the date each page last changed
+      - uses: astral-sh/setup-uv@v10.4.0
+      - name: Install just
+        run: uv tool install rust-just
+      - name: Install dependencies
+        run: uv sync --locked --no-default-groups --group docs
+      - name: Build in strict mode
+        run: just docs
+      - name: Check the links
+        run: just docs-links
+      - uses: actions/upload-pages-artifact@v5.0.0
+        if: github.event_name == 'push'
+        with:
+          path: site
+
+  deploy:
+    if: github.event_name == 'push'
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/configure-pages@v6.0.0
+      - uses: actions/deploy-pages@v5.0.1
+        id: deployment
