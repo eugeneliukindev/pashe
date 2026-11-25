@@ -1,0 +1,12 @@
+__pycache__/
+.venv/
+.mypy_cache/
+.ruff_cache/
+dist/
+.idea/
+coverage/
+.hypothesis/
+.pytest_cache/
+.unasyncd_cache/
+site/
+.nox/
