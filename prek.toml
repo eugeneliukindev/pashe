@@ -1,0 +1,167 @@
+default_install_hook_types = ["pre-commit"]
+default_stages = ["pre-commit"]
+
+[[repos]]
+repo = "builtin"
+hooks = [
+    { id = "check-merge-conflict" },
+    { id = "check-added-large-files", exclude = "^uv\\.lock$" },  # the lock is generated, and outgrows the limit by itself
+    { id = "check-case-conflict" },
+    { id = "check-yaml" },
+    { id = "detect-private-key" },
+    { id = "end-of-file-fixer" },
+    { id = "trailing-whitespace" },
+    { id = "mixed-line-ending" },
+]
+
+[[repos]]
+repo = "local"
+hooks = [
+    # Regenerates src/pashe/_internal/sync and fails when it changed: unasyncd --check exits 0 even then.
+    {
+        id = "unasyncd",
+        name = "unasyncd",
+        language = "system",
+        entry = "uv run --locked unasyncd --quiet",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "ruff-format",
+        name = "ruff format",
+        language = "system",
+        entry = "uv run --locked ruff format --check",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "ruff-check",
+        name = "ruff check",
+        language = "system",
+        entry = "uv run --locked ruff check",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "flake8",
+        name = "wemake-python-styleguide",
+        language = "system",
+        entry = "uv run --locked flake8 src src/pashe/_internal/sync/threads.py src/pashe/_internal/sync/locks/lock.py src/pashe/_internal/sync/backends/redis/listeners.py",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "mypy",
+        name = "mypy",
+        language = "system",
+        entry = "uv run --locked mypy src tests docs/examples",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "pyright",
+        name = "pyright",
+        language = "system",
+        entry = "uv run --locked pyright",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "pyrefly",
+        name = "pyrefly",
+        language = "system",
+        entry = "uv run --locked pyrefly check",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "import-linter",
+        name = "import-linter",
+        language = "system",
+        entry = "uv run --locked lint-imports",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "deptry",
+        name = "deptry",
+        language = "system",
+        entry = "uv run --locked deptry src",
+        files = "^(src/|pyproject\\.toml$)",
+        pass_filenames = false
+    },
+    {
+        id = "codespell",
+        name = "codespell",
+        language = "system",
+        entry = "uv run --locked codespell",
+        pass_filenames = false
+    },
+    {
+        id = "actionlint",
+        name = "actionlint",
+        language = "system",
+        entry = "uv run --locked actionlint",
+        files = "^\\.github/workflows/",
+        pass_filenames = false
+    },
+    {
+        id = "zizmor",
+        name = "zizmor",
+        language = "system",
+        entry = "uv run --locked zizmor --no-progress .github/workflows",
+        files = "^\\.github/",
+        pass_filenames = false
+    },
+    {
+        id = "check-github-workflows",
+        name = "check the schema of the workflows",
+        language = "system",
+        entry = "uv run --locked check-jsonschema --builtin-schema vendor.github-workflows",
+        files = "^\\.github/workflows/.*\\.yml$"
+    },
+    {
+        id = "format-justfile",
+        name = "just --fmt",
+        language = "system",
+        entry = "just --fmt --check --unstable",
+        files = "^justfile$",
+        pass_filenames = false
+    },
+    {
+        id = "slotscheck",
+        name = "slotscheck",
+        language = "system",
+        entry = "uv run --locked slotscheck -m pashe",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "typos",
+        name = "typos",
+        language = "system",
+        entry = "uv run --locked typos",
+        pass_filenames = false
+    },
+    {
+        id = "tombi-format",
+        name = "tombi format",
+        language = "system",
+        entry = "uv run --locked tombi format --check",
+        types = ["toml"],
+        pass_filenames = false
+    },
+    {
+        id = "tombi-lint",
+        name = "tombi lint",
+        language = "system",
+        entry = "uv run --locked tombi lint",
+        types = ["toml"],
+        pass_filenames = false
+    },
+]
+
+# Should be the last: an exclude that matches no file is a mistake.
+[[repos]]
+repo = "meta"
+hooks = [{ id = "check-useless-excludes" }]
