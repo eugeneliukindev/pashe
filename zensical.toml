@@ -1,0 +1,223 @@
+[project]
+site_name = "pashe"
+site_description = "Caching for Python services that run as many processes"
+site_url = "https://eugeneliukindev.github.io/pashe/"
+repo_url = "https://github.com/eugeneliukindev/pashe"
+repo_name = "eugeneliukindev/pashe"
+edit_uri = "edit/main/docs/"
+extra_css = ["stylesheets/pashe.css"]
+nav = [
+    # The guides run in the order a user meets the API: each page builds on those before it.
+    { "Home" = "index.md" },
+    { "Start here" = [
+        { "Getting started" = "getting-started.md" },
+        { "Core concepts" = "concepts.md" },
+        { "What to choose" = "guides/choosing.md" },
+    ] },
+    { "Caching functions" = [
+        { "Caching a function" = "guides/caching/decorator.md" },
+        { "Keys" = "guides/caching/keys.md" },
+        { "What is stored, and for how long" = "guides/caching/what-is-stored.md" },
+        { "Types" = "guides/caching/types.md" },
+        { "Batches" = "guides/caching/batches.md" },
+        { "Values without a loader" = "guides/caching/value.md" },
+        { "Reusing options" = "guides/caching/reusing-options.md" },
+    ] },
+    { "Invalidation" = [
+        { "Tags" = "guides/invalidation/tags.md" },
+        { "Invalidating on writes" = "guides/invalidation/on-a-write.md" },
+    ] },
+    { "Backends" = [
+        { "Choosing a backend" = "guides/backends/index.md" },
+        { "Memory" = "guides/backends/memory.md" },
+        { "SQLite" = "guides/backends/sqlite.md" },
+        { "Redis and Valkey" = "guides/backends/redis.md" },
+        { "Redis Cluster" = "guides/backends/cluster.md" },
+        { "Near cache" = "guides/backends/near-cache.md" },
+        { "Writing your own backend" = "guides/backends/your-own.md" },
+    ] },
+    { "Encoding" = [
+        { "Codecs" = "guides/values/codecs.md" },
+        { "Compressors" = "guides/values/compressors.md" },
+    ] },
+    { "Failures and load" = [
+        { "Stale results" = "guides/failures/stale.md" },
+        { "A failing backend" = "guides/failures/failing-backend.md" },
+        { "Stampede protection" = "guides/failures/stampedes.md" },
+    ] },
+    { "Observability" = [
+        { "How hooks work" = "guides/observability/hooks.md" },
+        { "Logging" = "guides/observability/logging.md" },
+        { "OpenTelemetry" = "guides/observability/opentelemetry.md" },
+        { "Prometheus" = "guides/observability/prometheus.md" },
+        { "Sentry" = "guides/observability/sentry.md" },
+    ] },
+    { "Locks and rate limits" = [
+        { "Locks" = "guides/locks/locks.md" },
+        { "Rate limits" = "guides/locks/rate-limits.md" },
+    ] },
+    { "Web" = [
+        { "HTTP caching headers" = "guides/web/headers.md" },
+        { "Caching an endpoint" = "guides/web/endpoint.md" },
+        { "Rate limits for HTTP" = "guides/web/rate-limits.md" },
+        { "FastAPI" = "guides/web/fastapi.md" },
+    ] },
+    { "Testing" = "guides/testing.md" },
+    { "In production" = [
+        { "Recommended setup" = "guides/recommended-setup.md" },
+        { "Examples" = "examples.md" },
+        { "Troubleshooting" = "guides/troubleshooting.md" },
+    ] },
+    { "API reference" = [
+        { "pashe" = "reference/caches.md" },
+        { "Options" = "reference/options.md" },
+        { "pashe.backends" = "reference/backends.md" },
+        { "pashe.invalidation" = "reference/invalidation.md" },
+        { "pashe.codecs" = "reference/codecs.md" },
+        { "pashe.compressors" = "reference/compressors.md" },
+        { "pashe.hooks" = "reference/hooks.md" },
+        { "pashe.locks" = "reference/locks.md" },
+        { "pashe.ratelimit" = "reference/ratelimit.md" },
+        { "pashe.asgi and pashe.wsgi" = "reference/http.md" },
+        { "pashe.errors" = "reference/errors.md" },
+        { "pashe.contrib" = [
+            { "redis" = "reference/contrib/redis.md" },
+            { "msgspec" = "reference/contrib/msgspec.md" },
+            { "pydantic" = "reference/contrib/pydantic.md" },
+            { "orjson" = "reference/contrib/orjson.md" },
+            { "zstd" = "reference/contrib/zstd.md" },
+            { "fastapi" = "reference/contrib/fastapi.md" },
+            { "opentelemetry" = "reference/contrib/opentelemetry.md" },
+            { "prometheus" = "reference/contrib/prometheus.md" },
+            { "sentry" = "reference/contrib/sentry.md" },
+        ] },
+        { "Internal API" = "reference/internal.md" },
+    ] },
+    { "Deep dive" = [
+        { "pashe and other libraries" = "deep-dive/comparison.md" },
+        { "What a call costs" = "deep-dive/cost.md" },
+        { "What is in Redis" = "deep-dive/storage.md" },
+        { "What pashe does not do" = "deep-dive/non-goals.md" },
+        { "Security" = "deep-dive/security.md" },
+        { "Contributing" = "deep-dive/contributing.md" },
+        { "Changelog" = "deep-dive/changelog.md" },
+    ] },
+]
+
+[project.theme]
+variant = "modern"
+language = "en"
+logo = "images/logo.svg"
+favicon = "images/favicon.svg"
+font.text = "Inter"
+font.code = "JetBrains Mono"
+features = [
+    "content.action.copy",
+    "content.action.edit",
+    "content.code.annotate",
+    "content.code.copy",
+    "content.tabs.link",
+    "content.tooltips",
+    "navigation.footer",
+    "navigation.indexes",
+    "navigation.instant",
+    "navigation.instant.prefetch",
+    "navigation.path",
+    "navigation.top",
+    "navigation.tracking",
+    "search.highlight",
+]
+
+# Python blue and a warm yellow of a cache hit; the hex values live in stylesheets/pashe.css.
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+toc.permalink = true
+pymdownx.betterem = {}
+pymdownx.details = {}
+pymdownx.emoji.emoji_generator = "zensical.extensions.emoji.to_svg"
+pymdownx.emoji.emoji_index = "zensical.extensions.emoji.twemoji"
+pymdownx.highlight.anchor_linenums = true
+pymdownx.highlight.line_spans = "__span"
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.inlinehilite = {}
+pymdownx.magiclink = {}
+# Every page gets the abbreviations, shown as tooltips.
+pymdownx.snippets.auto_append = ["docs/.snippets/abbreviations.md"]
+# The examples are files of docs/examples, checked as code: a page shows a section of one.
+pymdownx.snippets.base_path = [".", "docs/examples"]
+pymdownx.snippets.check_paths = true  # a missing file or section fails the build
+pymdownx.snippets.dedent_subsections = true  # a section inside main() reads from the first column
+pymdownx.superfences.custom_fences = [
+    { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tabbed.alternate_style = true
+pymdownx.tabbed.combine_header_slug = true
+
+[project.plugins.search]
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["src"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+extensions = ["griffe_inherited_docstrings"]  # an override without a docstring shows the docstring of the contract
+docstring_style = "google"
+# private names stay out; of the dunders only what a user calls: cache(...), a cached call, a with block
+filters = ["!^_[^_]", "!^__(?!(call|enter|exit|aenter|aexit)__$)"]
+heading_level = 2
+members_order = "source"
+merge_init_into_class = true
+separate_signature = true
+show_if_no_docstring = false
+show_root_heading = true
+show_signature_annotations = true
+show_source = false
+show_symbol_type_heading = true
+show_symbol_type_toc = true
+signature_crossrefs = true
+
+# The date a page last changed, from git; a page not committed yet shows the date of the build.
+[project.plugins.git-revision-date-localized]
+fallback_to_build_date = true
+strict = false  # a page not in git yet, as a new one before its commit, is not an error
+
+[project.plugins.social]
+# Cards for link previews in the brand blue, around the darker disc of the logo
+cards_layout_options.background_color = "#2b5b84"
+cards_layout_options.color = "#ffffff"
+
+[project.plugins.llmstxt]
+full_output = "llms-full.txt"
+markdown_description = "pashe caches the results of Python functions in Redis or memory for services that run as many processes: stale results, stampede protection, tags, near caches, locks and rate limits, for sync and async code."
+
+[project.plugins.llmstxt.sections]
+"Start here" = ["index.md", "getting-started.md", "concepts.md", "examples.md"]
+"Guides" = ["guides/*.md", "guides/*/*.md"]
+"API reference" = ["reference/*.md", "reference/*/*.md"]

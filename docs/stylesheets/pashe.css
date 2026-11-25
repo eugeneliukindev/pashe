@@ -1,0 +1,371 @@
+/* pashe: the blue of Python for the brand, the warm yellow of a cache hit for the accent. */
+
+/* Colors of the light scheme */
+:root,
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #2b5b84;
+  --md-primary-fg-color--light: #3d74a6;
+  --md-primary-fg-color--dark: #1f4466;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: #ffffffb3;
+  --md-accent-fg-color: #c98f00;
+  --md-accent-fg-color--transparent: #f7b5001a;
+
+  /* Secondary text, such as the table of contents, darker than the theme for contrast */
+  --md-default-fg-color--light: #000000b3;
+
+
+  /* Diagrams in the brand blue: yellow text on a pale background reads badly */
+  --md-mermaid-node-bg-color: #2b5b841a;
+  --md-mermaid-node-fg-color: #1f4466;
+  --md-mermaid-edge-color: #3d74a6;
+  --md-mermaid-label-fg-color: #1f2937;
+
+  --pashe-glow-blue: rgba(43, 91, 132, 0.1);
+  --pashe-glow-yellow: rgba(247, 181, 0, 0.08);
+  --pashe-table-head: #2b5b8414;
+}
+
+/* Colors of the dark scheme: a lighter blue keeps the contrast */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #6fa8dc;
+  --md-primary-fg-color--light: #93bfe6;
+  --md-primary-fg-color--dark: #4f8cc4;
+  --md-primary-bg-color: #0f1b26;
+  --md-accent-fg-color: #f7b500;
+  --md-accent-fg-color--transparent: #f7b5001a;
+
+  --md-default-fg-color--light: #ffffffc2;
+
+
+  --md-mermaid-node-bg-color: #6fa8dc26;
+  --md-mermaid-node-fg-color: #cfe3f5;
+  --md-mermaid-edge-color: #93bfe6;
+  --md-mermaid-label-fg-color: #e5e7eb;
+
+  --pashe-glow-blue: rgba(111, 168, 220, 0.1);
+  --pashe-glow-yellow: rgba(247, 181, 0, 0.06);
+  --pashe-table-head: #6fa8dc1f;
+}
+
+/* A soft glow of both colors from the top of every page, as django-modern-rest has in green */
+body {
+  background-image:
+    radial-gradient(ellipse 80% 45% at 50% 0%, var(--pashe-glow-blue) 0%, transparent 60%),
+    radial-gradient(ellipse 35% 25% at 85% 0%, var(--pashe-glow-yellow) 0%, transparent 70%);
+  background-attachment: fixed;
+}
+
+/* Headings in the brand blue */
+.md-typeset h1,
+.md-typeset h2 {
+  color: var(--md-primary-fg-color--dark);
+}
+
+[data-md-color-scheme="slate"] .md-typeset h1,
+[data-md-color-scheme="slate"] .md-typeset h2 {
+  color: var(--md-primary-fg-color--light);
+}
+
+/* Code in the colors of One Dark, in both schemes */
+:root,
+[data-md-color-scheme="default"],
+[data-md-color-scheme="slate"] {
+  --md-code-bg-color: #282c34;
+  --md-code-fg-color: #abb2bf;
+  --md-code-hl-color: #3e4451;
+  --md-code-hl-keyword-color: #c678dd;
+  --md-code-hl-string-color: #98c379;
+  --md-code-hl-number-color: #d19a66;
+  --md-code-hl-function-color: #61afef;
+  --md-code-hl-constant-color: #d19a66;
+  --md-code-hl-special-color: #56b6c2;
+  --md-code-hl-name-color: #abb2bf;
+  --md-code-hl-operator-color: #56b6c2;
+  --md-code-hl-punctuation-color: #abb2bf;
+  --md-code-hl-variable-color: #e06c75;
+  --md-code-hl-comment-color: #7f848e;
+  --md-code-hl-generic-color: #abb2bf;
+}
+
+.md-typeset code .c,
+.md-typeset code .c1,
+.md-typeset code .cm {
+  font-style: italic;
+}
+
+/* A decorator in the yellow One Dark gives it */
+.md-typeset code .nd { /* codespell:ignore - nd is the class Pygments gives a decorator */
+  color: #e5c07b;
+}
+
+/* Inline code in the plain text color of One Light and One Dark: code, not an accent */
+.md-typeset :not(pre) > code {
+  color: #383a42;
+  background-color: #eaeaeb;
+}
+
+[data-md-color-scheme="slate"] .md-typeset :not(pre) > code {
+  color: #abb2bf;
+  background-color: #2c313a;
+}
+
+/* Tables: a header row in a tint of the brand */
+.md-typeset table:not([class]) th {
+  color: var(--md-primary-fg-color--dark);
+  background-color: var(--pashe-table-head);
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
+  color: var(--md-primary-fg-color--light);
+}
+
+/* Admonitions: a stripe and a title in the color of their kind, so the kind is seen at a glance */
+.md-typeset .admonition,
+.md-typeset details {
+  border-left: 0.2rem solid var(--pashe-admonition, #448aff);
+}
+
+.md-typeset .admonition > .admonition-title,
+.md-typeset details > summary {
+  color: var(--pashe-admonition, #448aff);
+  font-weight: 700;
+}
+
+.md-typeset .admonition > .admonition-title::before,
+.md-typeset details > summary::before {
+  background-color: var(--pashe-admonition, #448aff);
+}
+
+.md-typeset .admonition.note,
+.md-typeset details.note {
+  --pashe-admonition: #2b6cb0;
+  background-color: #2b6cb01a;
+}
+
+.md-typeset .admonition.info,
+.md-typeset details.info {
+  --pashe-admonition: #0e7490;
+  background-color: #0e74901a;
+}
+
+.md-typeset .admonition.tip,
+.md-typeset details.tip {
+  --pashe-admonition: #15803d;
+  background-color: #15803d1a;
+}
+
+.md-typeset .admonition.warning,
+.md-typeset details.warning {
+  --pashe-admonition: #b45309;
+  background-color: #f59e0b1f;
+}
+
+.md-typeset .admonition.danger,
+.md-typeset details.danger {
+  --pashe-admonition: #c81e1e;
+  background-color: #dc26261a;
+}
+
+.md-typeset .admonition.example,
+.md-typeset details.example {
+  --pashe-admonition: #7c3aed;
+  background-color: #7c3aed1a;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition.note,
+[data-md-color-scheme="slate"] .md-typeset details.note {
+  --pashe-admonition: #7cb4ff;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition.info,
+[data-md-color-scheme="slate"] .md-typeset details.info {
+  --pashe-admonition: #5fd0e0;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition.tip,
+[data-md-color-scheme="slate"] .md-typeset details.tip {
+  --pashe-admonition: #6ee7a0;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition.warning,
+[data-md-color-scheme="slate"] .md-typeset details.warning {
+  --pashe-admonition: #fbbf24;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition.danger,
+[data-md-color-scheme="slate"] .md-typeset details.danger {
+  --pashe-admonition: #ff8a8a;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition.example,
+[data-md-color-scheme="slate"] .md-typeset details.example {
+  --pashe-admonition: #c4a5ff;
+}
+
+/* Cards of the landing page: a stripe of the accent, lifted on hover */
+.md-typeset .grid.cards > ul > li {
+  border-left: 0.2rem solid var(--md-accent-fg-color);
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.md-typeset .grid.cards > ul > li:hover {
+  transform: translateY(-0.1rem);
+}
+
+/* Icons of brands in their own colors, not in the grey of the text around them */
+.md-typeset .twemoji.brand-uv { color: #de5fe9; }
+.md-typeset .twemoji.brand-poetry { color: #60a5fa; }
+.md-typeset .twemoji.brand-pypi { color: #3775a9; }
+.md-typeset .twemoji.brand-redis { color: #ff4438; }
+.md-typeset .twemoji.brand-fastapi { color: #009688; }
+
+[data-md-color-scheme="slate"] .md-typeset .twemoji.brand-pypi { color: #7fb0dc; }
+[data-md-color-scheme="slate"] .md-typeset .twemoji.brand-fastapi { color: #2ec4b6; }
+
+/* A recommendation in the yellow of a cache hit */
+.md-typeset .twemoji.recommended { color: var(--md-accent-fg-color); }
+
+/* Questions of the troubleshooting page */
+.md-typeset details.question {
+  --pashe-admonition: #2b5b84;
+  background-color: #2b5b8414;
+}
+
+[data-md-color-scheme="slate"] .md-typeset details.question {
+  --pashe-admonition: #93bfe6;
+}
+
+/* The home page: the badge, the name, the tagline, the badges, the install line and two buttons */
+.pashe-hero {
+  text-align: center;
+}
+
+.md-typeset .pashe-hero__logo {
+  display: block;
+  margin: 0.5rem auto 0;
+  filter: drop-shadow(0 0.5rem 1.2rem rgba(29, 63, 122, 0.28));
+}
+
+.pashe-hero h1 {
+  margin: 0.2em 0 0.1em;
+  font-size: 3.6em;  /* the name of the project, bigger than the title of a page */
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.md-typeset .pashe-hero__tagline {
+  margin: 0 0 0.9em;
+  font-size: 1.25em;
+  font-weight: 600;
+  color: var(--md-default-fg-color--light);
+}
+
+/* One step between the badges, the install line and the buttons; a wider one before the prose */
+.md-typeset .pashe-hero > p:has(img[src*="shields.io"]) {
+  margin: 0;
+}
+
+.md-typeset .pashe-hero .highlight {
+  display: inline-block;  /* the install line as wide as its text, centered */
+  margin: 1.2em auto 0;
+  text-align: left;
+}
+
+.md-typeset .pashe-hero .highlight pre {
+  margin: 0;
+}
+
+.md-typeset .pashe-hero .highlight code {
+  padding-right: 3em;  /* room for the copy button, which would cover the end of the line */
+}
+
+.md-typeset .pashe-hero > p:has(.md-button) {
+  margin: 1.2em 0 0;
+}
+
+.md-typeset .pashe-hero .md-button {
+  margin: 0 0.3em;
+}
+
+.md-typeset .pashe-hero {
+  margin-bottom: 2.4em;
+}
+
+.md-typeset .pashe-hero .headerlink {
+  display: none;  /* the name of the project is no section to link to */
+}
+
+/* The buttons of a page float to the right: on the home page they would push the logo aside, so
+   they keep their corner without taking room from the centered hero */
+.md-content__inner:has(.pashe-hero) {
+  position: relative;
+}
+
+.md-content__inner:has(.pashe-hero) > .md-content__button {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.md-content__inner:has(.pashe-hero) > .md-content__button + .md-content__button {
+  right: 1.9rem;  /* the second one stands left of the first, 8px apart, as the float put it */
+}
+
+/* The prose of the home page: a block in the middle of the column, its lines left-aligned */
+.md-content__inner:has(.pashe-hero) > p {
+  margin-inline: auto;
+}
+
+/* Cards of the home page: the icon in the brand blue, on one line with the title */
+.md-typeset .grid.cards .lg {
+  color: var(--md-primary-fg-color);
+}
+
+/* A wider page: diagrams, tables and code take the room, prose keeps a line one reads at once */
+.md-grid {
+  max-width: 72rem;
+}
+
+.md-typeset > p,
+.md-typeset > ul,
+.md-typeset > ol,
+.md-typeset > blockquote {
+  max-width: 36rem;  /* the theme sets 20px a rem: 720px, about 90 characters */
+}
+
+/* Code in a table breaks between words only: a name or a default split in the middle reads as two */
+.md-typeset table:not([class]) code {
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* Code in a heading or in the table of contents reads as the heading: no box of its own */
+.md-typeset h1:not(.doc-heading) code,
+.md-typeset h2:not(.doc-heading) code,
+.md-typeset h3:not(.doc-heading) code,
+.md-typeset h4:not(.doc-heading) code,
+.md-nav code {
+  padding: 0;
+  color: inherit;
+  background-color: transparent;
+}
+
+[data-md-color-scheme="slate"] .md-typeset h1:not(.doc-heading) code,
+[data-md-color-scheme="slate"] .md-typeset h2:not(.doc-heading) code,
+[data-md-color-scheme="slate"] .md-typeset h3:not(.doc-heading) code,
+[data-md-color-scheme="slate"] .md-typeset h4:not(.doc-heading) code {
+  color: inherit;
+  background-color: transparent;
+}
+
+/* The copy button on the dark code of both schemes: the theme gives it the color of the text */
+.md-typeset .md-code__button,
+.md-typeset .md-clipboard {
+  color: #abb2bf;
+}
+
+.md-typeset .md-code__button:hover,
+.md-typeset .md-clipboard:hover {
+  color: var(--md-accent-fg-color);
+}

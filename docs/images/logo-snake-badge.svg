@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="pashe">
+  <!-- Badge: the snake runs round the rim of a dark disc and guards the cubes in the middle. -->
+  <defs>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#ffd84d" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#ffd84d" stop-opacity="0"/>
+    </radialGradient>
+    <g id="cube">
+      <polygon points="0,-24 20.8,-12 0,0 -20.8,-12" fill="#ffe680"/>
+      <polygon points="-20.8,-12 0,0 0,24 -20.8,12" fill="#f7b500"/>
+      <polygon points="0,0 20.8,-12 20.8,12 0,24" fill="#e09200"/>
+    </g>
+  </defs>
+
+  <rect width="256" height="256" fill="#ffffff"/>
+  <circle cx="128" cy="128" r="118" fill="#1d3f7a"/>
+  <circle cx="128" cy="136" r="62" fill="url(#glow)"/>
+
+  <g fill="none" stroke="#5aa2ff" stroke-linecap="round">
+    <path d="M98.6 208.8 A86 86 0 1 1 171 53.5" stroke-width="20"/>
+  </g>
+  <path d="M95.2 218.2 Q132.4 227.9 164.3 205.9 Q131.5 207.9 102 199.4 Z" fill="#5aa2ff"/>
+  <g>
+  </g>
+
+  <g transform="translate(128 140) scale(1.15) translate(-128 -140)">
+    <use href="#cube" x="107" y="146"/>
+    <use href="#cube" x="149" y="146"/>
+    <use href="#cube" x="128" y="158"/>
+    <use href="#cube" x="128" y="122"/>
+  </g>
+
+  <path d="M193 67 l8 5 M201 72 l5 -1 M201 72 l2 5" fill="none" stroke="#ffd84d" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="177" cy="58" r="19" fill="#5aa2ff"/>
+  <circle cx="172" cy="53" r="5" fill="#ffffff"/>
+  <circle cx="185" cy="58" r="5" fill="#ffffff"/>
+  <circle cx="173" cy="54" r="2.6" fill="#1d3f7a"/>
+  <circle cx="186" cy="59" r="2.6" fill="#1d3f7a"/>
+
+  <g fill="#ffd84d">
+    <path d="M84 70 l2.5 7.5 7.5 2.5 -7.5 2.5 -2.5 7.5 -2.5 -7.5 -7.5 -2.5 7.5 -2.5z"/>
+    <path d="M118 52 l1.5 4.5 4.5 1.5 -4.5 1.5 -1.5 4.5 -1.5 -4.5 -4.5 -1.5 4.5 -1.5z"/>
+  </g>
+</svg>
