@@ -1,0 +1,133 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from typing import TYPE_CHECKING, final
+
+from pashe._internal.async_.tasks import AsyncConcurrencyLimit
+from pashe._internal.cache.call import CallState, in_no_cache, timed
+from pashe.errors import BackendError
+from pashe.hooks import CacheStatus, Failure, Operation
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable, Hashable, Mapping, Sequence
+
+    from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend
+    from pashe._internal.async_.cache.fallback import AsyncFallbackStore
+    from pashe._internal.cache.call import CallReporter
+    from pashe._internal.cache.entry import Stored
+    from pashe._internal.cache.entry_codec import EntryCodec
+    from pashe._internal.cache.policy import Policy
+    from pashe.hooks import Hook
+
+type _States[K: Hashable] = dict[K, CallState]
+type _ToStore[K: Hashable] = dict[K, Stored]
+type _Found[K: Hashable] = dict[K, object]  # values decoded as the value type
+type AsyncBatchFunction[K: Hashable, V] = Callable[[list[K]], Awaitable[Mapping[K, V]]]
+
+
+@final
+class AsyncBatchFunctionCache[K: Hashable, V]:
+    # The cache of one batch function: reads every item at once, loads the missing ones in one call.
+    __slots__ = ("_backend", "_codec", "_concurrency", "_fallback", "_hooks", "_policy", "_reporter")
+
+    def __init__(
+        self,
+        policy: Policy,
+        *,
+        codec: EntryCodec,
+        reporter: CallReporter,
+        hooks: Hook,
+        backend: AsyncPrefixedBackend,
+        fallback: AsyncFallbackStore,
+    ) -> None:
+        self._policy = policy
+        self._codec = codec
+        self._reporter = reporter
+        self._hooks = hooks
+        self._backend = backend
+        self._fallback = fallback
+
+        self._concurrency = AsyncConcurrencyLimit(policy.stampede.max_concurrent_loads)
+
+    async def get_or_load_many(self, keys: Mapping[K, str], load: AsyncBatchFunction[K, V]) -> dict[K, V]:
+        states = {item: CallState(key) for item, key in keys.items()}
+        if in_no_cache():  # every item loads, and is stored for the calls after it
+            found: _Found[K] = {}
+            await self._store_all(states, await self._load(states, found, missing=list(states), load=load))
+            return {item: found[item] for item in states if item in found}  # type: ignore[misc]  # decoded as the value type
+        try:
+            raws = await self._backend.get_many([state.key for state in states.values()])
+        except BackendError as error:
+            self._hooks.on_error(Failure(Operation.GET_MANY, "", error))
+            stored = [
+                self._codec.decode(state.key, await self._fallback.get(state.key), ())  # noqa: WPS476 - memory, nothing to win
+                for state in states.values()
+            ]
+            found, missing = self._sort(states, stored, CacheStatus.FALLBACK)
+            await self._store_all_in_fallback(states, await self._load(states, found, missing=missing, load=load))
+        else:
+            stored = [
+                self._codec.decode(state.key, raw, state.tag_generations)
+                for state, raw in zip(states.values(), raws, strict=True)
+            ]
+            found, missing = self._sort(states, stored, CacheStatus.HIT)
+            await self._store_all(states, await self._load(states, found, missing=missing, load=load))
+        return {item: found[item] for item in states if item in found}  # type: ignore[misc]  # decoded as the value type
+
+    async def delete(self, key: str) -> bool:
+        return await self._backend.delete(key)
+
+    def _sort(
+        self, states: _States[K], stored: Sequence[Stored | None], status: CacheStatus
+    ) -> tuple[_Found[K], list[K]]:
+        found: _Found[K] = {}
+        for (item, state), entry in zip(states.items(), stored, strict=True):
+            answer = self._policy.answer_for(entry)
+            if answer is not None and answer.status is not CacheStatus.NOT_FOUND:  # a batch keeps no "not found"
+                found[item] = answer.value
+                self._reporter.report(state.key, status, stale_at=answer.stale_at)
+        return found, [pending for pending in states if pending not in found]
+
+    async def _load(
+        self, states: _States[K], found: _Found[K], *, missing: list[K], load: AsyncBatchFunction[K, V]
+    ) -> _ToStore[K]:
+        if not missing:
+            return {}
+
+        batch = CallState("")
+        async with self._concurrency.slot(has_stale_answer=False):
+            with timed(batch):
+                loaded = await load(missing)
+
+        to_store: _ToStore[K] = {}
+        for item in missing:
+            state = replace(states[item], load_seconds=batch.load_seconds)  # every item took the whole batch
+            if item not in loaded:  # the function left it out: absent from the result, not stored
+                self._reporter.report(state.key, CacheStatus.MISS, load_seconds=state.load_seconds)
+                continue
+            stored = self._codec.encode_loaded(state, loaded[item])
+            found[item] = loaded[item] if stored is None else stored.value
+            self._reporter.report(
+                state.key,
+                CacheStatus.MISS,
+                load_seconds=state.load_seconds,
+                stale_at=stored and stored.entry.stale_at,
+            )
+            if stored is not None:
+                to_store[item] = stored
+
+        return to_store
+
+    async def _store_all(self, states: _States[K], to_store: _ToStore[K]) -> None:
+        if not to_store:
+            return
+        raws = {states[item].key: stored.raw for item, stored in to_store.items()}
+        try:
+            await self._backend.set_many(raws, ttl=max(map(self._policy.storage_lifetime, to_store.values())))
+        except BackendError as error:
+            self._hooks.on_error(Failure(Operation.SET_MANY, "", error))
+            await self._store_all_in_fallback(states, to_store)
+
+    async def _store_all_in_fallback(self, states: _States[K], to_store: _ToStore[K]) -> None:
+        for item, stored in to_store.items():
+            await self._fallback.set(states[item].key, stored)  # noqa: WPS476 - memory, nothing to win at once

@@ -1,0 +1,83 @@
+from __future__ import annotations
+
+import random
+from typing import TYPE_CHECKING, Final, final
+
+from pashe._internal.cache.keys import KeyPrefix
+from pashe.errors import CodecError
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from pashe._internal.async_.backends.backend import AsyncBackend
+    from pashe._internal.cache.entry import Generations
+
+_GENERATION_BITS: Final = 62  # leaves room for invalidation_count to count up within 64 bits
+
+
+@final
+class AsyncTags:
+    __slots__ = ("_backend", "_invalidation_count")
+
+    def __init__(self, backend: AsyncBackend) -> None:
+        self._backend = backend
+
+        self._invalidation_count = 0  # of this process: a call after one shares no load started before it
+
+    @property
+    def invalidation_count(self) -> int:
+        return self._invalidation_count
+
+    async def read(self, key: str, tags: Sequence[str]) -> tuple[bytes | None, Generations]:
+        if not tags:
+            return await self._backend.get(key), ()
+        counters = _counters(tags)
+        raws = await self._backend.get_many([key, *counters])
+        return raws[0], await self._generations(counters, raws[1:])
+
+    async def generations(self, tags: Sequence[str]) -> Generations:
+        if not tags:
+            return ()
+        counters = _counters(tags)
+        return await self._generations(counters, await self._backend.get_many(counters))
+
+    async def invalidate(self, tags: Sequence[str]) -> None:
+        # An invalidation is rare: one write after another is fine.
+        try:
+            for counter in _counters(tags):
+                await self._backend.set_if_absent(counter, _random_start())  # noqa: WPS476 - INCRBY alone would start at 1
+                await self._backend.incr(counter, 1)  # noqa: WPS476 - as above
+        finally:  # counted after the writes: a load that started meanwhile may have read the old data
+            self._invalidation_count += 1
+
+    async def _generations(self, counters: Sequence[str], raws: Sequence[bytes | None]) -> Generations:
+        parsed = [_parse(raw) for raw in raws if raw is not None]
+        if len(parsed) == len(raws):  # every counter exists, as on almost every call: no task per tag
+            return tuple(parsed)
+        pairs = zip(counters, raws, strict=True)
+        return tuple([await self._counter_or_create(counter, raw) for counter, raw in pairs])  # noqa: WPS476 - once per new tag
+
+    async def _counter_or_create(self, counter: str, raw: bytes | None) -> int:
+        if raw is not None:
+            return _parse(raw)
+        start = _random_start()
+        if await self._backend.set_if_absent(counter, start):
+            return _parse(start)
+        created = await self._backend.get(counter)  # another caller created it first
+        return _parse(created or start)
+
+
+def _counters(tags: Sequence[str]) -> list[str]:
+    return [KeyPrefix.TAG + tag for tag in tags]
+
+
+def _random_start() -> bytes:
+    return str(random.getrandbits(_GENERATION_BITS)).encode()
+
+
+def _parse(raw: bytes) -> int:
+    try:
+        return int(raw)
+    except ValueError as error:
+        msg = "a tag counter is not an integer"
+        raise CodecError(msg) from error

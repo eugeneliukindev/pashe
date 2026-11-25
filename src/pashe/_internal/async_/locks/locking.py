@@ -1,0 +1,66 @@
+from __future__ import annotations
+
+import asyncio
+import random
+import secrets
+import time
+from typing import TYPE_CHECKING, Final, final
+
+from pashe._internal.async_.tasks import ashield
+from pashe.errors import BackendError
+from pashe.hooks import Failure, Operation
+
+if TYPE_CHECKING:
+    from pashe._internal.async_.backends.backend import AsyncBackend
+    from pashe.hooks import Hook
+
+_OWNER_BYTES: Final = 16
+_FIRST_PAUSE: Final = 0.01  # seconds before the first new check of a busy lock
+_LONGEST_PAUSE: Final = 0.5
+_PAUSES_PER_TTL: Final = 10  # a waiter checks at least this often within the ttl of the lock
+_JITTER: Final = 0.5  # a pause is cut by up to this share, so waiters do not check together
+
+
+async def aacquire(backend: AsyncBackend, key: str, ttl: float, *, timeout: float | None = None) -> bytes | None:  # noqa: ASYNC109 - bounds the wait, not the block that holds the lock
+    pauses = _Backoff(ttl, timeout)
+    owner = await atry_acquire(backend, key, ttl)
+    while owner is None:
+        pause = pauses.next_delay()
+        if pause is None:
+            return None
+        await asyncio.sleep(pause)
+        owner = await atry_acquire(backend, key, ttl)
+    return owner
+
+
+async def atry_acquire(backend: AsyncBackend, key: str, ttl: float) -> bytes | None:
+    owner = secrets.token_hex(_OWNER_BYTES).encode()  # only its holder releases or extends the lock
+    return owner if await backend.set_if_absent(key, owner, ttl=ttl) else None
+
+
+async def arelease(backend: AsyncBackend, key: str, owner: bytes | None, *, hooks: Hook) -> None:
+    # a lock the cache took for itself, as a load does: no caller waits for an error, so it goes to on_error
+    if owner is None:
+        return
+    try:
+        await ashield(backend.delete_if_equals(key, owner))  # a cancelled caller still releases it
+    except BackendError as error:
+        hooks.on_error(Failure(Operation.RELEASE_LOCK, key, error))
+
+
+@final
+class _Backoff:
+    __slots__ = ("_deadline", "_longest", "_pause")
+
+    def __init__(self, ttl: float, timeout: float | None) -> None:
+        self._pause = _FIRST_PAUSE
+        self._longest = max(_FIRST_PAUSE, min(_LONGEST_PAUSE, ttl / _PAUSES_PER_TTL))
+        self._deadline = None if timeout is None else time.monotonic() + timeout
+
+    def next_delay(self) -> float | None:
+        pause = self._pause * random.uniform(1 - _JITTER, 1)  # noqa: S311 - jitter, not a secret
+        self._pause = min(self._pause * 2, self._longest)
+        if self._deadline is None:
+            return pause
+        left = self._deadline - time.monotonic()
+        return None if left <= 0 else min(pause, left)
