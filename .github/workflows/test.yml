@@ -156,7 +156,7 @@ jobs:
       - name: Install nox
         run: uv sync --locked --only-group test  # nox makes the environment of the run itself
       - name: Run the session
-        run: uv run nox -s "$SESSION"
+        run: uv run --no-sync nox -s "$SESSION"  # nox alone, installed above: the project itself is the session's to install
         env:
           SESSION: ${{ matrix.session }}  # through the environment: it is the output of another job
 
