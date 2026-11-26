@@ -25,6 +25,7 @@ from pashe.options import Fallback, IfError, IfSlow, Negative, Stale, Stampede, 
 from pashe.ratelimit import per_second
 from tests.harness.helpers import (
     LOOP_BLOCK_SECONDS,
+    SYNC,
     FailingMemoryBackend,
     RecordingHook,
     Source,
@@ -32,17 +33,16 @@ from tests.harness.helpers import (
     cached_function,
     call,
     close,
-    failing_memory,
     json_codecs,
-    memory,
-    new_cache,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
+    from pashe import AsyncCachedFunction, AsyncCachedValue, CachedFunction, CachedValue
+    from pashe.codecs import Codec
     from pashe.hooks import Failure, Outcome
-    from tests.harness.helpers import Clock, NewCache
+    from tests.harness.helpers import Clock, EitherCache, NewCache, Side
 
 
 class UserNotFoundError(LookupError):
@@ -56,11 +56,11 @@ def results(outcomes: list[Outcome]) -> list[CacheStatus]:
 # Hits and the TTL
 
 
-async def test_a_second_call_is_answered_from_the_cache(side: str, new_process_cache: NewCache) -> None:
+async def test_a_second_call_is_answered_from_the_cache(new_process_cache: NewCache) -> None:
     outcomes: list[Outcome] = []
     cache = new_process_cache(hooks=[RecordingHook(outcomes=outcomes)])
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60, key="user:{user_id}")
+    get_user = cached_function(cache, source, ttl=60, key="user:{user_id}")
 
     first = await call(get_user, 42)
     second = await call(get_user, 42)
@@ -71,10 +71,10 @@ async def test_a_second_call_is_answered_from_the_cache(side: str, new_process_c
     assert outcomes[0].key == "user:42"
 
 
-async def test_other_arguments_load_results_of_their_own(side: str, new_process_cache: NewCache) -> None:
+async def test_other_arguments_load_results_of_their_own(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60)
+    get_user = cached_function(cache, source, ttl=60)
 
     users = [await call(get_user, 1), await call(get_user, 2)]
 
@@ -85,11 +85,11 @@ async def test_other_arguments_load_results_of_their_own(side: str, new_process_
 @pytest.mark.parametrize("ttl", [90, 90.0, timedelta(seconds=90)])
 @pytest.mark.parametrize(("elapsed", "loads"), [(89, 1), (91, 2)])
 async def test_a_result_answers_until_its_ttl_ends(
-    side: str, new_process_cache: NewCache, clock: Clock, ttl: object, elapsed: float, loads: int
+    new_process_cache: NewCache, clock: Clock, ttl: object, elapsed: float, loads: int
 ) -> None:
     cache = new_process_cache(clock=clock)
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=ttl)
+    get_user = cached_function(cache, source, ttl=ttl)
     await call(get_user, 1)
 
     clock.now += elapsed
@@ -99,12 +99,10 @@ async def test_a_result_answers_until_its_ttl_ends(
 
 
 @pytest.mark.parametrize(("elapsed", "loads"), [(4, 1), (6, 2)])
-async def test_a_ttl_from_the_result(
-    side: str, new_process_cache: NewCache, clock: Clock, elapsed: float, loads: int
-) -> None:
+async def test_a_ttl_from_the_result(new_process_cache: NewCache, clock: Clock, elapsed: float, loads: int) -> None:
     cache = new_process_cache(clock=clock)
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=lambda user: timedelta(seconds=5 * user["version"]))
+    get_user = cached_function(cache, source, ttl=lambda user: timedelta(seconds=5 * user["version"]))
     await call(get_user, 1)
 
     clock.now += elapsed
@@ -113,13 +111,11 @@ async def test_a_ttl_from_the_result(
     assert source.calls == loads
 
 
-async def test_a_negative_ttl_from_the_result_is_not_stored_and_reported(
-    side: str, new_process_cache: NewCache
-) -> None:
+async def test_a_negative_ttl_from_the_result_is_not_stored_and_reported(new_process_cache: NewCache) -> None:
     failures: list[Failure] = []
     cache = new_process_cache(hooks=[RecordingHook(failures=failures)])
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=lambda _user: -1)
+    get_user = cached_function(cache, source, ttl=lambda _user: -1)
 
     await call(get_user, 1)
     await call(get_user, 1)
@@ -131,10 +127,10 @@ async def test_a_negative_ttl_from_the_result_is_not_stored_and_reported(
 # set, refresh and invalidate
 
 
-async def test_set_stores_a_result_without_loading(side: str, new_process_cache: NewCache) -> None:
+async def test_set_stores_a_result_without_loading(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60)
+    get_user = cached_function(cache, source, ttl=60)
 
     await call(get_user.set, {"id": 1, "version": 7}, 1)
 
@@ -142,10 +138,10 @@ async def test_set_stores_a_result_without_loading(side: str, new_process_cache:
     assert source.calls == 0
 
 
-async def test_refresh_loads_and_stores_whatever_is_stored(side: str, new_process_cache: NewCache) -> None:
+async def test_refresh_loads_and_stores_whatever_is_stored(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60)
+    get_user = cached_function(cache, source, ttl=60)
     await call(get_user, 1)
     source.version = 3
 
@@ -156,10 +152,10 @@ async def test_refresh_loads_and_stores_whatever_is_stored(side: str, new_proces
     assert source.calls == 2
 
 
-async def test_a_refresh_the_policy_does_not_store_drops_the_old_result(side: str, new_process_cache: NewCache) -> None:
+async def test_a_refresh_the_policy_does_not_store_drops_the_old_result(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60, store=Store(when=lambda user: user["version"] == 1))
+    get_user = cached_function(cache, source, ttl=60, store=Store(when=lambda user: user["version"] == 1))
     await call(get_user, 1)
     source.version = 2
 
@@ -169,10 +165,10 @@ async def test_a_refresh_the_policy_does_not_store_drops_the_old_result(side: st
     assert source.calls == 3
 
 
-async def test_invalidate_drops_the_result(side: str, new_process_cache: NewCache) -> None:
+async def test_invalidate_drops_the_result(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60)
+    get_user = cached_function(cache, source, ttl=60)
     await call(get_user, 1)
 
     removed = await call(get_user.invalidate, 1)
@@ -182,9 +178,9 @@ async def test_invalidate_drops_the_result(side: str, new_process_cache: NewCach
     assert source.calls == 2
 
 
-async def test_invalidate_of_a_missing_result_answers_false(side: str, new_process_cache: NewCache) -> None:
+async def test_invalidate_of_a_missing_result_answers_false(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
-    get_user = cached_function(cache, side, Source(), ttl=60)
+    get_user = cached_function(cache, Source(), ttl=60)
 
     removed = await call(get_user.invalidate, 1)
 
@@ -194,10 +190,10 @@ async def test_invalidate_of_a_missing_result_answers_false(side: str, new_proce
 # Tags
 
 
-async def test_invalidating_a_tag_makes_its_results_load_again(side: str, new_process_cache: NewCache) -> None:
+async def test_invalidating_a_tag_makes_its_results_load_again(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60, tags=["users"])
+    get_user = cached_function(cache, source, ttl=60, tags=["users"])
     await call(get_user, 1)
 
     await call(cache.invalidate_tags, "users")
@@ -206,11 +202,11 @@ async def test_invalidating_a_tag_makes_its_results_load_again(side: str, new_pr
     assert source.calls == 2
 
 
-async def test_invalidating_a_tag_leaves_the_results_of_other_tags(side: str, new_process_cache: NewCache) -> None:
+async def test_invalidating_a_tag_leaves_the_results_of_other_tags(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     users, orders = Source(), Source()
-    get_user = cached_function(cache, side, users, ttl=60, key="user:{user_id}", tags=["users"])
-    get_order = cached_function(cache, side, orders, ttl=60, key="order:{user_id}", tags=["orders"])
+    get_user = cached_function(cache, users, ttl=60, key="user:{user_id}", tags=["users"])
+    get_order = cached_function(cache, orders, ttl=60, key="order:{user_id}", tags=["orders"])
     await call(get_user, 1)
     await call(get_order, 1)
 
@@ -221,10 +217,10 @@ async def test_invalidating_a_tag_leaves_the_results_of_other_tags(side: str, ne
     assert (users.calls, orders.calls) == (2, 1)
 
 
-async def test_a_tag_template_names_a_tag_per_call(side: str, new_process_cache: NewCache) -> None:
+async def test_a_tag_template_names_a_tag_per_call(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60, tags=["user:{user_id}"])
+    get_user = cached_function(cache, source, ttl=60, tags=["user:{user_id}"])
     await call(get_user, 1)
     await call(get_user, 2)
 
@@ -235,10 +231,10 @@ async def test_a_tag_template_names_a_tag_per_call(side: str, new_process_cache:
     assert source.calls == 3  # user 1 again, user 2 still cached
 
 
-async def test_every_invalidation_of_a_tag_takes_effect(side: str, new_process_cache: NewCache) -> None:
+async def test_every_invalidation_of_a_tag_takes_effect(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60, tags=["users"])
+    get_user = cached_function(cache, source, ttl=60, tags=["users"])
     await call(get_user, 1)
     await call(cache.invalidate_tags, "users")
     await call(get_user, 1)
@@ -249,10 +245,10 @@ async def test_every_invalidation_of_a_tag_takes_effect(side: str, new_process_c
     assert source.calls == 3
 
 
-async def test_a_tag_invalidated_before_any_result_still_caches(side: str, new_process_cache: NewCache) -> None:
+async def test_a_tag_invalidated_before_any_result_still_caches(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60, tags=["users"])
+    get_user = cached_function(cache, source, ttl=60, tags=["users"])
     await call(cache.invalidate_tags, "users")
 
     await call(get_user, 1)
@@ -261,11 +257,11 @@ async def test_a_tag_invalidated_before_any_result_still_caches(side: str, new_p
     assert source.calls == 1
 
 
-async def test_an_invalidation_reaches_every_process(side: str) -> None:
-    backend = memory(side)
-    reader, writer = new_cache(side, backend), new_cache(side, backend)
+async def test_an_invalidation_reaches_every_process(side: Side) -> None:
+    backend = side.memory()
+    reader, writer = side.new_cache(backend), side.new_cache(backend)
     source = Source()
-    get_user = cached_function(reader, side, source, ttl=60, tags=["users"])
+    get_user = cached_function(reader, source, ttl=60, tags=["users"])
     await call(get_user, 1)
 
     await call(writer.invalidate_tags, "users")
@@ -274,25 +270,19 @@ async def test_an_invalidation_reaches_every_process(side: str) -> None:
     assert source.calls == 2
 
 
-def _rename(cache: Any, side: str, error: Exception | None = None) -> Any:
+def _rename(cache: EitherCache, side: Side, error: Exception | None = None) -> Callable[[int], object]:
     """Return a write of user_id of the side that invalidates its tag, and raises error if one is given."""
 
     def write(user_id: int) -> None:  # noqa: ARG001 - the tag is filled from it
         if error is not None:
             raise error
 
-    if side == "sync":
-        return cache.invalidates(tags=["user:{user_id}"])(write)
-
-    async def awrite(user_id: int) -> None:
-        write(user_id)
-
-    return cache.invalidates(tags=["user:{user_id}"])(awrite)
+    return cache.invalidates(tags=["user:{user_id}"])(side.function(write))
 
 
-async def test_invalidates_drops_the_results_of_its_tags_after_a_write(side: str, new_process_cache: NewCache) -> None:
+async def test_invalidates_drops_the_results_of_its_tags_after_a_write(side: Side, new_process_cache: NewCache) -> None:
     cache, source = new_process_cache(), Source()
-    get_user = cached_function(cache, side, source, ttl=60, tags=["user:{user_id}"])
+    get_user = cached_function(cache, source, ttl=60, tags=["user:{user_id}"])
     await call(get_user, 1)
     await call(get_user, 2)
 
@@ -303,9 +293,9 @@ async def test_invalidates_drops_the_results_of_its_tags_after_a_write(side: str
     assert source.calls == 3  # user 1 again, user 2 still cached
 
 
-async def test_invalidates_drops_them_after_a_write_that_raised_too(side: str, new_process_cache: NewCache) -> None:
+async def test_invalidates_drops_them_after_a_write_that_raised_too(side: Side, new_process_cache: NewCache) -> None:
     cache, source = new_process_cache(), Source()
-    get_user = cached_function(cache, side, source, ttl=60, tags=["user:{user_id}"])
+    get_user = cached_function(cache, source, ttl=60, tags=["user:{user_id}"])
     await call(get_user, 1)
 
     with pytest.raises(ValueError, match="half written"):
@@ -315,10 +305,10 @@ async def test_invalidates_drops_them_after_a_write_that_raised_too(side: str, n
     assert source.calls == 2
 
 
-async def test_invalidates_hands_a_failing_backend_to_the_hooks_and_returns(side: str) -> None:
+async def test_invalidates_hands_a_failing_backend_to_the_hooks_and_returns(side: Side) -> None:
     failures: list[Failure] = []
-    backend = failing_memory(side)
-    rename = _rename(new_cache(side, backend, hooks=[RecordingHook(failures=failures)]), side)
+    backend = side.failing_memory()
+    rename = _rename(side.new_cache(backend, hooks=[RecordingHook(failures=failures)]), side)
     backend.down = True
 
     await call(rename, 1)
@@ -336,23 +326,19 @@ def test_invalidates_refuses_a_template_of_no_parameter() -> None:
 # Values
 
 
-def _login_code(cache: Any, side: str, **options: Any) -> Any:
+def _login_code(
+    cache: EitherCache, side: Side, **options: object
+) -> CachedValue[[str, int], str] | AsyncCachedValue[[str, int], str]:
     """Return a value of the side: the one-time code of an email, tagged with its user."""
     declare = cache.value(ttl=600, key="otp:{email}", tags=["user:{user_id}"], **options)
-    if side == "sync":
 
-        def login_code(email: str, user_id: int) -> str:
-            raise NotImplementedError
-
-        return declare(login_code)
-
-    async def alogin_code(email: str, user_id: int) -> str:
+    def login_code(email: str, user_id: int) -> str:
         raise NotImplementedError
 
-    return declare(alogin_code)
+    return declare(side.function(login_code))
 
 
-async def test_a_value_is_what_was_set_and_none_before(side: str, new_process_cache: NewCache) -> None:
+async def test_a_value_is_what_was_set_and_none_before(side: Side, new_process_cache: NewCache) -> None:
     code = _login_code(new_process_cache(), side)
     before = await call(code.get, "ada@example.com", 1)
 
@@ -362,7 +348,7 @@ async def test_a_value_is_what_was_set_and_none_before(side: str, new_process_ca
     assert await call(code.get, "ada@example.com", 1) == "482913"
 
 
-async def test_a_value_lives_for_its_ttl(side: str, new_process_cache: NewCache, clock: Clock) -> None:
+async def test_a_value_lives_for_its_ttl(side: Side, new_process_cache: NewCache, clock: Clock) -> None:
     code = _login_code(new_process_cache(clock=clock), side)
     await call(code.set, "482913", "ada@example.com", 1)
 
@@ -371,7 +357,7 @@ async def test_a_value_lives_for_its_ttl(side: str, new_process_cache: NewCache,
     assert await call(code.get, "ada@example.com", 1) is None
 
 
-async def test_a_value_is_dropped_by_invalidate_and_by_its_tags(side: str, new_process_cache: NewCache) -> None:
+async def test_a_value_is_dropped_by_invalidate_and_by_its_tags(side: Side, new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     code = _login_code(cache, side)
     await call(code.set, "1", "ada@example.com", 1)
@@ -385,18 +371,18 @@ async def test_a_value_is_dropped_by_invalidate_and_by_its_tags(side: str, new_p
     assert await call(code.get, "bob@example.com", 2) is None
 
 
-async def test_a_value_of_a_failing_backend_raises(side: str) -> None:
-    backend = failing_memory(side)
-    code = _login_code(new_cache(side, backend), side)
+async def test_a_value_of_a_failing_backend_raises(side: Side) -> None:
+    backend = side.failing_memory()
+    code = _login_code(side.new_cache(backend), side)
     backend.down = True
 
     with pytest.raises(BackendError):
         await call(code.get, "ada@example.com", 1)
 
 
-async def test_get_of_a_cached_function_reads_without_loading(side: str, new_process_cache: NewCache) -> None:
+async def test_get_of_a_cached_function_reads_without_loading(new_process_cache: NewCache) -> None:
     cache, source = new_process_cache(), Source()
-    get_user = cached_function(cache, side, source, ttl=60, key="user:{user_id}")
+    get_user = cached_function(cache, source, ttl=60, key="user:{user_id}")
     missing = await call(get_user.get, 1)
     await call(get_user, 1)
 
@@ -410,12 +396,12 @@ async def test_get_of_a_cached_function_reads_without_loading(side: str, new_pro
 # Errors of the loader
 
 
-async def test_negative_caching_keeps_a_not_found(side: str, new_process_cache: NewCache) -> None:
+async def test_negative_caching_keeps_a_not_found(new_process_cache: NewCache) -> None:
     outcomes: list[Outcome] = []
     cache = new_process_cache(hooks=[RecordingHook(outcomes=outcomes)])
     source = Source()
     source.error = UserNotFoundError()
-    get_user = cached_function(cache, side, source, ttl=60, negative=Negative(on=(UserNotFoundError,), ttl=30))
+    get_user = cached_function(cache, source, ttl=60, negative=Negative(on=(UserNotFoundError,), ttl=30))
 
     with pytest.raises(NotFoundError) as loaded:
         await call(get_user, 1)
@@ -428,11 +414,11 @@ async def test_negative_caching_keeps_a_not_found(side: str, new_process_cache: 
     assert results(outcomes) == [CacheStatus.MISS, CacheStatus.NOT_FOUND]
 
 
-async def test_a_not_found_is_asked_again_after_its_ttl(side: str, new_process_cache: NewCache, clock: Clock) -> None:
+async def test_a_not_found_is_asked_again_after_its_ttl(new_process_cache: NewCache, clock: Clock) -> None:
     cache = new_process_cache(clock=clock)
     source = Source()
     source.error = UserNotFoundError()
-    get_user = cached_function(cache, side, source, ttl=60, negative=Negative(on=(UserNotFoundError,), ttl=30))
+    get_user = cached_function(cache, source, ttl=60, negative=Negative(on=(UserNotFoundError,), ttl=30))
     with pytest.raises(NotFoundError):
         await call(get_user, 1)
     source.error = None
@@ -444,11 +430,11 @@ async def test_a_not_found_is_asked_again_after_its_ttl(side: str, new_process_c
     assert source.calls == 2
 
 
-async def test_loader_errors_are_not_cached(side: str, new_process_cache: NewCache) -> None:
+async def test_loader_errors_are_not_cached(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     source = Source()
     source.error = RuntimeError("source is down")
-    get_user = cached_function(cache, side, source, ttl=60)
+    get_user = cached_function(cache, source, ttl=60)
 
     for _ in range(2):
         with pytest.raises(RuntimeError):
@@ -460,14 +446,12 @@ async def test_loader_errors_are_not_cached(side: str, new_process_cache: NewCac
 # Stale results
 
 
-async def test_stale_while_revalidate_answers_at_once_and_reloads(
-    side: str, new_process_cache: NewCache, clock: Clock
-) -> None:
+async def test_stale_while_revalidate_answers_at_once_and_reloads(new_process_cache: NewCache, clock: Clock) -> None:
     outcomes: list[Outcome] = []
     cache = new_process_cache(clock=clock, hooks=[RecordingHook(outcomes=outcomes)])
     source = Source()
-    options: dict[str, Any] = {"ttl": 60, "stale": Stale(while_revalidate=600)}
-    get_user = cached_function(cache, side, source, **options)
+    options: dict[str, object] = {"ttl": 60, "stale": Stale(while_revalidate=600)}
+    get_user = cached_function(cache, source, **options)
     await call(get_user, 1)
     clock.now += 61
     source.version = 2
@@ -475,7 +459,7 @@ async def test_stale_while_revalidate_answers_at_once_and_reloads(
     stale = await call(get_user, 1)
     await close(cache)  # waits for the reload in the background
     later = new_process_cache(clock=clock, hooks=[RecordingHook(outcomes=outcomes)])  # a closed backend takes no calls
-    fresh = await call(cached_function(later, side, source, **options), 1)
+    fresh = await call(cached_function(later, source, **options), 1)
 
     assert stale == {"id": 1, "version": 1}
     assert fresh == {"id": 1, "version": 2}
@@ -483,7 +467,7 @@ async def test_stale_while_revalidate_answers_at_once_and_reloads(
 
 
 @pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
-@pytest.mark.parametrize("side", ["async"])
+@pytest.mark.parametrize("side", ["async"], indirect=True)
 async def test_a_reload_in_the_background_slower_than_its_window_still_stores(
     new_process_cache: NewCache, clock: Clock
 ) -> None:
@@ -494,7 +478,9 @@ async def test_a_reload_in_the_background_slower_than_its_window_still_stores(
             await asyncio.sleep(0.2)  # longer than the window
         return version
 
-    cache: AsyncCache = new_process_cache(clock=clock)
+    cache = new_process_cache(clock=clock)
+
+    assert isinstance(cache, AsyncCache)
     get_version = cache(ttl=60, stale=Stale(while_revalidate=0.05))(load_version)
     await get_version()
     clock.now += 60.01
@@ -502,18 +488,19 @@ async def test_a_reload_in_the_background_slower_than_its_window_still_stores(
 
     stale = await get_version()
     await cache.aclose()  # waits for the reload in the background
-    later: AsyncCache = new_process_cache(clock=clock)  # a closed backend takes no calls
+    later = new_process_cache(clock=clock)  # a closed backend takes no calls
+    assert isinstance(later, AsyncCache)
     fresh = await later(ttl=60, stale=Stale(while_revalidate=0.05))(load_version)()
 
     assert (stale, fresh) == (1, 2)
 
 
-async def test_stale_if_error_answers_a_failing_loader(side: str, new_process_cache: NewCache, clock: Clock) -> None:
+async def test_stale_if_error_answers_a_failing_loader(new_process_cache: NewCache, clock: Clock) -> None:
     failures: list[Failure] = []
     outcomes: list[Outcome] = []
     cache = new_process_cache(clock=clock, hooks=[RecordingHook(outcomes=outcomes, failures=failures)])
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60, stale=Stale(if_error=IfError(600, on=(RuntimeError,))))
+    get_user = cached_function(cache, source, ttl=60, stale=Stale(if_error=IfError(600, on=(RuntimeError,))))
     await call(get_user, 1)
     clock.now += 61
     source.error = RuntimeError("down")
@@ -525,10 +512,10 @@ async def test_stale_if_error_answers_a_failing_loader(side: str, new_process_ca
     assert isinstance(failures[-1].error, RuntimeError)  # as the loader raised it, for the hooks
 
 
-async def test_stale_if_error_lets_other_errors_through(side: str, new_process_cache: NewCache, clock: Clock) -> None:
+async def test_stale_if_error_lets_other_errors_through(new_process_cache: NewCache, clock: Clock) -> None:
     cache = new_process_cache(clock=clock)
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60, stale=Stale(if_error=IfError(600, on=(RuntimeError,))))
+    get_user = cached_function(cache, source, ttl=60, stale=Stale(if_error=IfError(600, on=(RuntimeError,))))
     await call(get_user, 1)
     clock.now += 61
     source.error = ValueError("not a failure it answers")
@@ -541,7 +528,7 @@ async def test_stale_if_error_takes_a_timedelta(clock: Clock) -> None:
     cache = AsyncCache(AsyncMemoryBackend(), clock=clock)
     source = Source()
     stale = Stale(if_error=timedelta(minutes=1))
-    get_user = cached_function(cache, "async", source, ttl=timedelta(seconds=10), stale=stale)
+    get_user = cached_function(cache, source, ttl=timedelta(seconds=10), stale=stale)
     await get_user(1)
     clock.now += 30
     source.error = RuntimeError("the source is down")
@@ -551,12 +538,12 @@ async def test_stale_if_error_takes_a_timedelta(clock: Clock) -> None:
     assert user == {"id": 1, "version": 1}  # within the window of Stale.if_error
 
 
-async def test_stale_if_slow_answers_while_the_load_goes_on(side: str, clock: Clock) -> None:
+async def test_stale_if_slow_answers_while_the_load_goes_on(side: Side, clock: Clock) -> None:
     outcomes: list[Outcome] = []
     slow = False
-    get_user: Any
-    cache: Any
-    if side == "sync":
+    get_user: CachedFunction[[int], int] | AsyncCachedFunction[[int], int]
+    cache: EitherCache
+    if side is SYNC:
         cache = sync_cache = Cache(MemoryBackend(), hooks=[RecordingHook(outcomes=outcomes)], clock=clock)
 
         @sync_cache(ttl=60, stale=Stale(if_slow=IfSlow(600, after=0.05)))
@@ -592,13 +579,13 @@ async def test_stale_if_slow_answers_while_the_load_goes_on(side: str, clock: Cl
 
 
 async def test_revalidate_before_reloads_a_fresh_result_in_its_last_seconds(
-    side: str, new_process_cache: NewCache, clock: Clock
+    new_process_cache: NewCache, clock: Clock
 ) -> None:
     outcomes: list[Outcome] = []
     cache = new_process_cache(clock=clock, hooks=[RecordingHook(outcomes=outcomes)])
     source = Source()
-    options: dict[str, Any] = {"ttl": 60, "stampede": Stampede(revalidate_before=10)}
-    get_user = cached_function(cache, side, source, **options)
+    options: dict[str, object] = {"ttl": 60, "stampede": Stampede(revalidate_before=10)}
+    get_user = cached_function(cache, source, **options)
     await call(get_user, 1)
     source.version = 2
 
@@ -608,7 +595,7 @@ async def test_revalidate_before_reloads_a_fresh_result_in_its_last_seconds(
     due = await call(get_user, 1)
     await close(cache)  # waits for the reload in the background
     later = new_process_cache(clock=clock, hooks=[RecordingHook(outcomes=outcomes)])  # a closed backend takes no calls
-    reloaded = await call(cached_function(later, side, source, **options), 1)
+    reloaded = await call(cached_function(later, source, **options), 1)
 
     assert (early["version"], due["version"], reloaded["version"]) == (1, 1, 2)
     assert source.calls == 2
@@ -616,9 +603,10 @@ async def test_revalidate_before_reloads_a_fresh_result_in_its_last_seconds(
 
 
 @pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
-@pytest.mark.parametrize("side", ["async"])
+@pytest.mark.parametrize("side", ["async"], indirect=True)
 async def test_single_flight_shares_one_load_between_tasks(new_process_cache: NewCache) -> None:
-    cache: AsyncCache = new_process_cache()
+    cache = new_process_cache()
+    assert isinstance(cache, AsyncCache)
     started = 0
     release = asyncio.Event()
 
@@ -638,9 +626,10 @@ async def test_single_flight_shares_one_load_between_tasks(new_process_cache: Ne
     assert started == 1
 
 
-@pytest.mark.parametrize("side", ["sync"])
+@pytest.mark.parametrize("side", ["sync"], indirect=True)
 def test_single_flight_shares_one_load_between_threads(new_process_cache: NewCache) -> None:
-    cache: Cache = new_process_cache()
+    cache = new_process_cache()
+    assert isinstance(cache, Cache)
     started = 0
     release = threading.Event()
 
@@ -665,9 +654,10 @@ def test_single_flight_shares_one_load_between_threads(new_process_cache: NewCac
     assert started == 1
 
 
-@pytest.mark.parametrize("side", ["sync"])
+@pytest.mark.parametrize("side", ["sync"], indirect=True)
 def test_threads_that_share_a_failing_load_each_get_its_error(new_process_cache: NewCache) -> None:
-    cache: Cache = new_process_cache()
+    cache = new_process_cache()
+    assert isinstance(cache, Cache)
     started = 0
     release = threading.Event()
 
@@ -700,9 +690,10 @@ def test_threads_that_share_a_failing_load_each_get_its_error(new_process_cache:
 
 
 @pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
-@pytest.mark.parametrize("side", ["async"])
+@pytest.mark.parametrize("side", ["async"], indirect=True)
 async def test_a_waiter_loads_when_the_caller_it_waited_for_is_cancelled(new_process_cache: NewCache) -> None:
-    cache: AsyncCache = new_process_cache()
+    cache = new_process_cache()
+    assert isinstance(cache, AsyncCache)
     loads = 0
     loading = asyncio.Event()
 
@@ -730,7 +721,7 @@ async def test_lock_for_loads_once_for_all_processes() -> None:
     backend = AsyncMemoryBackend()
     loads = 0
 
-    def cached(cache: AsyncCache) -> Any:
+    def cached(cache: AsyncCache) -> AsyncCachedFunction[[int], int]:
         @cache(ttl=60, key="user:{user_id}", stampede=Stampede(lock_for=5))
         async def get_user(user_id: int) -> int:
             nonlocal loads
@@ -749,9 +740,10 @@ async def test_lock_for_loads_once_for_all_processes() -> None:
 
 
 @pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
-@pytest.mark.parametrize("side", ["async"])
+@pytest.mark.parametrize("side", ["async"], indirect=True)
 async def test_a_call_after_an_invalidation_shares_no_load_started_before_it(new_process_cache: NewCache) -> None:
-    cache: AsyncCache = new_process_cache()
+    cache = new_process_cache()
+    assert isinstance(cache, AsyncCache)
     version = 1
     loading = asyncio.Event()
 
@@ -772,9 +764,10 @@ async def test_a_call_after_an_invalidation_shares_no_load_started_before_it(new
 
 
 @pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
-@pytest.mark.parametrize("side", ["async"])
+@pytest.mark.parametrize("side", ["async"], indirect=True)
 async def test_a_load_that_started_before_invalidate_is_neither_shared_nor_stored(new_process_cache: NewCache) -> None:
-    cache: AsyncCache = new_process_cache()
+    cache = new_process_cache()
+    assert isinstance(cache, AsyncCache)
     version = 1
     loading = asyncio.Event()
 
@@ -794,9 +787,10 @@ async def test_a_load_that_started_before_invalidate_is_neither_shared_nor_store
     assert (await before, after, await get_version(1)) == (1, 2, 2)
 
 
-@pytest.mark.parametrize("side", ["async"])
+@pytest.mark.parametrize("side", ["async"], indirect=True)
 async def test_max_concurrent_loads_limits_concurrent_loads(new_process_cache: NewCache) -> None:
-    cache: AsyncCache = new_process_cache()
+    cache = new_process_cache()
+    assert isinstance(cache, AsyncCache)
     running = peak = 0
 
     @cache(ttl=60, stampede=Stampede(max_concurrent_loads=1))
@@ -814,10 +808,10 @@ async def test_max_concurrent_loads_limits_concurrent_loads(new_process_cache: N
     assert peak == 1
 
 
-async def test_a_function_that_calls_itself_loads_within_its_one_slot(side: str) -> None:
+async def test_a_function_that_calls_itself_loads_within_its_one_slot(side: Side) -> None:
     stampede = Stampede(max_concurrent_loads=1)
-    depth: Any
-    if side == "sync":
+    depth: CachedFunction[[int], int] | AsyncCachedFunction[[int], int]
+    if side is SYNC:
         sync_cache = Cache(MemoryBackend())
 
         @sync_cache(ttl=60, stampede=stampede)
@@ -839,11 +833,12 @@ async def test_a_function_that_calls_itself_loads_within_its_one_slot(side: str)
     assert found == 3
 
 
-@pytest.mark.parametrize("side", ["async"])
+@pytest.mark.parametrize("side", ["async"], indirect=True)
 async def test_jitter_spreads_when_results_expire(new_process_cache: NewCache, clock: Clock) -> None:
-    cache: AsyncCache = new_process_cache(clock=clock)
+    cache = new_process_cache(clock=clock)
+    assert isinstance(cache, AsyncCache)
     source = Source()
-    get_user = cached_function(cache, "async", source, ttl=100, stampede=Stampede(jitter=0.5))
+    get_user = cached_function(cache, source, ttl=100, stampede=Stampede(jitter=0.5))
     for user_id in range(20):
         await get_user(user_id)
 
@@ -858,11 +853,11 @@ async def test_jitter_spreads_when_results_expire(new_process_cache: NewCache, c
 
 
 async def test_the_logging_hook_logs_what_a_failing_backend_worked_around(
-    side: str, caplog: pytest.LogCaptureFixture
+    side: Side, caplog: pytest.LogCaptureFixture
 ) -> None:
-    backend = failing_memory(side)
-    cache = new_cache(side, backend, hooks=[LoggingHook()])
-    get_user = cached_function(cache, side, Source(), ttl=60, key="user:{user_id}")
+    backend = side.failing_memory()
+    cache = side.new_cache(backend, hooks=[LoggingHook()])
+    get_user = cached_function(cache, Source(), ttl=60, key="user:{user_id}")
     backend.down = True
 
     with caplog.at_level(logging.WARNING, logger="pashe"):
@@ -874,12 +869,12 @@ async def test_the_logging_hook_logs_what_a_failing_backend_worked_around(
     assert record.exc_info is not None
 
 
-async def test_a_failing_backend_loads_and_reports(side: str) -> None:
+async def test_a_failing_backend_loads_and_reports(side: Side) -> None:
     failures: list[Failure] = []
-    backend = failing_memory(side)
-    cache = new_cache(side, backend, hooks=[RecordingHook(failures=failures)])
+    backend = side.failing_memory()
+    cache = side.new_cache(backend, hooks=[RecordingHook(failures=failures)])
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60, key="user:{user_id}")
+    get_user = cached_function(cache, source, ttl=60, key="user:{user_id}")
     backend.down = True
 
     users = [await call(get_user, 1), await call(get_user, 1)]
@@ -890,12 +885,12 @@ async def test_a_failing_backend_loads_and_reports(side: str) -> None:
     assert (failures[0].operation, failures[0].key) == (Operation.GET, "user:1")
 
 
-async def test_the_fallback_answers_while_the_backend_fails(side: str) -> None:
+async def test_the_fallback_answers_while_the_backend_fails(side: Side) -> None:
     outcomes: list[Outcome] = []
-    backend = failing_memory(side)
-    cache = new_cache(side, backend, hooks=[RecordingHook(outcomes=outcomes)], fallback=Fallback(memory(side)))
+    backend = side.failing_memory()
+    cache = side.new_cache(backend, hooks=[RecordingHook(outcomes=outcomes)], fallback=Fallback(side.memory()))
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60)
+    get_user = cached_function(cache, source, ttl=60)
     backend.down = True
 
     await call(get_user, 1)
@@ -907,12 +902,12 @@ async def test_the_fallback_answers_while_the_backend_fails(side: str) -> None:
 
 
 @pytest.mark.parametrize(("elapsed", "loads"), [(9, 1), (11, 2)])
-async def test_a_result_stays_in_the_fallback_for_its_ttl(side: str, clock: Clock, elapsed: float, loads: int) -> None:
-    backend = failing_memory(side)
-    kept = MemoryBackend(clock=clock) if side == "sync" else AsyncMemoryBackend(clock=clock)
-    cache = new_cache(side, backend, clock=clock, fallback=Fallback(kept, ttl=10))
+async def test_a_result_stays_in_the_fallback_for_its_ttl(side: Side, clock: Clock, elapsed: float, loads: int) -> None:
+    backend = side.failing_memory()
+    kept = side.memory(clock=clock)
+    cache = side.new_cache(backend, clock=clock, fallback=Fallback(kept, ttl=10))
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60)
+    get_user = cached_function(cache, source, ttl=60)
     backend.down = True
     await call(get_user, 1)
 
@@ -950,7 +945,7 @@ def test_the_fallback_answers_a_tagged_result_whose_write_failed() -> None:
     backend = _WritesFail()
     cache = Cache(backend, hooks=[RecordingHook(outcomes=outcomes)], fallback=Fallback(MemoryBackend()))
     source = Source()
-    get_user = cached_function(cache, "sync", source, ttl=60, tags=["users"])
+    get_user = cached_function(cache, source, ttl=60, tags=["users"])
     get_user(1)  # the tag is known to the backend from now on
     get_user.invalidate(1)
     backend.writes_broken = True
@@ -967,10 +962,10 @@ def test_the_fallback_answers_a_tagged_result_whose_write_failed() -> None:
 # What is stored, and how
 
 
-async def test_store_when_skips_the_results_it_refuses(side: str, new_process_cache: NewCache) -> None:
+async def test_store_when_skips_the_results_it_refuses(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     source = Source()
-    get_user = cached_function(cache, side, source, ttl=60, store=Store(when=lambda user: user["version"] > 1))
+    get_user = cached_function(cache, source, ttl=60, store=Store(when=lambda user: user["version"] > 1))
 
     await call(get_user, 1)
     await call(get_user, 1)
@@ -1008,8 +1003,8 @@ class _After:
     email: str = ""  # old entries decode as this type too: only the shape makes them misses
 
 
-async def test_a_changed_value_type_makes_old_entries_misses(side: str) -> None:
-    backend = memory(side)
+async def test_a_changed_value_type_makes_old_entries_misses(side: Side) -> None:
+    backend = side.memory()
     loads: list[str] = []
 
     def before() -> _Before:
@@ -1020,23 +1015,17 @@ async def test_a_changed_value_type_makes_old_entries_misses(side: str) -> None:
         loads.append("after")
         return _After("ann", "ann@example.com")
 
-    async def before_async() -> _Before:
-        return before()
-
-    async def after_async() -> _After:
-        return after()
-
-    deploys: list[Any] = [before, after, after] if side == "sync" else [before_async, after_async, after_async]
+    deploys = [side.function(before), side.function(after), side.function(after)]
 
     for function in deploys:
-        cache = new_cache(side, backend, codec=MsgspecJsonCodec())
+        cache = side.new_cache(backend, codec=MsgspecJsonCodec())
         await call(cache(ttl=60, key="user")(function))
         await close(cache)
 
     assert loads == ["before", "after"]  # the old entry did not decode as the new type
 
 
-async def test_a_function_without_a_return_annotation_is_cached(side: str, new_process_cache: NewCache) -> None:
+async def test_a_function_without_a_return_annotation_is_cached(side: Side, new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     calls = 0
 
@@ -1045,10 +1034,7 @@ async def test_a_function_without_a_return_annotation_is_cached(side: str, new_p
         calls += 1
         return {"id": user_id}
 
-    async def aget_user(user_id):  # type: ignore[no-untyped-def]  # noqa: ANN001, ANN202 - what the test is about
-        return get_user(user_id)  # type: ignore[no-untyped-call]  # unannotated on purpose
-
-    cached = cache(ttl=60)(get_user if side == "sync" else aget_user)
+    cached = cache(ttl=60)(side.function(get_user))
 
     users = [await call(cached, 1), await call(cached, 1)]
 
@@ -1156,11 +1142,9 @@ async def test_the_default_key_refuses_arguments_without_a_stable_repr() -> None
 # Batches
 
 
-async def test_no_cache_loads_and_stores_what_it_loaded_for_the_calls_after_it(
-    side: str, new_process_cache: NewCache
-) -> None:
+async def test_no_cache_loads_and_stores_what_it_loaded_for_the_calls_after_it(new_process_cache: NewCache) -> None:
     cache, source = new_process_cache(), Source()
-    get_user = cached_function(cache, side, source, ttl=60)
+    get_user = cached_function(cache, source, ttl=60)
     await call(get_user, 1)
     source.version = 2
 
@@ -1172,9 +1156,9 @@ async def test_no_cache_loads_and_stores_what_it_loaded_for_the_calls_after_it(
     assert source.calls == 2  # the call after the block is answered from what the block stored
 
 
-async def test_get_finds_nothing_in_no_cache(side: str, new_process_cache: NewCache) -> None:
+async def test_get_finds_nothing_in_no_cache(new_process_cache: NewCache) -> None:
     cache, source = new_process_cache(), Source()
-    get_user = cached_function(cache, side, source, ttl=60)
+    get_user = cached_function(cache, source, ttl=60)
     await call(get_user, 1)
 
     with pashe.no_cache():
@@ -1183,9 +1167,9 @@ async def test_get_finds_nothing_in_no_cache(side: str, new_process_cache: NewCa
     assert found is None
 
 
-async def test_a_batch_loads_every_item_in_no_cache(side: str, new_process_cache: NewCache) -> None:
+async def test_a_batch_loads_every_item_in_no_cache(new_process_cache: NewCache) -> None:
     asked: list[list[int]] = []
-    get_items = batch_function(new_process_cache(), side, asked)
+    get_items = batch_function(new_process_cache(), asked)
     await call(get_items, [1, 2])
 
     with pashe.no_cache():
@@ -1195,9 +1179,9 @@ async def test_a_batch_loads_every_item_in_no_cache(side: str, new_process_cache
     assert asked == [[1, 2], [1, 2]]
 
 
-async def test_a_batch_loads_only_the_missing_items(side: str, new_process_cache: NewCache) -> None:
+async def test_a_batch_loads_only_the_missing_items(new_process_cache: NewCache) -> None:
     asked: list[list[int]] = []
-    get_items = batch_function(new_process_cache(), side, asked, left_out=frozenset({3}))
+    get_items = batch_function(new_process_cache(), asked, left_out=frozenset({3}))
     await call(get_items, [1, 2])
 
     items = await call(get_items, [1, 2, 3])
@@ -1206,10 +1190,10 @@ async def test_a_batch_loads_only_the_missing_items(side: str, new_process_cache
     assert asked == [[1, 2], [3]]
 
 
-async def test_a_batch_answers_from_the_fallback_while_the_backend_fails(side: str) -> None:
-    backend = failing_memory(side)
+async def test_a_batch_answers_from_the_fallback_while_the_backend_fails(side: Side) -> None:
+    backend = side.failing_memory()
     asked: list[list[int]] = []
-    get_items = batch_function(new_cache(side, backend, fallback=Fallback(memory(side))), side, asked)
+    get_items = batch_function(side.new_cache(backend, fallback=Fallback(side.memory())), asked)
     backend.down = True
     await call(get_items, [1, 2])
 
@@ -1219,11 +1203,11 @@ async def test_a_batch_answers_from_the_fallback_while_the_backend_fails(side: s
     assert asked == [[1, 2], [3]]
 
 
-async def test_a_batch_loads_and_reports_while_the_backend_fails(side: str) -> None:
+async def test_a_batch_loads_and_reports_while_the_backend_fails(side: Side) -> None:
     failures: list[Failure] = []
-    backend = failing_memory(side)
+    backend = side.failing_memory()
     asked: list[list[int]] = []
-    get_items = batch_function(new_cache(side, backend, hooks=[RecordingHook(failures=failures)]), side, asked)
+    get_items = batch_function(side.new_cache(backend, hooks=[RecordingHook(failures=failures)]), asked)
     backend.down = True
 
     items = [await call(get_items, [1]), await call(get_items, [1])]
@@ -1237,7 +1221,7 @@ async def test_a_batch_loads_and_reports_while_the_backend_fails(side: str) -> N
 def test_a_batch_keeps_in_the_fallback_what_it_could_not_write() -> None:
     backend = _WritesFail()
     asked: list[list[int]] = []
-    get_items = batch_function(Cache(backend, fallback=Fallback(MemoryBackend())), "sync", asked)
+    get_items = batch_function(Cache(backend, fallback=Fallback(MemoryBackend())), asked)
     backend.writes_broken = True
 
     get_items([1])  # loads, and keeps the result in the fallback
@@ -1274,18 +1258,15 @@ class _Plan:
 
 @pytest.mark.parametrize("codec", json_codecs(), ids=lambda codec: type(codec).__name__)
 def test_a_return_type_json_reads_back_as_another_is_refused_at_the_decorator(
-    side: str, new_process_cache: NewCache, codec: Any
+    side: Side, new_process_cache: NewCache, codec: Codec
 ) -> None:
     cache = new_process_cache(codec=codec, compressor=GzipCompressor())  # the compressor passes the check on
 
     def get_plan(plan_id: int) -> _Plan:
         return _Plan(plan_id)
 
-    async def aget_plan(plan_id: int) -> _Plan:
-        return _Plan(plan_id)
-
     with pytest.raises(InvalidOptionsError, match="reads _Plan back as another type"):
-        cache(ttl=60)(get_plan if side == "sync" else aget_plan)
+        cache(ttl=60)(side.function(get_plan))
 
 
 class _Deploy:
@@ -1325,29 +1306,23 @@ def test_a_lambda_without_a_key_is_refused_at_the_decorator() -> None:
         cache(ttl=60)(lambda user_id: user_id)
 
 
-def test_a_return_type_not_defined_yet_is_refused_at_the_decorator(side: str, new_process_cache: NewCache) -> None:
+def test_a_return_type_not_defined_yet_is_refused_at_the_decorator(side: Side, new_process_cache: NewCache) -> None:
     cache = new_process_cache()
 
     def get_plan(plan_id: int) -> _Later:  # type: ignore[name-defined]  # noqa: F821 - the name it tests
         return _Plan(plan_id)
 
-    async def aget_plan(plan_id: int) -> _Later:  # type: ignore[name-defined]  # noqa: F821 - the name it tests
-        return _Plan(plan_id)
-
     with pytest.raises(InvalidOptionsError, match="annotated with _Later, which is not defined yet"):
-        cache(ttl=60)(get_plan if side == "sync" else aget_plan)
+        cache(ttl=60)(side.function(get_plan))
 
 
-async def test_a_codec_that_rebuilds_the_type_takes_it(side: str, new_process_cache: NewCache) -> None:
+async def test_a_codec_that_rebuilds_the_type_takes_it(side: Side, new_process_cache: NewCache) -> None:
     cache = new_process_cache(codec=MsgspecJsonCodec())
 
     def get_plan(plan_id: int) -> _Plan:
         return _Plan(plan_id)
 
-    async def aget_plan(plan_id: int) -> _Plan:
-        return _Plan(plan_id)
-
-    cached = cache(ttl=60)(get_plan if side == "sync" else aget_plan)
+    cached = cache(ttl=60)(side.function(get_plan))
     await call(cached, 1)
 
     plan = await call(cached, 1)
@@ -1402,7 +1377,7 @@ def test_a_value_is_compressed_from_min_size_and_only_if_it_shrinks(
 def test_an_entry_of_the_format_before_is_a_miss() -> None:
     backend, source = MemoryBackend(), Source()
     cache = Cache(backend)
-    get_user = cached_function(cache, "sync", source, ttl=60, key="user")
+    get_user = cached_function(cache, source, ttl=60, key="user")
     backend.set("user", b"\x02" + b"\x00" * 19 + b'{"id": 1}')  # as pashe wrote it before the payload had a flag
 
     get_user(1)

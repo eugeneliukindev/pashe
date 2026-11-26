@@ -2,29 +2,27 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from pashe.asgi import CacheHeadersMiddleware
 from pashe.hooks import CacheHeadersHook
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, MutableMapping
-
-    type _Message = MutableMapping[str, Any]
+    from pashe.asgi import Message, Receive, Scope, Send
 
 _SCOPE = {"type": "http", "method": "GET", "headers": []}
 
 
-async def _sent(*messages: _Message, request_headers: list[tuple[bytes, bytes]] | None = None) -> list[_Message]:
+async def _sent(*messages: Message, request_headers: list[tuple[bytes, bytes]] | None = None) -> list[Message]:
     """Return what the middleware sends of an application that sends messages."""
 
-    async def application(scope: _Message, receive: Callable[[], Awaitable[_Message]], send: Any) -> None:  # noqa: ARG001
+    async def application(scope: Scope, receive: Receive, send: Send) -> None:  # noqa: ARG001
         for message in messages:
             await send(message)
 
-    sent: list[_Message] = []
+    sent: list[Message] = []
 
-    async def send(message: _Message) -> None:
+    async def send(message: Message) -> None:
         sent.append(message)
 
     scope = _SCOPE | {"headers": request_headers or []}

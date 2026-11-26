@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
@@ -21,14 +21,14 @@ from pashe.ratelimit import FixedWindow
 from tests.harness.helpers import AsyncFailingMemoryBackend
 
 if TYPE_CHECKING:
-    from collections.abc import MutableMapping
-
     from starlette.requests import Request
+
+    from pashe.asgi import Scope
 
 _LIMIT = FixedWindow(calls=2, per=60)
 
 
-def _client(_scope: MutableMapping[str, Any]) -> str:
+def _client(_scope: Scope) -> str:
     return "client"
 
 

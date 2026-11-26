@@ -12,9 +12,10 @@ import pashe
 from pashe import AsyncCache, Cache
 from pashe.backends import AsyncMemoryBackend, MemoryBackend, NearCacheBackend
 from pashe.errors import BackendError, InvalidOptionsError, LockLostError, LockTimeoutError, RateLimitedError
+from pashe.locks import Lock
 from pashe.options import Fallback
 from pashe.ratelimit import FixedWindow, SlidingWindow, per_second
-from tests.harness.helpers import LOOP_BLOCK_SECONDS, RecordingHook, call
+from tests.harness.helpers import LOOP_BLOCK_SECONDS, RecordingHook, call, run_block
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -105,24 +106,20 @@ async def test_try_lock_of_a_held_lock_answers_none(new_process_cache: NewCache)
     assert lock is None
 
 
-async def test_the_block_of_a_lock_releases_it(side: str, new_process_cache: NewCache) -> None:
+async def test_the_block_of_a_lock_releases_it(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     lock = await call(cache.try_lock, "job", ttl=10)
     assert lock is not None
 
-    if side == "sync":
-        with lock:
-            pass
-    else:
-        async with lock:
-            pass
+    await run_block(lock)
 
     assert await call(cache.try_lock, "job", ttl=10) is not None
 
 
-@pytest.mark.parametrize("side", ["sync"])
+@pytest.mark.parametrize("side", ["sync"], indirect=True)
 def test_a_lock_is_held_while_its_block_runs(new_process_cache: NewCache) -> None:
-    cache: Cache = new_process_cache()
+    cache = new_process_cache()
+    assert isinstance(cache, Cache)
 
     with cache.lock("job", ttl=1) as lease:
         held = cache.try_lock("job", ttl=1)
@@ -133,9 +130,10 @@ def test_a_lock_is_held_while_its_block_runs(new_process_cache: NewCache) -> Non
 
 
 @pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
-@pytest.mark.parametrize("side", ["async"])
+@pytest.mark.parametrize("side", ["async"], indirect=True)
 async def test_async_locks_of_one_key_run_one_at_a_time(new_process_cache: NewCache) -> None:
-    cache: AsyncCache = new_process_cache()
+    cache = new_process_cache()
+    assert isinstance(cache, AsyncCache)
     order: list[str] = []
 
     async def worker(name: str) -> None:
@@ -150,9 +148,10 @@ async def test_async_locks_of_one_key_run_one_at_a_time(new_process_cache: NewCa
 
 
 @pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
-@pytest.mark.parametrize("side", ["async"])
+@pytest.mark.parametrize("side", ["async"], indirect=True)
 async def test_a_task_cancelled_as_its_lock_block_ends_still_releases_the_lock(new_process_cache: NewCache) -> None:
-    cache: AsyncCache = new_process_cache()
+    cache = new_process_cache()
+    assert isinstance(cache, AsyncCache)
 
     async def worker() -> None:
         async with cache.lock("job", ttl=30):
@@ -167,17 +166,18 @@ async def test_a_task_cancelled_as_its_lock_block_ends_still_releases_the_lock(n
 
 async def test_a_lock_entered_inside_its_own_block_is_refused(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
-    lock = cache.lock("job", ttl=30)
 
     if isinstance(cache, Cache):
+        lock = cache.lock("job", ttl=30)
         with lock:
             with pytest.raises(RuntimeError, match="inside its own block"):
                 lock.__enter__()
             held = cache.try_lock("job", ttl=30) is None
     else:
-        async with lock:
+        async_lock = cache.lock("job", ttl=30)
+        async with async_lock:
             with pytest.raises(RuntimeError, match="inside its own block"):
-                await lock.__aenter__()
+                await async_lock.__aenter__()
             held = await cache.try_lock("job", ttl=30) is None
 
     assert held
@@ -187,7 +187,7 @@ async def test_a_lock_that_stays_busy_raises_after_its_timeout(new_process_cache
     cache = new_process_cache()
     await call(cache.try_lock, "job", ttl=5)
     lock = cache.lock("job", ttl=5, timeout=0.05)
-    enter = lock.__enter__ if isinstance(cache, Cache) else lock.__aenter__
+    enter = lock.__enter__ if isinstance(lock, Lock) else lock.__aenter__
 
     with pytest.raises(LockTimeoutError):
         await call(enter)
@@ -321,6 +321,7 @@ async def test_a_sliding_window_lets_calls_through_once_it_passed(new_process_ca
     clock.now += 2  # both windows are past
     state = await call(cache.rate_limit, "api", per_second(3))
 
+    assert state is not None
     assert state.remaining == 2
 
 
@@ -334,6 +335,8 @@ async def test_limits_on_one_key_count_apart(new_process_cache: NewCache, clock:
     sliding = await call(cache.rate_limit, "ip:1", SlidingWindow(calls=5, per=60))
     fixed = await call(cache.rate_limit, "user:1", FixedWindow(calls=3, per=3600))
 
+    assert sliding is not None
+    assert fixed is not None
     assert (sliding.remaining, fixed.remaining) == (4, 2)
 
 
@@ -344,6 +347,8 @@ async def test_the_state_of_a_sliding_window(new_process_cache: NewCache, clock:
     first = await call(cache.rate_limit, "api", per_second(3))
     second = await call(cache.rate_limit, "api", per_second(3), cost=2)
 
+    assert first is not None
+    assert second is not None
     assert (first.limit, first.remaining) == (3, 2)
     assert second.remaining == 0
     assert 0 < second.reset_after <= 1
@@ -354,6 +359,7 @@ async def test_the_state_of_a_fixed_window(new_process_cache: NewCache) -> None:
 
     state = await call(cache.rate_limit, "login", FixedWindow(calls=5, per=60), cost=3)
 
+    assert state is not None
     assert state.remaining == 2
     assert 59 < state.reset_after <= 60
 

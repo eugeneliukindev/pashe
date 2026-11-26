@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
@@ -20,8 +20,9 @@ from pashe.ratelimit import FixedWindow
 from tests.harness.helpers import Source
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable, MutableMapping
+    from collections.abc import AsyncIterator, Callable
 
+    from pashe.asgi import Message, Receive, Scope, Send
     from tests.harness.helpers import Clock
 
 
@@ -180,12 +181,12 @@ async def test_an_overloaded_load_is_503(client: httpx.AsyncClient) -> None:
 async def test_the_response_goes_before_the_work_after_it() -> None:
     sent: list[str] = []
 
-    async def app(_scope: object, _receive: object, send: Any) -> None:
+    async def app(_scope: Scope, _receive: Receive, send: Send) -> None:
         await send({"type": "http.response.start", "status": 200, "headers": []})
         await send({"type": "http.response.body", "body": b"ok"})
         sent.append("background task")  # what Starlette runs after the body
 
-    async def send(message: MutableMapping[str, Any]) -> None:
+    async def send(message: Message) -> None:
         sent.append(message["type"])
 
     scope = {"type": "http", "method": "GET", "headers": []}
@@ -193,7 +194,7 @@ async def test_the_response_goes_before_the_work_after_it() -> None:
     assert sent == ["http.response.start", "http.response.body", "background task"]
 
 
-async def _nothing() -> dict[str, Any]:
+async def _nothing() -> Message:
     return {"type": "http.disconnect"}
 
 
@@ -204,9 +205,7 @@ def test_a_rate_limit_that_costs_more_than_its_limit_is_refused_when_it_is_made(
         rate_limit(cache, FixedWindow(calls=5, per=60), key=lambda _request: "ip", cost=10)
 
 
-def _reloading_app(
-    source: Source, clock: Clock, *, allow: Callable[[MutableMapping[str, Any]], bool] | None
-) -> FastAPI:
+def _reloading_app(source: Source, clock: Clock, *, allow: Callable[[Scope], bool] | None) -> FastAPI:
     headers = CacheHeadersHook()
     cache = AsyncCache(AsyncMemoryBackend(), hooks=[headers], clock=clock)
 
@@ -224,7 +223,7 @@ def _reloading_app(
     return app
 
 
-def _staff(scope: MutableMapping[str, Any]) -> bool:
+def _staff(scope: Scope) -> bool:
     return (b"x-role", b"staff") in scope["headers"]
 
 
@@ -241,7 +240,7 @@ def _staff(scope: MutableMapping[str, Any]) -> bool:
     ids=["no header", "nobody allowed", "not allowed", "allowed", "pragma", "a plain reload"],
 )
 async def test_a_request_with_no_cache_reloads_its_results_only_if_it_is_allowed(
-    allow: Callable[[MutableMapping[str, Any]], bool] | None,
+    allow: Callable[[Scope], bool] | None,
     asked: dict[str, str],
     loads: int,
     status: str,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Never, override
 
 import pytest
 import redis.asyncio
@@ -19,7 +19,9 @@ from pashe.hooks import Circuit, Hook, LoggingHook
 from tests.harness.helpers import Clock, RecordingHook, Source, cached_function
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
+
+    from pashe.hooks import Failure
 
 
 class _Circuits(Hook):
@@ -44,7 +46,7 @@ def _down(monkeypatch: pytest.MonkeyPatch, client: Redis, error: Exception) -> l
     """Make every GET of client fail with error; return the GETs that reached it."""
     reached: list[str] = []
 
-    def get(key: str) -> Any:
+    def get(key: str) -> Never:
         reached.append(key)
         raise error
 
@@ -116,11 +118,11 @@ def test_an_error_redis_answers_tells_it_is_up(client: Redis, monkeypatch: pytes
 
 
 def test_a_cached_call_answers_from_the_source_while_it_is_open(client: Redis, monkeypatch: pytest.MonkeyPatch) -> None:
-    failures: list[Any] = []
+    failures: list[Failure] = []
     backend = RedisBackend(client, breaker=CircuitBreaker(failure_threshold=1, open_for=10, clock=Clock()))
     cache = Cache(backend, hooks=[RecordingHook(failures=failures)])
     source = Source()
-    get_user = cached_function(cache, "sync", source, ttl=60)
+    get_user = cached_function(cache, source, ttl=60)
     _down(monkeypatch, client, RedisConnectionError("down"))
     get_user(1)
 
@@ -137,7 +139,7 @@ def test_a_cached_call_answers_from_the_source_while_it_is_open(client: Redis, m
         (lambda: CircuitBreaker(open_for=0), "CircuitBreaker.open_for is 0"),
     ],
 )
-def test_options_that_cannot_work_are_refused(make: Any, message: str) -> None:
+def test_options_that_cannot_work_are_refused(make: Callable[[], object], message: str) -> None:
     with pytest.raises(InvalidOptionsError, match=message):
         make()
 
@@ -146,7 +148,7 @@ async def test_an_async_backend_skips_redis_once_it_is_open(redis_url: str, monk
     client = redis.asyncio.Redis.from_url(redis_url)
     backend = AsyncRedisBackend(client, breaker=CircuitBreaker(failure_threshold=1, open_for=10, clock=Clock()))
 
-    async def get(_key: str) -> Any:
+    async def get(_key: str) -> Never:
         msg = "down"
         raise RedisConnectionError(msg)
 

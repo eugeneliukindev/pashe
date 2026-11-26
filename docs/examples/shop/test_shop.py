@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import importlib
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
@@ -11,6 +11,7 @@ from pashe.errors import NotFoundError, RateLimitedError
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+    from types import ModuleType
 
 
 class Shop:
@@ -19,9 +20,9 @@ class Shop:
     def __init__(self, side: str) -> None:
         self.side = side
 
-        self.data: Any = importlib.import_module(f"examples.shop.data_{side}")
+        self.data = importlib.import_module(f"examples.shop.data_{side}")
 
-    def section(self, name: str) -> Any:
+    def section(self, name: str) -> ModuleType:
         return importlib.import_module(f"examples.shop.{name}_{self.side}")
 
     def selects(self) -> list[str]:

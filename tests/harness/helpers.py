@@ -5,26 +5,49 @@ Tests import it as tests.harness.helpers, with the stores of tests.harness.store
 
 from __future__ import annotations
 
+import functools
 import importlib.util
 import inspect
-from typing import TYPE_CHECKING, Any, Final, override
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Final, overload, override
+
+from redis import Redis
+from redis.asyncio import Redis as AsyncRedis
+from redis.asyncio.cluster import RedisCluster as AsyncRedisCluster
+from redis.cluster import RedisCluster
 
 from pashe import AsyncCache, Cache
-from pashe.backends import AsyncMemoryBackend, MemoryBackend
+from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend
+from pashe._internal.sync.backends.prefixed import PrefixedBackend
+from pashe.backends import (
+    AsyncBackend,
+    AsyncMemoryBackend,
+    AsyncNearCacheBackend,
+    AsyncSQLiteBackend,
+    Backend,
+    MemoryBackend,
+    NearCacheBackend,
+    SQLiteBackend,
+)
 from pashe.codecs import JsonCodec
+from pashe.contrib.redis import AsyncRedisBackend, RedisBackend
 from pashe.errors import BackendError
 from pashe.hooks import Hook
 from pashe.invalidation import InvalidationBus
+from pashe.locks import AsyncLock, Lock
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Awaitable, Callable, Mapping, Sequence
 
+    from pashe import AsyncCachedBatchFunction, AsyncCachedFunction, CachedBatchFunction, CachedFunction
     from pashe.codecs import Codec
     from pashe.hooks import Failure, Outcome
     from pashe.invalidation import InvalidationHandler
 
 
-type NewCache = Callable[..., Any]  # makes a Cache or an AsyncCache that stands for a process of its own
+type EitherCache = Cache | AsyncCache  # a cache of either side, as a test of both sides holds it
+type EitherBackend = Backend | AsyncBackend  # a backend of either side, as the same
+type NewCache = Callable[..., EitherCache]  # makes a cache of the side that stands for a process of its own
 
 # A sync call that waits in the loop, as for a busy file, blocks it for seconds; a busy machine of CI
 # stalls it for a fifth of a second, the default of pyleak, as it opens a file.
@@ -160,31 +183,115 @@ class AsyncFailingMemoryBackend(AsyncMemoryBackend):
         return await super().incr(key, by, ttl=ttl)
 
 
-def memory(side: str) -> Any:
-    """Return an empty memory backend of the side."""
-    return MemoryBackend() if side == "sync" else AsyncMemoryBackend()
+@dataclass(frozen=True, slots=True)
+class Side:
+    """What the tests build of one side of pashe: the classes of Cache, or those of AsyncCache.
+
+    A test of both sides holds what it builds as a union of the two sides, which no type ties to one
+    side: a method that joins two of them checks that the one it is given is of its side.
+    """
+
+    memory: type[MemoryBackend | AsyncMemoryBackend]
+    failing_memory: type[FailingMemoryBackend | AsyncFailingMemoryBackend]
+    sqlite: type[SQLiteBackend | AsyncSQLiteBackend]
+    is_async: bool
+
+    def new_cache(self, backend: EitherBackend | None = None, **options: Any) -> EitherCache:
+        """Return a cache of the side over backend, a new memory backend by default.
+
+        The options go to the cache as they are. A backend of the other side is a TypeError.
+        """
+        if self.is_async:
+            return AsyncCache(AsyncMemoryBackend() if backend is None else _async(backend), **options)
+        return Cache(MemoryBackend() if backend is None else _sync(backend), **options)
+
+    def redis(self, url: str) -> RedisBackend | AsyncRedisBackend:
+        """Return a Redis backend of the side, with a client of its own to the server at url."""
+        if self.is_async:
+            return AsyncRedisBackend(AsyncRedis.from_url(url))
+        return RedisBackend(Redis.from_url(url))
+
+    def redis_cluster(self, url: str) -> RedisBackend | AsyncRedisBackend:
+        """Return a Redis backend of the side, with a client of its own to the cluster of the node at url."""
+        if self.is_async:
+            return AsyncRedisBackend(AsyncRedisCluster.from_url(url))
+        return RedisBackend(RedisCluster.from_url(url))
+
+    def near(self) -> NearCacheBackend | AsyncNearCacheBackend:
+        """Return a near cache of the side, with a memory backend as the near store and another as the shared one."""
+        if self.is_async:
+            return AsyncNearCacheBackend(AsyncMemoryBackend(), AsyncMemoryBackend())
+        return NearCacheBackend(MemoryBackend(), MemoryBackend())
+
+    def prefixed(self, backend: EitherBackend, prefix: str) -> PrefixedBackend | AsyncPrefixedBackend:
+        """Return backend with every key under prefix. A backend of the other side is a TypeError."""
+        if self.is_async:
+            return AsyncPrefixedBackend(_async(backend), prefix)
+        return PrefixedBackend(_sync(backend), prefix)
+
+    # Any: the result is that of function on the sync side and an awaitable of it on the async one, and
+    # the cache that decorates it is a union of both sides, which no type ties to the side of the function
+    def function[**P](self, function: Callable[P, object]) -> Callable[P, Any]:
+        """Return function as one of the side: itself, or an async def function of its signature that calls it."""
+        if not self.is_async:
+            return function
+
+        @functools.wraps(function)
+        async def awaited(*args: P.args, **kwargs: P.kwargs) -> object:
+            return function(*args, **kwargs)
+
+        return awaited
 
 
-def failing_memory(side: str) -> Any:
-    """Return a memory backend of the side that fails while its down is set."""
-    return FailingMemoryBackend() if side == "sync" else AsyncFailingMemoryBackend()
+def _sync(backend: EitherBackend) -> Backend:
+    # a test joins two things it built of one side: one of the other side is a mistake of the test
+    if isinstance(backend, AsyncBackend):
+        msg = f"{backend!r} is of the async side, not of the sync one"
+        raise TypeError(msg)
+    return backend
 
 
-def new_cache(side: str, backend: Any = None, **options: Any) -> Any:
-    """Return a Cache or an AsyncCache over backend, a new memory backend by default."""
-    backend = backend or memory(side)
-    return Cache(backend, **options) if side == "sync" else AsyncCache(backend, **options)
+def _async(backend: EitherBackend) -> AsyncBackend:
+    if isinstance(backend, Backend):
+        msg = f"{backend!r} is of the sync side, not of the async one"
+        raise TypeError(msg)
+    return backend
 
 
-async def call(function: Any, *args: Any, **kwargs: Any) -> Any:
+SYNC: Final = Side(memory=MemoryBackend, failing_memory=FailingMemoryBackend, sqlite=SQLiteBackend, is_async=False)
+ASYNC: Final = Side(
+    memory=AsyncMemoryBackend, failing_memory=AsyncFailingMemoryBackend, sqlite=AsyncSQLiteBackend, is_async=True
+)
+SIDES: Final = {"sync": SYNC, "async": ASYNC}  # the name of each in the ids of the tests
+
+
+@overload
+async def call[**P, R](function: Callable[P, Awaitable[R]], /, *args: P.args, **kwargs: P.kwargs) -> R: ...
+@overload  # a method of a cache of either side: the union of a def and an async def of one result
+async def call[**P, R](
+    function: Callable[P, Awaitable[R]] | Callable[P, R], /, *args: P.args, **kwargs: P.kwargs
+) -> R: ...
+async def call(function: Callable[..., object], /, *args: object, **kwargs: object) -> object:
     """Call a function of either side and return its result."""
     result = function(*args, **kwargs)
     return await result if inspect.isawaitable(result) else result
 
 
-async def close(cache: Any) -> None:
+async def run_block(lock: Lock | AsyncLock) -> None:
+    """Enter and leave the block of a lock of either side."""
+    if isinstance(lock, AsyncLock):
+        async with lock:
+            return
+    with lock:
+        pass
+
+
+async def close(cache: EitherCache) -> None:
     """Wait for the background reloads of a cache of either side."""
-    await call(cache.close if isinstance(cache, Cache) else cache.aclose)
+    if isinstance(cache, Cache):
+        cache.close()
+    else:
+        await cache.aclose()
 
 
 class Source:
@@ -202,9 +309,22 @@ class Source:
         return {"id": user_id, "version": self.version}
 
 
-def cached_function(cache: Any, side: str, source: Callable[[int], dict[str, int]], **options: Any) -> Any:
-    """Return source cached as a def or an async def function of user_id."""
-    if side == "sync":
+@overload
+def cached_function(
+    cache: Cache, source: Callable[[int], dict[str, int]], **options: Any
+) -> CachedFunction[[int], dict[str, int]]: ...
+@overload
+def cached_function(
+    cache: AsyncCache, source: Callable[[int], dict[str, int]], **options: Any
+) -> AsyncCachedFunction[[int], dict[str, int]]: ...
+def cached_function(
+    cache: EitherCache, source: Callable[[int], dict[str, int]], **options: Any
+) -> CachedFunction[[int], dict[str, int]] | AsyncCachedFunction[[int], dict[str, int]]:
+    """Return source cached as a def function of user_id by a Cache, or an async def one by an AsyncCache.
+
+    The options go to the decorator as they are.
+    """
+    if isinstance(cache, Cache):
 
         def get_user(user_id: int) -> dict[str, int]:
             return source(user_id)
@@ -217,21 +337,28 @@ def cached_function(cache: Any, side: str, source: Callable[[int], dict[str, int
     return cache(**options)(aget_user)
 
 
-def batch_function(cache: Any, side: str, asked: list[list[int]], *, left_out: frozenset[int] = frozenset()) -> Any:
-    """Return a cached batch function of the side: it counts what it is asked, and leaves left_out out."""
-    if side == "sync":
-        sync_cache: Cache = cache
+@overload
+def batch_function(
+    cache: Cache, asked: list[list[int]], *, left_out: frozenset[int] = frozenset()
+) -> CachedBatchFunction[int, int]: ...
+@overload
+def batch_function(
+    cache: AsyncCache, asked: list[list[int]], *, left_out: frozenset[int] = frozenset()
+) -> AsyncCachedBatchFunction[int, int]: ...
+def batch_function(
+    cache: EitherCache, asked: list[list[int]], *, left_out: frozenset[int] = frozenset()
+) -> CachedBatchFunction[int, int] | AsyncCachedBatchFunction[int, int]:
+    """Return a cached batch function of the side of cache: it counts what it is asked, and leaves left_out out."""
+    if isinstance(cache, Cache):
 
-        @sync_cache.batch(ttl=60, key="item:{}")
+        @cache.batch(ttl=60, key="item:{}")
         def load_items(ids: list[int]) -> dict[int, int]:
             asked.append(ids)
             return {item_id: item_id * 10 for item_id in ids if item_id not in left_out}
 
         return load_items
 
-    async_cache: AsyncCache = cache
-
-    @async_cache.batch(ttl=60, key="item:{}")
+    @cache.batch(ttl=60, key="item:{}")
     async def aload_items(ids: list[int]) -> dict[int, int]:
         asked.append(ids)
         return {item_id: item_id * 10 for item_id in ids if item_id not in left_out}
@@ -239,8 +366,14 @@ def batch_function(cache: Any, side: str, asked: list[list[int]], *, left_out: f
     return aload_items
 
 
-def recording_calls(function: Any, calls: list[tuple[object, ...]]) -> Any:
-    """Return function of either side that also notes the arguments of every call in calls."""
+@overload
+def recording_calls[**P, R](
+    function: Callable[P, Awaitable[R]], calls: list[tuple[object, ...]]
+) -> Callable[P, Awaitable[R]]: ...
+@overload
+def recording_calls[**P, R](function: Callable[P, R], calls: list[tuple[object, ...]]) -> Callable[P, R]: ...
+def recording_calls(function: Callable[..., object], calls: list[tuple[object, ...]]) -> Callable[..., object]:
+    """Return function of either side that also notes the positional arguments of every call in calls."""
     if inspect.iscoroutinefunction(function):
 
         async def acounted(*args: object) -> object:

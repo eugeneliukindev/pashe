@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import pytest
 from redis import Redis
 
-from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend
-from pashe._internal.sync.backends.prefixed import PrefixedBackend
-from pashe.backends import AsyncMemoryBackend, AsyncNearCacheBackend, MemoryBackend, NearCacheBackend
+from pashe.backends import Backend
 from pashe.contrib.redis import RedisBackend
 from pashe.errors import InvalidOptionsError, WrongTypeError
 from tests.harness.stores import SERVED, STORE_PARAMS, STORES
@@ -18,7 +16,8 @@ from tests.harness.stores import SERVED, STORE_PARAMS, STORES
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
 
-    from pashe.backends import AsyncBackend, Backend
+    from pashe.backends import AsyncBackend
+    from tests.harness.helpers import EitherBackend, Side
 
 _INT64_MAX = 2**63 - 1
 
@@ -53,21 +52,18 @@ def _awaited(backend: Backend) -> AsyncBackend:
 
 
 @pytest.fixture(params=[*STORE_PARAMS, "near"])
-async def backend(request: pytest.FixtureRequest, side: str, key_prefix: str) -> AsyncIterator[AsyncBackend]:
+async def backend(request: pytest.FixtureRequest, side: Side, key_prefix: str) -> AsyncIterator[AsyncBackend]:
     """An empty backend of every store and side, and a near cache over memory."""
     if request.param == "near":
-        created: Any = (
-            NearCacheBackend(MemoryBackend(), MemoryBackend())
-            if side == "sync"
-            else AsyncNearCacheBackend(AsyncMemoryBackend(), AsyncMemoryBackend())
-        )
+        created: EitherBackend = side.near()
     else:
         created = STORES[request.param](request, side)()
     if request.param in SERVED:
-        # The test processes share a server, and a cluster has one database: each test keeps its keys
-        # under a prefix of its own, so its keys still spread over the slots, and so over the nodes.
-        created = PrefixedBackend(created, key_prefix) if side == "sync" else AsyncPrefixedBackend(created, key_prefix)
-    driven = _awaited(created) if side == "sync" else created
+        # The tests of a process share its server, and every process shares the cluster, which has one
+        # database: each test keeps its keys under a prefix of its own, so its keys still spread over
+        # the slots, and so over the nodes.
+        created = side.prefixed(created, key_prefix)
+    driven = _awaited(created) if isinstance(created, Backend) else created
 
     yield driven
     await driven.aclose()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from wsgiref.util import setup_testing_defaults
 from wsgiref.validate import validator
 
@@ -17,8 +17,8 @@ from pashe.wsgi import CacheHeadersMiddleware
 from tests.harness.helpers import Source
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
-    from wsgiref.types import StartResponse, WSGIEnvironment
+    from collections.abc import Callable, Iterable, Iterator
+    from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
 
     from tests.harness.helpers import Clock
 
@@ -125,9 +125,9 @@ def test_a_request_with_no_cache_it_is_allowed_reloads_its_results(clock: Clock)
     assert response.headers["cache-status"] == "pashe; fwd=request; ttl=60"
 
 
-def _get(application: Any, path: str = "/", **headers: str) -> tuple[list[tuple[str, str]], bytes]:
+def _get(application: WSGIApplication, path: str = "/", **headers: str) -> tuple[list[tuple[str, str]], bytes]:
     """Run application on a GET of path as a WSGI server does; return the headers it started and the body."""
-    environ: dict[str, Any] = {
+    environ: WSGIEnvironment = {
         "PATH_INFO": path,
         "SCRIPT_NAME": "",
         "QUERY_STRING": "",
@@ -135,9 +135,18 @@ def _get(application: Any, path: str = "/", **headers: str) -> tuple[list[tuple[
     }
     setup_testing_defaults(environ)
     started: list[list[tuple[str, str]]] = []
-    body = application(environ, lambda _status, sent, _exc_info=None: started.append(sent))
+    chunks: list[bytes] = []
+
+    def start_response(
+        _status: str, sent: list[tuple[str, str]], _exc_info: object = None, /
+    ) -> Callable[[bytes], object]:
+        started.append(sent)
+        return chunks.append  # the write of WSGI: its bytes go out in the order of the body
+
+    body = application(environ, start_response)
     try:
-        whole = b"".join(body)
+        chunks.extend(body)  # a write while it iterates lands between the parts of the body, in order
+        whole = b"".join(chunks)
     finally:
         getattr(body, "close", lambda: None)()
     return started[0], whole

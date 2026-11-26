@@ -18,7 +18,7 @@ from tests.harness.helpers import RecordingHook, call
 
 if TYPE_CHECKING:
     from pashe.hooks import Outcome
-    from tests.harness.helpers import NewCache
+    from tests.harness.helpers import NewCache, Side
 
 _SECRET = "a secret of sixteen bytes or more"
 _DIGEST_HEX = 32  # 128 bits
@@ -38,7 +38,7 @@ def _keys(cache_outcomes: list[Outcome]) -> list[str]:
     return [outcome.key for outcome in cache_outcomes]
 
 
-async def test_equal_values_give_equal_digests(side: str, new_process_cache: NewCache) -> None:
+async def test_equal_values_give_equal_digests(side: Side, new_process_cache: NewCache) -> None:
     outcomes: list[Outcome] = []
     cache = new_process_cache(hooks=[RecordingHook(outcomes=outcomes)])
     loads: list[object] = []
@@ -47,10 +47,7 @@ async def test_equal_values_give_equal_digests(side: str, new_process_cache: New
         loads.append(filters)
         return len(loads)
 
-    async def asearch(filters: dict[str, object]) -> int:
-        return search(filters)
-
-    cached = cache(ttl=60, key="search:{filters:blake2b}")(search if side == "sync" else asearch)
+    cached = cache(ttl=60, key="search:{filters:blake2b}")(side.function(search))
     assert await call(cached, {"color": "red", "size": 3}) == 1
     assert await call(cached, {"size": 3, "color": "red"}) == 1  # the same dict in another order
     assert await call(cached, {"size": 4, "color": "red"}) == 2
@@ -111,7 +108,7 @@ def test_format_specs_of_str_format_stay() -> None:
     assert cache.key_for("price:{0:.2f}:{1:x}:{2:>4}", 1.5, 255, "a") == "price:1.50:ff:   a"
 
 
-async def test_a_hashed_tag_is_made_by_cache_key(side: str, new_process_cache: NewCache) -> None:
+async def test_a_hashed_tag_is_made_by_cache_key(side: Side, new_process_cache: NewCache) -> None:
     cache = new_process_cache(key_secret=_SECRET)
     loads: list[str] = []
 
@@ -119,12 +116,7 @@ async def test_a_hashed_tag_is_made_by_cache_key(side: str, new_process_cache: N
         loads.append(email)
         return len(loads)
 
-    async def aget_user(email: str) -> int:
-        return get_user(email)
-
-    cached = cache(ttl=60, key="user:{email:hmac}", tags=["user:{email:hmac}"])(
-        get_user if side == "sync" else aget_user
-    )
+    cached = cache(ttl=60, key="user:{email:hmac}", tags=["user:{email:hmac}"])(side.function(get_user))
     assert await call(cached, "ada@example.com") == 1
     await call(cache.invalidate_tags, cache.key_for("user:{email:hmac}", email="ada@example.com"))
     assert await call(cached, "ada@example.com") == 2
