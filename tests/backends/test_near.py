@@ -191,8 +191,11 @@ def test_a_pub_sub_bus_refuses_an_async_cluster_without_pub_sub(monkeypatch: pyt
 
 
 def test_a_tracking_bus_refuses_a_cluster(redis_cluster_url: str) -> None:
+    client = RedisCluster.from_url(redis_cluster_url)  # connects to the nodes already, unlike the async one
+
     with pytest.raises(TypeError, match="client must be Redis, not RedisCluster"):
-        RedisTrackingBus(RedisCluster.from_url(redis_cluster_url))  # type: ignore[arg-type]  # as a caller without types
+        RedisTrackingBus(client)  # type: ignore[arg-type]  # as a caller without types
+    client.close()
     with pytest.raises(TypeError, match="client must be Redis, not RedisCluster"):
         AsyncRedisTrackingBus(AsyncRedisCluster.from_url(redis_cluster_url))  # type: ignore[arg-type]  # as above
 
