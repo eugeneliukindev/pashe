@@ -2,7 +2,8 @@
 
 `@cache.value(...)` keeps values that no function loads: what one place writes and another reads
 later, such as a session, a one-time code or the result of a job. It takes the `ttl`, `key` and
-`tags` of `@cache(...)`; a miss is `None`, not a load.
+`tags` of `@cache(...)`; a miss is `None`, not a load. It makes a `CachedValue`, an
+`AsyncCachedValue` on the async side.
 
 === "Sync"
 

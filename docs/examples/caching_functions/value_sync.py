@@ -14,7 +14,11 @@ def send_code(email: str, user_id: int) -> None:
     login_code.set("482913", email, user_id)  # one process sends the mail
 
 
-def check_code(email: str, user_id: int, entered: str) -> bool:
+def check_code(
+    email: str,
+    user_id: int,
+    entered: str,
+) -> bool:
     code = login_code.get(email, user_id)  # another process checks: None once it expired
     if code != entered:
         return False

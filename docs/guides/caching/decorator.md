@@ -56,6 +56,20 @@ flowchart LR
 The options of [stale results](../failures/stale.md) and of [stampedes](../failures/stampedes.md) have their own
 pages.
 
+## Every option
+
+=== "Sync"
+
+    ```python
+    --8<-- "caching_functions/decorator_options_sync.py:show"
+    ```
+
+=== "Async"
+
+    ```python
+    --8<-- "caching_functions/decorator_options_async.py:show"
+    ```
+
 ## Reading and writing a result
 
 === "Sync"

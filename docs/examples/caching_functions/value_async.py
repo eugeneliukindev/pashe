@@ -14,7 +14,11 @@ async def send_code(email: str, user_id: int) -> None:
     await login_code.set("482913", email, user_id)  # one process sends the mail
 
 
-async def check_code(email: str, user_id: int, entered: str) -> bool:
+async def check_code(
+    email: str,
+    user_id: int,
+    entered: str,
+) -> bool:
     code = await login_code.get(email, user_id)  # another process checks: None once it expired
     if code != entered:
         return False

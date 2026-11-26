@@ -91,7 +91,6 @@ nav = [
             { "prometheus" = "reference/contrib/prometheus.md" },
             { "sentry" = "reference/contrib/sentry.md" },
         ] },
-        { "Internal API" = "reference/internal.md" },
     ] },
     { "Deep dive" = [
         { "pashe and other libraries" = "deep-dive/comparison.md" },

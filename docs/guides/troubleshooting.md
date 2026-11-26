@@ -1,6 +1,7 @@
 # Troubleshooting
 
-The errors you meet first, and what they mean.
+The errors you meet first, and what they mean. Every error pashe raises subclasses `PasheError`
+of `pashe.errors`, so `except PasheError` takes them all.
 
 ??? question "TypeError: argument 'filters' is a dict: pass key= with a template"
 

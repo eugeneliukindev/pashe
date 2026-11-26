@@ -17,6 +17,7 @@ all items in one backend call and calls the function once with the missing ones.
     --8<-- "caching_functions/batches_async.py:calls"
     ```
 
+`@cache.batch(...)` makes a `CachedBatchFunction`, an `AsyncCachedBatchFunction` on the async side.
 Items the function leaves out are absent from the result and not stored. `batch` takes `ttl`,
 `key`, `stampede` with its `jitter` and `max_concurrent_loads`, and `store`.
 

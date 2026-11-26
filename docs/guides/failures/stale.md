@@ -13,6 +13,21 @@ flowchart LR
     class gone fromSource
 ```
 
+Every window of `Stale` at once, as the [example of every option](../caching/decorator.md#every-option) of
+`@cache(...)` gives it:
+
+=== "Sync"
+
+    ```python
+    --8<-- "caching_functions/decorator_options_sync.py:stale"
+    ```
+
+=== "Async"
+
+    ```python
+    --8<-- "caching_functions/decorator_options_async.py:stale"
+    ```
+
 ## Stale while revalidate
 
 ```mermaid

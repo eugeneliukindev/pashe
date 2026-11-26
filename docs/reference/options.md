@@ -55,42 +55,18 @@ the others do nothing, and the cache calls its hooks in the order of the list.
 | `negative` | `Negative` | `Negative()` | loader errors kept as the answer "no such data": [below](#negative); `Negative()` keeps none |
 | `store` | `Store` | `Store()` | which loaded results are stored: [below](#store) |
 
-The groups are in `pashe.options`; one left out takes its defaults:
+The groups are in `pashe.options`; one left out takes its defaults. Every option at once:
 
 === "Sync"
 
     ```python
-    from pashe.options import IfError, Negative, Stale, Stampede, Store
-
-
-    @cache(
-        ttl=60,
-        key="user:{user_id}",
-        stale=Stale(while_revalidate=30, if_error=IfError(600, on=(ConnectionError,))),
-        stampede=Stampede(revalidate_before=10, lock_for=5, jitter=0.1, max_concurrent_loads=10),
-        negative=Negative(on=(LookupError,), ttl=30),
-        store=Store(when=lambda user: user["active"]),
-    )
-    def get_user(user_id: int) -> dict[str, bool]:
-        return {"active": True}
+    --8<-- "caching_functions/decorator_options_sync.py:show"
     ```
 
 === "Async"
 
     ```python
-    from pashe.options import IfError, Negative, Stale, Stampede, Store
-
-
-    @cache(
-        ttl=60,
-        key="user:{user_id}",
-        stale=Stale(while_revalidate=30, if_error=IfError(600, on=(ConnectionError,))),
-        stampede=Stampede(revalidate_before=10, lock_for=5, jitter=0.1, max_concurrent_loads=10),
-        negative=Negative(on=(LookupError,), ttl=30),
-        store=Store(when=lambda user: user["active"]),
-    )
-    async def get_user(user_id: int) -> dict[str, bool]:
-        return {"active": True}
+    --8<-- "caching_functions/decorator_options_async.py:show"
     ```
 
 A group checks its options when it is made: options that cannot work together, such as

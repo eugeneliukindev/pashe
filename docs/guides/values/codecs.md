@@ -60,6 +60,10 @@ differ, the ratios hold:
     Unpickling runs code chosen by the bytes, so it signs every value with a secret; it is also
     the slowest. Use it only for objects no other codec holds.
 
+A codec of your own subclasses `Codec` of `pashe.codecs`: `encode` turns a value into bytes,
+`decode` gives it back as the type it is asked for, and `check` refuses, when a function is
+decorated, a type it cannot give back as it is; it takes every type by default.
+
 ---
 
 API reference: [`pashe.codecs`](../../reference/codecs.md).

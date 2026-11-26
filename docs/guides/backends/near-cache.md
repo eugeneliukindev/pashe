@@ -130,8 +130,10 @@ within `local_ttl` at the latest.
 
 Subclass `InvalidationBus`, or `AsyncInvalidationBus`, from `pashe.invalidation`, for another
 transport such as NATS or Kafka. `publish(keys)` tells the other processes that keys changed;
-`None` means every key. `listen(on_invalidate)` calls `on_invalidate` with the keys others publish, until
-the function it returns is called.
+`None` means every key. `listen(on_invalidate)` calls `on_invalidate`, an `InvalidationHandler`, or
+an `AsyncInvalidationHandler` on the async side, with the keys others publish, until the function
+it returns is called. A near cache without `bus=` has `NoOpBus`, `AsyncNoOpBus` on the async side,
+which tells no one.
 
 ---
 

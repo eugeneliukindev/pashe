@@ -46,6 +46,23 @@ Each limit keeps counters of its own, named by the key and the limit. Two limits
 as 10 calls a minute and 100 an hour for one address, count apart, and a call passes when every
 one of them lets it. One limit used in two places on one key shares its counters.
 
+## Every option
+
+=== "Sync"
+
+    ```python
+    --8<-- "locks_and_rate_limits/rate_limit_options_sync.py:show"
+    ```
+
+=== "Async"
+
+    ```python
+    --8<-- "locks_and_rate_limits/rate_limit_options_async.py:show"
+    ```
+
+`rate_limit` returns a `RateLimitState` of `pashe.ratelimit`: the calls of the limit, those left,
+and the seconds until the window resets.
+
 !!! warning "A limit is checked in a few calls to the backend, not at once"
 
     A sliding window adds the call to its counter, reads the last window, and takes the call back

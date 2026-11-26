@@ -10,6 +10,21 @@ When a popular key expires, every caller misses at once and asks the source. The
 | `max_concurrent_loads` | `int` | the cache: one process | `0`, no limit | at most this many loads of the function run at once |
 | `revalidate_before` | `float | int | timedelta` | the backend: every process over it | `0`, off | in the last seconds of the TTL a call gets the fresh result at once, and one caller reloads it in the background |
 
+Every option at once, as the [example of every option](../caching/decorator.md#every-option) of
+`@cache(...)` gives it:
+
+=== "Sync"
+
+    ```python
+    --8<-- "caching_functions/decorator_options_sync.py:stampede"
+    ```
+
+=== "Async"
+
+    ```python
+    --8<-- "caching_functions/decorator_options_async.py:stampede"
+    ```
+
 === "Sync"
 
     ```python

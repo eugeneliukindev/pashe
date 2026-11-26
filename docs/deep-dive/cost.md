@@ -37,6 +37,7 @@ per node at once, and `set_many` of a batch as one pipeline per node.
 | --- | --- |
 | `try_lock` | 1: `SET NX` |
 | `with cache.lock(...)` | 2: `SET NX`, then the release; one more every third of the TTL while the block runs |
+| `try_lock` or `lock` of `holders=N` | 1 `SET NX` for a free place, up to N when the others are taken: it tries them one by one |
 | `rate_limit` over a `SlidingWindow` | 2: the increment of the current window, the read of the last one; a refused call 1 more, to undo its count |
 | `rate_limit` over a `FixedWindow` | 2: the increment, then the time left; the call that starts a ban 1 more |
 

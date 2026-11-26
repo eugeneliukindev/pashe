@@ -1,7 +1,8 @@
 # What is stored, and for how long
 
 How long a result stays fresh, with `ttl=`; which results are stored at all, with `Store`; and how
-a "not found" is kept as an answer, with `Negative`.
+a "not found" is kept as an answer, with `Negative`. Every duration of the options, such as a
+`ttl` or a window of `Stale`, is a `Duration` of `pashe.options`: seconds or a `timedelta`.
 
 ## TTL from the result
 

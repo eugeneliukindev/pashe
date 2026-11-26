@@ -10,6 +10,8 @@
 ::: pashe.hooks.LoggingHook
 
 ::: pashe.hooks.CacheHeadersHook
+    options:
+      filters: ["!^_[^_]", "!^__(?!(call|enter|exit|aenter|aexit)__$)", "!^recording$"]  # the library calls it, not you
 
 ::: pashe.hooks.Outcome
 

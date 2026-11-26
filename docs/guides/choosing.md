@@ -119,6 +119,7 @@ feature that lives in it.
 | a block one process at a time may run | `with cache.lock(...)` | every process | [Locks](locks/locks.md) |
 | a job that skips when another process runs it | `cache.try_lock(...)` | every process | the same |
 | a function one process at a time may run, each call doing its work | `@cache.locked(...)` | every process | the same |
+| a function a few at a time may run, such as three exports at once | `@cache.locked(..., holders=3)` | every process | [Several holders](locks/locks.md#several-holders) |
 | a cached function whose load one process at a time may run, the others taking its result | `Stampede(lock_for=...)`, not `@cache.locked` | every process | [Locking a load across processes](failures/stampedes.md#locking-a-load-across-processes) |
 | a limit such as "100 a minute", even across its windows | `SlidingWindow`, or `per_minute(100)` | every process | [Rate limits](locks/rate-limits.md) |
 | a limit that bans for a while once it is passed, such as logins | `FixedWindow(..., ban_for=...)` | every process | the same |

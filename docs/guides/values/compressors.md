@@ -42,6 +42,11 @@ bytes on the network; it costs CPU on every read and write.
     Cache(backend, compressor=GzipCompressor(min_size=4096))
     ```
 
+A cache without `compressor=` has `NoOpCompressor`, which stores the bytes of the codec as they
+are. A compressor of your own subclasses `Compressor` of `pashe.compressors`: `compress` and
+`decompress` turn bytes into bytes, and `min_size` is the length below which a value is stored as
+it is.
+
 ---
 
 API reference: [`pashe.compressors`](../../reference/compressors.md).

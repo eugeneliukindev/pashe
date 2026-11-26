@@ -47,7 +47,8 @@ sequenceDiagram
     --8<-- "locks_and_rate_limits/lock_async.py:show"
     ```
 
-Entering waits while someone else holds the lock; `timeout` bounds the wait and raises
+`cache.lock` and `cache.try_lock` return a `Lock` of `pashe.locks`, an `AsyncLock` on the async
+side; its `key` is the name it was given. Entering waits while someone else holds the lock; `timeout` bounds the wait and raises
 `LockTimeoutError`. While the block runs the lock is extended every third of `ttl`, so the block
 may run longer than `ttl`; the `ttl` frees the lock if the process dies.
 
@@ -68,6 +69,44 @@ may run longer than `ttl`; the `ttl` frees the lock if the process dies.
     ```python
     --8<-- "locks_and_rate_limits/try_lock_async.py:show"
     ```
+
+## Every option
+
+=== "Sync"
+
+    ```python
+    --8<-- "locks_and_rate_limits/lock_options_sync.py:show"
+    ```
+
+=== "Async"
+
+    ```python
+    --8<-- "locks_and_rate_limits/lock_options_async.py:show"
+    ```
+
+## Several holders
+
+`holders` lets a lock be held by that many at once, as a semaphore across processes: a fourth
+waits while three hold `holders=3`. `lock`, `try_lock` and `@cache.locked` take it, and every
+holder is extended and released on its own.
+
+=== "Sync"
+
+    ```python
+    --8<-- "locks_and_rate_limits/holders_sync.py:show"
+    ```
+
+=== "Async"
+
+    ```python
+    --8<-- "locks_and_rate_limits/holders_async.py:show"
+    ```
+
+!!! warning "One number of holders for a key"
+
+    Every use of a key takes the same `holders`. Each holder takes one of as many keys in the
+    backend, the first of them the key itself; a lock of the key with fewer holders checks fewer
+    of them, and lets more in than either number says.
 
 ---
 

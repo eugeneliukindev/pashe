@@ -73,6 +73,10 @@ Only a server that cannot be reached counts as a failure: an error it answered, 
 Redis, `RedisPubSubBus(client, breaker=breaker)`, so both skip it together. A hook hears when it
 opens and closes through `on_circuit`: an alert of a Redis that is down.
 
+A backend takes any `Breaker` of `pashe.backends`: `NoOpBreaker`, the default, lets every call
+through. Another policy subclasses `Breaker`: `before_call` lets a call reach the backend or raises
+`CircuitOpenError`, and `on_success`, `on_failure` and `on_cancel` take how it ended.
+
 ---
 
 API reference: [options](../../reference/options.md), [`pashe.backends`](../../reference/backends.md).
