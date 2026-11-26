@@ -23,7 +23,7 @@ def main() -> None:
 
     # --8<-- [start:methods]
     user = {"id": "1", "name": "Ada"}
-    get_user.refresh(1)  # load again and store, whatever is stored
+    get_user.refresh(1)  # reload and store, whatever is stored
     get_user.set(user, 1)  # store a value as the result of get_user(1), as right after saving it
     get_user.invalidate(1)  # drop the stored result
     # --8<-- [end:methods]

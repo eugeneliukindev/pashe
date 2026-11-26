@@ -15,7 +15,7 @@ SALES = "SELECT count(*), coalesce(sum(total_cents), 0) FROM orders WHERE day = 
     stale=Stale(while_revalidate=600),  # the old report answers at once while a new one is built
     stampede=Stampede(
         lock_for=30,  # one process of the service builds it, the others wait for it
-        max_concurrent_loads=2,  # at most two reports build at once in a process
+        max_loads=2,  # at most two reports build at once in a process
     ),
 )
 def sales_report(day: str) -> dict[str, int]:

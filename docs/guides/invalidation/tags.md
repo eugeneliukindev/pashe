@@ -21,9 +21,8 @@ or every user. `tags=` of the decorator takes templates over the arguments, as `
     --8<-- "invalidation/tags_async.py:show"
     ```
 
-An invalidation is two calls to the backend per tag, and nothing is scanned: a tag has a generation counter, and
-a result remembers the generations of its tags, as [Core concepts](../../concepts.md#tags) shows.
-Every process over the same backend sees it at once.
+An invalidation is two calls to the backend per tag, however many results it covers, and scans
+no key. Every process over the same backend sees it at once.
 
 A tag with a digest, such as `user:{email:hmac}`, is stored filled in and hashed: make it with
 `cache.key_for("user:{email:hmac}", email=...)` to invalidate it, see [`key_for`](../caching/keys.md#digests-and-cachekey_for).
@@ -33,4 +32,4 @@ A tag with a digest, such as `user:{email:hmac}`, is stored filled in and hashed
 
 ---
 
-API reference: [`pashe`](../../reference/caches.md).
+API reference: [`Cache.invalidate_tags`](../../reference/caches.md#pashe.Cache.invalidate_tags), [`Cache.key_for`](../../reference/caches.md#pashe.Cache.key_for).

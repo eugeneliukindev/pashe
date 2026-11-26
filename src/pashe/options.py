@@ -56,9 +56,9 @@ class Stale:
     Attributes:
         while_revalidate: a stale result answers at once while one caller reloads it in the
             background (RFC 5861).
-        if_error: a stale result answers a loader error (RFC 5861): seconds or a timedelta answer
+        if_error: a stale result answers an error of the function (RFC 5861): seconds or a timedelta answer
             any Exception; IfError names the errors.
-        if_slow: a stale result answers a loader slower than IfSlow.after; the load goes on in
+        if_slow: a stale result answers a function slower than IfSlow.after; the load goes on in
             the background. None turns it off.
 
     Examples:
@@ -90,11 +90,11 @@ class Stale:
 @final
 @dataclass(frozen=True, slots=True)
 class IfError:
-    """How long after its TTL a stale result answers a loader that raised one of on (RFC 5861).
+    """How long after its TTL a stale result answers a function that raised one of on (RFC 5861).
 
     Attributes:
         window: how long after the TTL, seconds or a timedelta.
-        on: the loader errors it answers.
+        on: the errors of the function it answers.
 
     Examples:
         >>> from pashe.options import IfError
@@ -119,11 +119,11 @@ class IfError:
 @final
 @dataclass(frozen=True, slots=True)
 class IfSlow:
-    """How long after its TTL a stale result answers a loader slower than after; the load goes on in the background.
+    """How long after its TTL a stale result answers a function slower than after; the load goes on in the background.
 
     Attributes:
         window: how long after the TTL, seconds or a timedelta.
-        after: how long a call waits for the loader before the stale result answers it.
+        after: how long a call waits for the function before the stale result answers it.
 
     Examples:
         >>> from pashe.options import IfSlow
@@ -142,7 +142,7 @@ class IfSlow:
             InvalidOptionsError: the window is negative, or after is not more than 0.
         """
         parse_seconds("IfSlow.window", self.window, _WINDOW)
-        parse_seconds("IfSlow.after", self.after, "how long a call waits for the loader", positive=True)
+        parse_seconds("IfSlow.after", self.after, "how long a call waits for the function", positive=True)
 
 
 @final
@@ -160,23 +160,23 @@ class Stampede:
             a holder that dies frees it.
         jitter: spreads TTLs randomly by up to this share, from 0 to less than 1, so entries
             stored together do not expire together: 0.1 means +-10%; the TTL of Negative too.
-        max_concurrent_loads: how many loads may run at once in this cache; 0 means no limit.
-            A call over it waits for a slot, or raises OverloadedError when a stale result can
-            answer instead.
-        single_flight: concurrent calls of one key in this cache share one lookup and one
+        max_loads: how many loads of the function may run at once in this process; 0 means no
+            limit. A call over it waits for a slot; when a stale result can answer it, that result
+            answers at once instead, and the hooks hear an OverloadedError.
+        share_loads: concurrent calls of one key in this process share one lookup and one
             load. They then get the same object: copy a result before you change it.
 
     Examples:
         >>> from pashe.options import Stampede
         >>> Stampede(revalidate_before=10, jitter=0.1, lock_for=5)
-        Stampede(revalidate_before=10, lock_for=5, jitter=0.1, max_concurrent_loads=0, single_flight=True)
+        Stampede(revalidate_before=10, lock_for=5, jitter=0.1, max_loads=0, share_loads=True)
     """
 
     revalidate_before: Duration = 0
     lock_for: Duration = 0
     jitter: float = 0
-    max_concurrent_loads: int = 0
-    single_flight: bool = True
+    max_loads: int = 0
+    share_loads: bool = True
 
     def __post_init__(self) -> None:
         """Check the options.
@@ -184,7 +184,7 @@ class Stampede:
         Raises:
             TypeError: an option is not of the type its annotation names.
             InvalidOptionsError: jitter is not from 0 to less than 1, or revalidate_before, lock_for or
-                max_concurrent_loads is negative.
+                max_loads is negative.
         """
         parse_seconds(
             "Stampede.revalidate_before",
@@ -192,30 +192,30 @@ class Stampede:
             "0 turns it off, more reloads that long before the TTL",
         )
         expect_type("Stampede.jitter", self.jitter, int | float)
-        expect_type("Stampede.single_flight", self.single_flight, bool)
+        expect_type("Stampede.share_loads", self.share_loads, bool)
         parse_seconds("Stampede.lock_for", self.lock_for, "0 turns the lock off, more holds it that long")
-        expect_type("Stampede.max_concurrent_loads", self.max_concurrent_loads, int)
+        expect_type("Stampede.max_loads", self.max_loads, int)
 
         if not 0 <= self.jitter < 1:
             msg = f"Stampede.jitter is {self.jitter!r}: a share from 0 to less than 1, such as 0.1 for +-10%"
             raise InvalidOptionsError(msg)
 
-        if self.max_concurrent_loads < 0:
-            msg = f"Stampede.max_concurrent_loads is {self.max_concurrent_loads}: 0 means no limit, more is the limit"
+        if self.max_loads < 0:
+            msg = f"Stampede.max_loads is {self.max_loads}: 0 means no limit, more is the limit"
             raise InvalidOptionsError(msg)
 
 
 @final
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Negative:
-    """Negative caching: loader errors that mean "there is no such data", kept as the answer for a while.
+    """Negative caching: errors of the function that mean "there is no such data", kept as the answer for a while.
 
     The source is not asked again for what it does not have. The cached function raises
-    NotFoundError then, with the loader error as its cause when it loaded; a stale result never
+    NotFoundError then, with the error of the function as its cause when it loaded; a stale result never
     hides it. By default no error is kept: Negative() turns it off.
 
     Attributes:
-        on: the loader errors that mean "not found", such as ``(UserNotFoundError,)``.
+        on: the errors of the function that mean "not found", such as ``(UserNotFoundError,)``.
         ttl: how long a "not found" is kept; positive once on names an error.
 
     Examples:
@@ -243,7 +243,7 @@ class Negative:
             raise InvalidOptionsError(msg)
 
         if ttl and not self.on:
-            msg = "Negative.ttl is set and Negative.on is empty: name the loader errors, such as (UserNotFoundError,)"
+            msg = "Negative.ttl is set and Negative.on is empty: name the errors of the function, such as (UserNotFoundError,)"
             raise InvalidOptionsError(msg)
 
 

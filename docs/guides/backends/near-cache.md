@@ -9,6 +9,18 @@ Redis node, and reads go on for a while when Redis is slow.
     The copies live in each process; the bus tells every process over the shared backend to drop
     them. See [Where each feature works](../choosing.md#where-each-feature-works).
 
+=== "Sync"
+
+    ```python
+    --8<-- "backends/near_cache_sync.py:show"
+    ```
+
+=== "Async"
+
+    ```python
+    --8<-- "backends/near_cache_async.py:show"
+    ```
+
 ```mermaid
 flowchart LR
     subgraph p1["Process 1"]
@@ -33,17 +45,7 @@ flowchart LR
     style shared fill:#f7b5002e,stroke:#c98f00
 ```
 
-=== "Sync"
-
-    ```python
-    --8<-- "backends/near_cache_sync.py:show"
-    ```
-
-=== "Async"
-
-    ```python
-    --8<-- "backends/near_cache_async.py:show"
-    ```
+API reference: [`NearCacheBackend`](../../reference/backends.md#pashe.backends.NearCacheBackend).
 
 ## How it reads and writes
 
@@ -55,9 +57,6 @@ flowchart LR
 4. Other processes still hold their copies. Without a bus each answers with its copy for up to
    `local_ttl`: that is how stale a near cache may be. A bus tells them at once.
 
-A copy is made only if no drop of the key came while it was read, so a value read just before a
-change does not outlive the change.
-
 `hooks=` takes the hooks of the cache, such as the metrics of `pashe.contrib.opentelemetry`: a
 near cache tells them how many keys its copies answered, with `on_near_read`, and when it dropped
 every copy, with `on_near_flush`. See [Metrics and logs](../observability/hooks.md).
@@ -67,11 +66,6 @@ every copy, with `on_near_flush`. See [Metrics and logs](../observability/hooks.
 A bus carries "these keys changed" between the near caches of every process; only the names of
 keys travel, never values. A near cache starts listening to its bus on its first read, and a
 process that hears of a key drops its copy: its next read goes to the shared backend.
-
-| Bus | How it learns of a change | Sees writes of | Needs |
-| --- | --- | --- | --- |
-| `RedisPubSubBus` | the writer publishes the keys it changed on a channel | pashe only | any Redis, Valkey, a Redis Cluster |
-| `RedisTrackingBus` | Redis tells, with `CLIENT TRACKING` in broadcasting mode | anyone: pashe, other services, `redis-cli` | Redis or Valkey 6 or later, one node |
 
 ```mermaid
 sequenceDiagram
@@ -92,34 +86,62 @@ sequenceDiagram
     R-->>B: RedisTrackingBus: drop user:2, as Redis saw the write
 ```
 
-### `RedisPubSubBus`
+| Bus | How it learns of a change | Sees writes of | Needs |
+| --- | --- | --- | --- |
+| `RedisPubSubBus` | the writer publishes the keys it changed on a channel | pashe only | any Redis, Valkey, a Redis Cluster |
+| `RedisTrackingBus` | Redis tells, with `CLIENT TRACKING` in broadcasting mode | anyone: pashe, other services, `redis-cli` | Redis or Valkey 6 or later, one node |
 
-The near cache that writes publishes the changed keys on a channel, `pashe:near-cache` by
-default; every process subscribed to it drops its copies. Give every process of one cache the
-same channel, and two caches that must not hear each other different ones. Writes made past
-pashe, by another service or by hand, are not published: those copies live out `local_ttl`.
+=== "RedisPubSubBus"
 
-Every near cache hears every message, its own too: the one that wrote drops its copy of the key,
-and its next read of it goes to the shared backend once. Near caches may share a bus and its
-client.
+    === "Sync"
 
-### `RedisTrackingBus`
+        ```python
+        --8<-- "backends/pubsub_bus_sync.py:show"
+        ```
 
-Redis itself tells about every write under a prefix, whoever made it, so pashe publishes
-nothing. Give it the prefix of the cache, such as `prefix="app:"`: without one every process
-hears of every write to the whole Redis. Tracking in broadcasting mode costs the server no
-memory. The bus listens on a connection of its own; on a Redis Cluster a node tracks only its
-own keys, so take `RedisPubSubBus` there.
+    === "Async"
+
+        ```python
+        --8<-- "backends/pubsub_bus_async.py:show"
+        ```
+
+    The near cache that writes publishes the changed keys on a channel, `pashe:near-cache` by
+    default; every process subscribed to it drops its copies. Give every process of one cache the
+    same channel, and two caches that must not hear each other different ones. Writes made past
+    pashe, by another service or by hand, are not published: those copies live out `local_ttl`.
+
+    Near caches may share a bus and its client.
+
+    API reference: [`RedisPubSubBus`](../../reference/contrib/redis.md#pashe.contrib.redis.RedisPubSubBus).
+
+=== "RedisTrackingBus"
+
+    === "Sync"
+
+        ```python
+        --8<-- "backends/tracking_bus_sync.py:show"
+        ```
+
+    === "Async"
+
+        ```python
+        --8<-- "backends/tracking_bus_async.py:show"
+        ```
+
+    Redis itself tells about every write under a prefix, whoever made it, so pashe publishes
+    nothing. Give it the prefix of the cache, such as `prefix="app:"`: without one every process
+    hears of every write to the whole Redis. Tracking in broadcasting mode costs the server no
+    memory. The bus listens on a connection of its own; on a Redis Cluster a node tracks only its
+    own keys, so take `RedisPubSubBus` there.
+
+    API reference: [`RedisTrackingBus`](../../reference/contrib/redis.md#pashe.contrib.redis.RedisTrackingBus).
 
 ### When messages are lost
 
 A message sent while a process is disconnected never reaches it. So whenever a bus cannot be
-sure it heard everything, the near cache drops all its copies: when it subscribes, as a copy may
-be older than the subscription, and after every error of the connection. It listens again after a second, and waits twice as long
-each time Redis fails again, up to 30 seconds, so the processes of a service do not all reconnect
-at once. A failed publish is not raised, as the write itself succeeded: the next publish that
-goes through tells the other processes to drop every copy, and until then they drop theirs
-within `local_ttl` at the latest.
+sure it heard everything, as after an error of its connection, the near cache drops all its
+copies, and listens again by itself. A publish that failed is not raised, as the write itself
+succeeded; the other processes then drop their copies within `local_ttl` at the latest.
 
 !!! note
 
@@ -134,6 +156,8 @@ transport such as NATS or Kafka. `publish(keys)` tells the other processes that 
 an `AsyncInvalidationHandler` on the async side, with the keys others publish, until the function
 it returns is called. A near cache without `bus=` has `NoOpBus`, `AsyncNoOpBus` on the async side,
 which tells no one.
+
+API reference: [`InvalidationBus`](../../reference/invalidation.md#pashe.invalidation.InvalidationBus).
 
 ---
 

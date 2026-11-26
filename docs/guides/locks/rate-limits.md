@@ -1,6 +1,7 @@
 # Rate limits
 
-`cache.rate_limit` and `@cache.rate_limited` count calls for a key in the backend, so every process that uses it shares the
+`cache.rate_limit` and `@cache.rate_limited` count calls for a key in the backend, so every process
+that uses it shares the
 count, and refuses those over the limit with `RateLimitedError`.
 
 !!! info "Where it works"
@@ -20,24 +21,50 @@ count, and refuses those over the limit with `RateLimitedError`.
     --8<-- "locks_and_rate_limits/rate_limit_async.py:show"
     ```
 
-| Limit | Counts |
-| --- | --- |
-| `SlidingWindow(calls=100, per=60)` | about `calls` calls in any span of `per` seconds; refused calls are not counted |
-| `FixedWindow(calls=5, per=60, ban_for=300)` | `calls` per window that starts with the first call; the first call over it blocks the key for `ban_for` |
-| `per_second(n)`, `per_minute(n)`, `per_hour(n)` | sliding windows |
+=== "SlidingWindow"
 
-A `FixedWindow` with a ban, as the table says:
+    === "Sync"
 
-```mermaid
-flowchart LR
-    window["0 to 60 s<br/>calls 1 to 5 pass"] -- "call 6" --> ban["the next 300 s<br/>every call raises RateLimitedError, retry_after says how long is left"]
-    ban --> next["after the ban<br/>the next call starts a new window"]
-    window -. "60 s pass" .-> next
-    classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
-    classDef fromSource fill:#2b5b84,color:#ffffff,stroke:#1f4466
-    class window,next fromCache
-    class ban fromSource
-```
+        ```python
+        --8<-- "locks_and_rate_limits/sliding_window_sync.py:show"
+        ```
+
+    === "Async"
+
+        ```python
+        --8<-- "locks_and_rate_limits/sliding_window_async.py:show"
+        ```
+
+    About `calls` calls pass in any span of `per` seconds, even across the edge of two windows;
+    refused calls are not counted. `SlidingWindow.per_second(n)`, `per_minute(n)` and `per_hour(n)` make one; `FixedWindow` has the same, with `ban_for=`.
+
+=== "FixedWindow"
+
+    === "Sync"
+
+        ```python
+        --8<-- "locks_and_rate_limits/fixed_window_sync.py:show"
+        ```
+
+    === "Async"
+
+        ```python
+        --8<-- "locks_and_rate_limits/fixed_window_async.py:show"
+        ```
+
+    `calls` pass per window that starts with the first call; the first call over it blocks the
+    key for `ban_for`, or for `per` without it:
+
+    ```mermaid
+    flowchart LR
+        window["0 to 60 s<br/>calls 1 to 5 pass"] -- "call 6" --> ban["the next 300 s<br/>every call raises RateLimitedError, retry_after says how long is left"]
+        ban --> next["after the ban<br/>the next call starts a new window"]
+        window -. "60 s pass" .-> next
+        classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
+        classDef fromSource fill:#2b5b84,color:#ffffff,stroke:#1f4466
+        class window,next fromCache
+        class ban fromSource
+    ```
 
 `RateLimitedError.retry_after` says how long to wait, for a `Retry-After` header. `cost` counts a
 heavy call as several. A failing backend lets the call through uncounted and reports to `on_error`.
@@ -45,6 +72,13 @@ heavy call as several. A failing backend lets the call through uncounted and rep
 Each limit keeps counters of its own, named by the key and the limit. Two limits on one key, such
 as 10 calls a minute and 100 an hour for one address, count apart, and a call passes when every
 one of them lets it. One limit used in two places on one key shares its counters.
+
+API reference: [`Cache.rate_limit`](../../reference/caches.md#pashe.Cache.rate_limit),
+[`Cache.rate_limited`](../../reference/caches.md#pashe.Cache.rate_limited),
+[`SlidingWindow`](../../reference/ratelimit.md#pashe.ratelimit.SlidingWindow),
+[`FixedWindow`](../../reference/ratelimit.md#pashe.ratelimit.FixedWindow),
+[`RateLimitState`](../../reference/ratelimit.md#pashe.ratelimit.RateLimitState),
+[`RateLimitedError`](../../reference/errors.md#pashe.errors.RateLimitedError).
 
 ## Every option
 

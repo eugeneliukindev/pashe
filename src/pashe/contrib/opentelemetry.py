@@ -34,7 +34,7 @@ class OtelMetricsHook(Hook):
 
     - ``pashe.calls``, a counter of ``{call}``: every cached call and item of a batch, by
       ``pashe.function`` and ``pashe.status``.
-    - ``pashe.load.duration``, a histogram in ``s``: every run of a loader for a call, by
+    - ``pashe.load.duration``, a histogram in ``s``: every run of a function for a call, by
       ``pashe.function``.
     - ``pashe.errors``, a counter of ``{error}``: every error a cache works around, by
       ``pashe.operation`` and ``error.type``, the qualified name of its class.
@@ -78,7 +78,7 @@ class OtelMetricsHook(Hook):
         self._loads = made.create_histogram(
             "pashe.load.duration",
             unit="s",
-            description="Runs of loaders for cached calls.",
+            description="Runs of functions for cached calls.",
             explicit_bucket_boundaries_advisory=_LOAD_BUCKETS,
         )
         self._errors = made.create_counter(
@@ -132,7 +132,7 @@ class OtelSpanEventsHook(Hook):
     """A hook that adds every cached call, and every error worked around, to the current span.
 
     A call becomes the event ``pashe.call``, with ``pashe.function``, ``pashe.key``,
-    ``pashe.status`` and, for a stored result, ``pashe.fresh_for``. An error becomes an exception event
+    ``pashe.status`` and, for a stored result, ``pashe.fresh_seconds``. An error becomes an exception event
     with ``pashe.operation`` and ``pashe.key``; the span keeps its status, as the cache answered.
     The key goes into the trace: give the templates of keys that hold personal data a digest,
     such as ``{email:hmac}``. Without a span that records, the hook does nothing.
@@ -156,8 +156,8 @@ class OtelSpanEventsHook(Hook):
             "pashe.key": outcome.key,
             "pashe.status": outcome.status.value,
         }
-        if outcome.fresh_for is not None:
-            attributes["pashe.fresh_for"] = outcome.fresh_for
+        if outcome.fresh_seconds is not None:
+            attributes["pashe.fresh_seconds"] = outcome.fresh_seconds
         span.add_event("pashe.call", attributes)
 
     @override

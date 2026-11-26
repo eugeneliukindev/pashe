@@ -3,12 +3,34 @@
 When a popular key expires, every caller misses at once and asks the source. The options of
 `Stampede`, from `pashe.options`, share the load.
 
-| Option | Type | Lives in | Default | What it does |
-| --- | --- | --- | --- | --- |
-| `single_flight` | `bool` | the cache: one process | `True` | concurrent calls of a key share one lookup and one load |
-| `lock_for` | `float | int | timedelta` | the backend: every process over it | `0`, off | a missing key loads under a lock in the backend: one process loads, the others wait and take its result |
-| `max_concurrent_loads` | `int` | the cache: one process | `0`, no limit | at most this many loads of the function run at once |
-| `revalidate_before` | `float | int | timedelta` | the backend: every process over it | `0`, off | in the last seconds of the TTL a call gets the fresh result at once, and one caller reloads it in the background |
+=== "Sync"
+
+    ```python
+    --8<-- "stampedes/lock_for_sync.py:show"
+    ```
+
+=== "Async"
+
+    ```python
+    --8<-- "stampedes/lock_for_async.py:show"
+    ```
+
+`share_loads` and `max_loads` work in the process; `lock_for` and `revalidate_before` hold a lock in the
+backend, so they reach every process over it: [Where each feature works](../choosing.md#where-each-feature-works).
+
+`lock_for` is the longest the lock is held, so a process that dies holding it frees it.
+
+A call over `max_loads` waits for a slot; when a stale result can answer it, that result answers
+at once instead, and the hooks hear an `OverloadedError`.
+
+!!! warning "Concurrent callers share one object"
+
+    With `share_loads` concurrent callers of a key get the same object: copy a result before
+    you change it.
+
+API reference: [`Stampede`](../../reference/options.md#pashe.options.Stampede).
+
+## Every option
 
 Every option at once, as the [example of every option](../caching/decorator.md#every-option) of
 `@cache(...)` gives it:
@@ -24,28 +46,6 @@ Every option at once, as the [example of every option](../caching/decorator.md#e
     ```python
     --8<-- "caching_functions/decorator_options_async.py:stampede"
     ```
-
-=== "Sync"
-
-    ```python
-    --8<-- "stampedes/lock_for_sync.py:show"
-    ```
-
-=== "Async"
-
-    ```python
-    --8<-- "stampedes/lock_for_async.py:show"
-    ```
-
-`lock_for` is the longest the lock is held, so a process that dies holding it frees it.
-
-!!! warning "Concurrent callers share one object"
-
-    With `single_flight` concurrent callers of a key get the same object: copy a result before
-    you change it.
-
-A call over `max_concurrent_loads` waits for a slot, or raises `OverloadedError` when a stale
-result can answer it instead, so a stale window answers it.
 
 ## Sharing a load within a process
 
@@ -83,7 +83,7 @@ Calls of one key at the same time in one process share one load. It is on by def
 
 ## Locking a load across processes
 
-`single_flight` leaves one load per process; with ten processes that is ten loads. A load lock
+`share_loads` leaves one load per process; with ten processes that is ten loads. A load lock
 in Redis leaves one for all of them.
 
 === "Without"
@@ -131,7 +131,7 @@ in Redis leaves one for all of them.
 
 ## Limiting loads at once
 
-A limit of loads of one function in one process, whatever their keys: here, `max_concurrent_loads=2`.
+A limit of loads of one function in one process, whatever their keys: here, `max_loads=2`.
 
 === "Without"
 
@@ -168,14 +168,6 @@ A key read all the time still expires, and the calls right after it miss or answ
 `revalidate_before` the result is reloaded while it is still fresh: here, the calls of its last
 10 seconds get it at once, a HIT, and one caller reloads it in the background.
 
-```mermaid
-flowchart LR
-    fresh["0 to 50 s<br/>fresh: HIT"] --> ahead["50 to 60 s<br/>fresh at once, a reload in the background: HIT"]
-    ahead --> reloaded["the reloaded result, fresh for 60 s more"]
-    classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
-    class fresh,ahead,reloaded fromCache
-```
-
 === "Sync"
 
     ```python
@@ -188,6 +180,14 @@ flowchart LR
     --8<-- "stampedes/revalidate_before_async.py:show"
     ```
 
+```mermaid
+flowchart LR
+    fresh["0 to 50 s<br/>fresh: HIT"] --> ahead["50 to 60 s<br/>fresh at once, a reload in the background: HIT"]
+    ahead --> reloaded["the reloaded result, fresh for 60 s more"]
+    classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
+    class fresh,ahead,reloaded fromCache
+```
+
 The reload holds a lock in the backend, so one process reloads a key at a time; a failed reload
 goes to `on_error`, and the result answers until its TTL, then as `Stale` says. A key nobody
 reads in those seconds expires as without it. Unlike `Stale(while_revalidate=...)`, no call
@@ -195,4 +195,4 @@ gets a result past its TTL; the price is a load a little more often. A batch tak
 
 ---
 
-API reference: [options](../../reference/options.md).
+API reference: [`pashe.options`](../../reference/options.md).

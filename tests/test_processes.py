@@ -16,7 +16,7 @@ from pashe import AsyncCache
 from pashe.compressors import GzipCompressor
 from pashe.errors import NotFoundError, RateLimitedError
 from pashe.options import Negative, Stale, Stampede
-from pashe.ratelimit import FixedWindow, per_minute
+from pashe.ratelimit import FixedWindow, SlidingWindow
 from tests.harness.helpers import Source, batch_function, cached_function, call, close, run_block
 
 if TYPE_CHECKING:
@@ -201,11 +201,11 @@ async def test_a_lock_released_by_one_process_is_free_for_another(new_process_ca
 
 async def test_a_rate_limit_counts_the_calls_of_every_process(new_process_cache: NewCache) -> None:
     first, second = new_process_cache(), new_process_cache()
-    await call(first.rate_limit, "ip", per_minute(2))
-    await call(second.rate_limit, "ip", per_minute(2))
+    await call(first.rate_limit, "ip", SlidingWindow.per_minute(2))
+    await call(second.rate_limit, "ip", SlidingWindow.per_minute(2))
 
     with pytest.raises(RateLimitedError):
-        await call(first.rate_limit, "ip", per_minute(2))
+        await call(first.rate_limit, "ip", SlidingWindow.per_minute(2))
 
 
 async def test_a_fixed_window_bans_the_calls_of_every_process(new_process_cache: NewCache) -> None:

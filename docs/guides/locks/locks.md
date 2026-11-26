@@ -14,6 +14,18 @@ process that uses it shares it: one holder at a time, in any process.
     result once for the whole service, with the waiters taking that result, give the cached function
     `stampede=Stampede(lock_for=...)` instead: see [Locking a load across processes](../failures/stampedes.md#locking-a-load-across-processes).
 
+=== "Sync"
+
+    ```python
+    --8<-- "locks_and_rate_limits/lock_sync.py:show"
+    ```
+
+=== "Async"
+
+    ```python
+    --8<-- "locks_and_rate_limits/lock_async.py:show"
+    ```
+
 ```mermaid
 sequenceDiagram
     box rgba(43,91,132,0.14) Process 1
@@ -35,28 +47,11 @@ sequenceDiagram
     Note over R: a process that dies frees the lock after 30 s
 ```
 
-=== "Sync"
-
-    ```python
-    --8<-- "locks_and_rate_limits/lock_sync.py:show"
-    ```
-
-=== "Async"
-
-    ```python
-    --8<-- "locks_and_rate_limits/lock_async.py:show"
-    ```
-
 `cache.lock` and `cache.try_lock` return a `Lock` of `pashe.locks`, an `AsyncLock` on the async
-side; its `key` is the name it was given. Entering waits while someone else holds the lock; `timeout` bounds the wait and raises
+side; its `key` is the name it was given. Entering waits while someone else holds the lock;
+`timeout` bounds the wait and raises
 `LockTimeoutError`. While the block runs the lock is extended every third of `ttl`, so the block
 may run longer than `ttl`; the `ttl` frees the lock if the process dies.
-
-!!! warning "A lost lock"
-
-    If the lock expires while the block runs, as when Redis was unreachable for longer than
-    `ttl`, someone else may hold it now, and `LockLostError` is raised: a sync block runs to its
-    end first, as a thread cannot be interrupted; an async block is cancelled at once.
 
 === "Sync"
 
@@ -69,6 +64,14 @@ may run longer than `ttl`; the `ttl` frees the lock if the process dies.
     ```python
     --8<-- "locks_and_rate_limits/try_lock_async.py:show"
     ```
+
+!!! warning "A lost lock"
+
+    If the lock expires while the block runs, as when Redis was unreachable for longer than
+    `ttl`, someone else may hold it now, and `LockLostError` is raised: a sync block runs to its
+    end first, as a thread cannot be interrupted; an async block is cancelled at once.
+
+API reference: [`Cache.lock`](../../reference/caches.md#pashe.Cache.lock), [`Cache.try_lock`](../../reference/caches.md#pashe.Cache.try_lock), [`Cache.locked`](../../reference/caches.md#pashe.Cache.locked), [`Lock`](../../reference/locks.md#pashe.locks.Lock), [`LockTimeoutError`](../../reference/errors.md#pashe.errors.LockTimeoutError), [`LockLostError`](../../reference/errors.md#pashe.errors.LockLostError).
 
 ## Every option
 

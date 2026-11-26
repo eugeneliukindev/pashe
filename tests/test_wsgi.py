@@ -115,7 +115,7 @@ def test_a_request_with_no_cache_it_is_allowed_reloads_its_results(clock: Clock)
         start_response("200 OK", [("Content-Type", "application/json"), ("Content-Length", str(len(body)))])
         return [body]
 
-    app = CacheHeadersMiddleware(application, hook=headers, allow_no_cache=lambda environ: "HTTP_X_ROLE" in environ)
+    app = CacheHeadersMiddleware(application, hook=headers, honor_no_cache=lambda environ: "HTTP_X_ROLE" in environ)
     with httpx.Client(transport=httpx.WSGITransport(app=app), base_url="http://test") as http:
         http.get("/")
 
@@ -204,6 +204,6 @@ def test_a_streamed_body_loads_past_the_stored_results_to_its_end() -> None:
         for _ in range(2):
             yield json.dumps(get_user(1)).encode()
 
-    _get(CacheHeadersMiddleware(stream, hook=headers, allow_no_cache=lambda _environ: True), CACHE_CONTROL="no-cache")
+    _get(CacheHeadersMiddleware(stream, hook=headers, honor_no_cache=lambda _environ: True), CACHE_CONTROL="no-cache")
 
     assert source.calls == 3  # the first call, and both chunks of the request with no-cache

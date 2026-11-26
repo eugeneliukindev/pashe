@@ -30,26 +30,6 @@ When the result says how long it is valid, as a token does, give `ttl` a functio
 By default every result is stored. `Store`, from `pashe.options`, keeps out the results not worth
 keeping: one that will change soon, or one the source gives fast anyway.
 
-| Option | Type | Default | Stores a result |
-| --- | --- | --- | --- |
-| `when` | `Callable[[R], bool] | None` | `None`, every result | only if it returns true for the result |
-| `slower_than` | `float | int | timedelta` | `0`, every result | only if its load took at least this many seconds |
-
-`R` is the type the function returns.
-
-```mermaid
-flowchart LR
-    load(["the function returns a result"]) --> slow{"the load took slower_than or more?"}
-    slow -- "no" --> answer["answered, not stored: MISS"]
-    slow -- "yes" --> when{"when(result) is true?"}
-    when -- "no" --> answer
-    when -- "yes" --> stored["answered and stored: MISS, then HIT"]
-    classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
-    classDef fromSource fill:#2b5b84,color:#ffffff,stroke:#1f4466
-    class stored fromCache
-    class answer fromSource
-```
-
 An order is final once it is done; until then its status changes, so caching it would answer
 with an old status:
 
@@ -75,9 +55,11 @@ result gets in: `get_order.set(order, 1)` and `refresh` with a result `when` ref
 stored one instead of keeping it. `set` loads nothing, so `slower_than` does not apply to it. In
 a batch `when` is checked per item, and `slower_than` against the load of the whole batch.
 
+API reference: [`Store`](../../reference/options.md#pashe.options.Store).
+
 ## Negative caching
 
-A loader error that means "there is no such data" can be cached as the answer, so the source
+An error of the function that means "there is no such data" can be cached as the answer, so the source
 is not asked again every time:
 
 ```mermaid
@@ -104,9 +86,11 @@ flowchart LR
     --8<-- "staleness/not_found_async.py:show"
     ```
 
-The cached function raises `NotFoundError` then, with the loader error as its cause when it just
+The cached function raises `NotFoundError` then, with the error of the function as its cause when it just
 loaded. A stale result never hides a "not found".
+
+API reference: [`Negative`](../../reference/options.md#pashe.options.Negative), [`NotFoundError`](../../reference/errors.md#pashe.errors.NotFoundError).
 
 ---
 
-API reference: [`pashe`](../../reference/caches.md), [options](../../reference/options.md).
+API reference: [`pashe`](../../reference/caches.md), [`pashe.options`](../../reference/options.md).

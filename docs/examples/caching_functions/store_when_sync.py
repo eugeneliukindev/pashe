@@ -19,5 +19,5 @@ def get_order(order_id: int) -> dict[str, str]:
 def main() -> None:
     # --8<-- [start:calls]
     get_order(1)  # done: stored, the next call is a hit
-    get_order(2)  # pending: answered, not stored, the next call loads again
+    get_order(2)  # pending: answered, not stored, the next call reloads
     # --8<-- [end:calls]

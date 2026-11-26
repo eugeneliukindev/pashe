@@ -52,7 +52,8 @@ Extras for metrics and errors:
 | `"pashe[sentry]"` | the errors caches work around as breadcrumbs in Sentry: `pashe.contrib.sentry` |
 | `"pashe[all]"` | every extra |
 
-The HTTP caching middlewares of `pashe.asgi` and `pashe.wsgi`, and `RateLimitMiddleware` of `pashe.asgi` for Starlette, Litestar and any ASGI application, need no extra.
+The HTTP caching middlewares of `pashe.asgi` and `pashe.wsgi`, and `RateLimitMiddleware` of
+`pashe.asgi` for Starlette, Litestar and any ASGI application, need no extra.
 
 !!! tip "Pick a codec that rebuilds your types"
 
@@ -107,7 +108,7 @@ the stored value decodes as:
 
 The result lives in Redis under the prefix and the key, for the TTL:
 
-```{.console title="What the cache keeps in Redis"}
+```console title="What the cache keeps in Redis"
 $ redis-cli KEYS 'app:*'
 1) "app:user:1"
 $ redis-cli TTL app:user:1
@@ -149,6 +150,7 @@ Results change at the source. Drop them when you change the data, or let them ex
 The guides run in the order you meet the API, each built on those before it:
 
 - [Core concepts](concepts.md): how a cached call is answered, and where each feature works.
+- [Glossary](glossary.md): the words these docs use, one for each thing.
 - [Caching functions](guides/caching/decorator.md): the decorator, keys, what is stored, types, batches, values.
 - [Freshness](guides/failures/stale.md): stale results, and stampedes of callers that miss at once.
 - [Invalidation](guides/invalidation/tags.md): tags, and invalidating on a write.

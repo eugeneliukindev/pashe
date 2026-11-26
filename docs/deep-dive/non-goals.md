@@ -10,7 +10,7 @@ made for it.
 | Data that must not be lost | A cache drops entries on purpose, on eviction, on a restart of Redis, on a deploy that changes a type | your database |
 | Idempotency of writes, as of payments | A lost entry would run the write twice: it needs storage that does not evict, and a refusal when it is down | a unique key in the database, in the transaction of the write |
 | Queues and background jobs | pashe runs a reload in the background of the process, not jobs that must outlive it | Celery, arq, RQ, Dramatiq |
-| ReconnectBackoff and circuit breakers around your services | A loader is yours: pashe calls it, and answers with a stale result while it fails | tenacity, stamina |
+| ReconnectBackoff and circuit breakers around your services | A function is yours: pashe calls it, and answers with a stale result while it fails | tenacity, stamina |
 | Caching every query of an ORM by itself | It guesses what a write changes from the tables it touches; pashe caches the functions you choose, with the tags you name | django-cachalot, django-cacheops |
 | A cache in front of the application, of whole responses | That is a proxy or a CDN; pashe adds the headers they read | nginx, Varnish, a CDN |
 | Sessions, and data kept per user for long | A session must outlive an eviction | the session store of your framework |

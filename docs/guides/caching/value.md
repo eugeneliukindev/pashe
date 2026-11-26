@@ -1,4 +1,4 @@
-# Values without a loader
+# Values no function loads
 
 `@cache.value(...)` keeps values that no function loads: what one place writes and another reads
 later, such as a session, a one-time code or the result of a job. It takes the `ttl`, `key` and
@@ -43,4 +43,4 @@ differ, as for a one-time code.
 
 ---
 
-API reference: [`pashe`](../../reference/caches.md).
+API reference: [`Cache.value`](../../reference/caches.md#pashe.Cache.value), [`CachedValue`](../../reference/caches.md#pashe.CachedValue).

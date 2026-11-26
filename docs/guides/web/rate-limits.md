@@ -28,7 +28,7 @@ to answer in the format of your API.
 === "FastAPI"
 
     ```python
-    app.add_middleware(RateLimitMiddleware, cache=cache, limit=per_minute(100), key=client)
+    app.add_middleware(RateLimitMiddleware, cache=cache, limit=SlidingWindow.per_minute(100), key=client)
     ```
 
 The 101st request within the minute:
@@ -42,6 +42,8 @@ content-length: 17
 
 Too Many Requests
 ```
+
+API reference: [`RateLimitMiddleware`](../../reference/http.md#pashe.asgi.RateLimitMiddleware).
 
 ## One route
 
@@ -73,6 +75,8 @@ Too Many Requests
 
     Behind a proxy the address of the connection is the address of the proxy: take the client
     from a header your proxy sets.
+
+API reference: [`rate_limit`](../../reference/contrib/fastapi.md#pashe.contrib.fastapi.rate_limit).
 
 ---
 

@@ -1,6 +1,6 @@
 # ruff: noqa: ARG001 - partner_id names the key of the limit, not the query
 # --8<-- [start:imports]
-from pashe.ratelimit import FixedWindow, per_minute
+from pashe.ratelimit import FixedWindow, SlidingWindow
 
 # --8<-- [end:imports]
 from examples.shop.data_sync import db
@@ -14,7 +14,7 @@ def failed_login(email: str) -> None:
     cache.rate_limit(f"login:{email}", LOGINS, fail_open=False)  # raises RateLimitedError
 
 
-@cache.rate_limited(per_minute(100), key="partner:{partner_id}")
+@cache.rate_limited(SlidingWindow.per_minute(100), key="partner:{partner_id}")
 def search_catalogue(partner_id: str, query: str) -> list[Product]:
     rows = db.execute("SELECT * FROM products WHERE name LIKE ?", (f"%{query}%",)).fetchall()
     return [Product(*row) for row in rows]

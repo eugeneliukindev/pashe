@@ -12,7 +12,7 @@ from starlette.routing import Route
 from pashe import AsyncCache
 from pashe.asgi import RateLimitMiddleware
 from pashe.backends import AsyncMemoryBackend
-from pashe.ratelimit import per_minute
+from pashe.ratelimit import SlidingWindow
 
 cache = AsyncCache(AsyncMemoryBackend())
 
@@ -28,6 +28,6 @@ async def search(request: Request) -> JSONResponse:
 
 app = Starlette(
     routes=[Route("/search", search)],
-    middleware=[Middleware(RateLimitMiddleware, cache=cache, limit=per_minute(100), key=client)],
+    middleware=[Middleware(RateLimitMiddleware, cache=cache, limit=SlidingWindow.per_minute(100), key=client)],
 )
 # --8<-- [end:show]

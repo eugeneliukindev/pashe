@@ -18,7 +18,7 @@ def is_staff(scope: MutableMapping[str, Any]) -> bool:
     return (b"x-role", b"staff") in scope["headers"]  # as your authentication says
 
 
-app.add_middleware(CacheHeadersMiddleware, hook=headers, allow_no_cache=is_staff)
+app.add_middleware(CacheHeadersMiddleware, hook=headers, honor_no_cache=is_staff)
 loads: list[int] = []
 
 

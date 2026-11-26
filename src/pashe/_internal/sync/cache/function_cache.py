@@ -75,7 +75,7 @@ class FunctionCache[V]:
         self._revalidation = Revalidation(
             backend=backend, background=background, hooks=hooks, slow_after=policy.stale.slow_after
         )
-        self._concurrency = ConcurrencyLimit(policy.stampede.max_concurrent_loads)
+        self._concurrency = ConcurrencyLimit(policy.stampede.max_loads)
 
     def get_or_load(
         self,
@@ -87,7 +87,7 @@ class FunctionCache[V]:
         try:
             if in_no_cache():  # it shares no answer: another call may answer from the backend
                 answer = self._bypass(state, load)
-            elif self._policy.stampede.single_flight:
+            elif self._policy.stampede.share_loads:
                 flight_key = (
                     key,
                     self._tags.invalidation_count,

@@ -13,7 +13,7 @@ def get_user(user_id: int) -> User:
 
 `get_user(1)` at the moment `1764000000` keeps 49 bytes under `shop:user:1`:
 
-```
+```text
 03 | 41 da 49 20 8b 00 00 00 | 00 | 96 87 df b8 c0 ce 34 23 | 00 01 | 0b e3 ab 06 f1 d6 9d 90 | {"id":1,"name":"Ada"}
 ```
 

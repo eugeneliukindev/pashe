@@ -49,7 +49,7 @@ class BatchFunctionCache[K: Hashable, V]:
         self._backend = backend
         self._fallback = fallback
 
-        self._concurrency = ConcurrencyLimit(policy.stampede.max_concurrent_loads)
+        self._concurrency = ConcurrencyLimit(policy.stampede.max_loads)
 
     def get_or_load_many(self, keys: Mapping[K, str], load: BatchFunction[K, V]) -> dict[K, V]:
         states = {item: CallState(key) for item, key in keys.items()}

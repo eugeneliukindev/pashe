@@ -5,14 +5,8 @@ from typing import TypedDict
 
 from pashe import Cache
 from pashe.backends import MemoryBackend
-from pashe.hooks import Outcome
-
-from examples.recorded import Record
 
 __name__ = "app.users"  # the module of the page, so the keys read as it says
-
-outcomes: list[Outcome] = []  # the key of every call, for the test
-cache = Cache(MemoryBackend(), prefix="shop:", hooks=[Record(outcomes)])
 
 
 class User(TypedDict):
@@ -36,6 +30,9 @@ class Plan(enum.Enum):
 
 
 # --8<-- [start:show]
+cache = Cache(MemoryBackend(), prefix="shop:")  # every key starts with the prefix
+
+
 @cache(ttl=60)
 def get_user(user_id: int) -> User:
     return User(id=user_id)  # your query to the database

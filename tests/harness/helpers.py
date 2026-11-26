@@ -336,7 +336,7 @@ async def close(cache: EitherCache) -> None:
 
 
 class Source:
-    """A loader that counts its calls; it fails or answers from its current state."""
+    """A function that counts its calls; it fails or answers from its current state."""
 
     def __init__(self) -> None:
         self.calls = 0

@@ -67,6 +67,33 @@ body {
   color: var(--md-primary-fg-color--light);
 }
 
+/* A section of a guide starts with a stripe of the accent, and its parts are in the brand blue, so
+   a page reads as its outline while it scrolls; the headings of the reference keep their own look */
+.md-typeset h2:not(.doc-heading) {
+  padding-left: 0.6rem;
+  border-left: 0.2rem solid var(--md-accent-fg-color);
+}
+
+.md-typeset h3:not(.doc-heading) {
+  color: var(--md-primary-fg-color);
+}
+
+[data-md-color-scheme="slate"] .md-typeset h3:not(.doc-heading) {
+  color: var(--md-primary-fg-color--light);
+}
+
+/* A link is underlined under the pointer, so it does not pass for the inline code beside it */
+.md-typeset a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+/* The page you are on, marked in the navigation by a stripe of the accent */
+.md-nav__link--active {
+  box-shadow: inset 0.15rem 0 0 var(--md-accent-fg-color);
+  padding-left: 0.4rem;
+}
+
 /* Code in the colors of One Dark, in both schemes */
 :root,
 [data-md-color-scheme="default"],
@@ -84,39 +111,52 @@ body {
   --md-code-hl-operator-color: #56b6c2;
   --md-code-hl-punctuation-color: #abb2bf;
   --md-code-hl-variable-color: #e06c75;
-  --md-code-hl-comment-color: #7f848e;
+  --md-code-hl-comment-color: #9aa5b1;  /* lighter than One Dark: 5.6:1 on the code, as a comment explains an option */
   --md-code-hl-generic-color: #abb2bf;
 }
 
-.md-typeset code .c,
-.md-typeset code .c1,
-.md-typeset code .cm {
-  font-style: italic;
-}
 
 /* A decorator in the yellow One Dark gives it */
 .md-typeset code .nd { /* codespell:ignore - nd is the class Pygments gives a decorator */
   color: #e5c07b;
 }
 
-/* Inline code in the plain text color of One Light and One Dark: code, not an accent */
+/* Inline code in a tint of the brand: the names of the API stand out of the text, softly */
 .md-typeset :not(pre) > code {
-  color: #383a42;
-  background-color: #eaeaeb;
+  color: #1f4466;
+  background-color: #2b5b8412;
 }
 
 [data-md-color-scheme="slate"] .md-typeset :not(pre) > code {
-  color: #abb2bf;
-  background-color: #2c313a;
+  color: #cfe3f5;
+  background-color: #6fa8dc1f;
 }
 
-/* Tables: a header row in a tint of the brand */
+/* Tables: a header row in a tint of the brand, every other row tinted, and the first column, the
+   name of an option or a case, in the brand blue, as the eye looks for it */
 .md-typeset table:not([class]) th {
   color: var(--md-primary-fg-color--dark);
   background-color: var(--pashe-table-head);
 }
 
 [data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
+  color: var(--md-primary-fg-color--light);
+}
+
+.md-typeset table:not([class]) tbody tr:nth-child(even) {
+  background-color: #2b5b8408;
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) tbody tr:nth-child(even) {
+  background-color: #6fa8dc0f;
+}
+
+.md-typeset table:not([class]) td:first-child {
+  color: var(--md-primary-fg-color);
+  font-weight: 600;
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) td:first-child {
   color: var(--md-primary-fg-color--light);
 }
 
@@ -322,17 +362,7 @@ body {
   color: var(--md-primary-fg-color);
 }
 
-/* A wider page: diagrams, tables and code take the room, prose keeps a line one reads at once */
-.md-grid {
-  max-width: 72rem;
-}
 
-.md-typeset > p,
-.md-typeset > ul,
-.md-typeset > ol,
-.md-typeset > blockquote {
-  max-width: 36rem;  /* the theme sets 20px a rem: 720px, about 90 characters */
-}
 
 /* Code in a table breaks between words only: a name or a default split in the middle reads as two */
 .md-typeset table:not([class]) code {

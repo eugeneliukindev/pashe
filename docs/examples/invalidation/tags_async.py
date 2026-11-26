@@ -14,9 +14,9 @@ async def main() -> None:
     await get_member(1, team_id=7)
     await get_member(2, team_id=7)
 
-    await cache.invalidate_tags("user:1")  # get_member(1, ...) loads again, get_member(2, ...) does not
-    await cache.invalidate_tags("team:7")  # both load again
-    await cache.invalidate_tags("users")  # every result of every member loads again
+    await cache.invalidate_tags("user:1")  # get_member(1, ...) reloads, get_member(2, ...) does not
+    await cache.invalidate_tags("team:7")  # both reload
+    await cache.invalidate_tags("users")  # every result of every member reloads
 
 
 # --8<-- [end:show]

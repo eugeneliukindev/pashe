@@ -88,7 +88,7 @@ def add_cache_headers(
     return Response(status, full, body)
 
 
-def allows_no_cache[R](
+def honors_no_cache[R](
     allow: Callable[[R], bool] | None,
     request: R,
     *,
@@ -131,7 +131,7 @@ def _freshness(
     no_cache: bool,
 ) -> Headers:
     # A response is as fresh as its shortest-lived result; one that was not stored is not fresh.
-    shortest = min(call.fresh_for or 0 for call in calls)
+    shortest = min(call.fresh_seconds or 0 for call in calls)
     added: Headers = []
     if not has_cache_control:  # the endpoint decided itself
         fresh = f"{CacheControl.MAX_AGE}={int(shortest)}" if shortest >= _FRESH_ENOUGH else CacheControl.NO_CACHE
@@ -140,7 +140,7 @@ def _freshness(
     hit = all(call.status is not CacheStatus.MISS for call in calls)
     forwarded = _HIT if hit else _MISS
     status = [_CACHE_NAME, _BY_REQUEST if no_cache else forwarded]
-    if all(call.fresh_for is not None for call in calls):
+    if all(call.fresh_seconds is not None for call in calls):
         status.append(f"ttl={int(shortest)}")
     added.append((Header.CACHE_STATUS.value, "; ".join(status)))
 

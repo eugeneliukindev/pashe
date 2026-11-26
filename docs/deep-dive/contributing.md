@@ -16,8 +16,9 @@ codespell and tombi.
 | Command | What it does |
 | --- | --- |
 | `just fmt` | regenerates the sync side, then formats the code |
-| `just lint` | every linter, and the check that every fixture of the tests is used |
-| `just types` | mypy, pyright and pyrefly |
+| `just lint` | every linter, and the check that every fixture of the tests is used; each is a recipe of its own too, such as `just ruff` or `just vale` |
+| `just types` | mypy, pyright and pyrefly; each is a recipe of its own too, such as `just mypy` |
+| `just check` | `lint`, `types` and `deps` at once |
 | `just test-fast` | the tests over memory and SQLite alone: no Docker, no coverage, one process |
 | `just test` | every test, with Redis and a Redis Cluster in Docker; reports in `coverage/` |
 | `just doctest` | the examples of the docstrings |
@@ -29,6 +30,9 @@ codespell and tombi.
 | `just all` | everything CI runs: the checks, the tests and the examples of the docstrings and the docs |
 | `just docs-serve` | the documentation with live reload |
 
+`just` is where every check starts: the hooks of `prek.toml` and the jobs of CI call its recipes, so a
+check runs the same everywhere. `just --list` shows them all.
+
 `just test` writes `coverage/html/index.html`, with every line and branch the tests missed,
 `coverage.xml` and `junit.xml`.
 
@@ -39,7 +43,7 @@ edit `src/pashe/_internal/async_` and run `just fmt`. A new module of `async_` g
 `[tool.unasyncd.files]` of `pyproject.toml`.
 
 Three modules do what asyncio and threads do their own ways, so each side has its own, written
-by hand: `tasks.py`, the tasks, waits and single flights, `threads.py` on the sync side;
+by hand: `tasks.py`, the tasks, waits and shared loads, `threads.py` on the sync side;
 `locks/lock.py`, the lock of `with` blocks; `backends/redis/listeners.py`, how the Redis buses listen. Change
 both when you change one.
 
@@ -82,7 +86,7 @@ Arrange, Act and Assert, the three split by a blank line.
 | `tests/backends` | the contract every backend keeps, over every store of `stores.py` and both sides |
 | `tests/test_processes.py` | the core scenarios of caches that stand for processes, over every store of `stores.py` |
 | `tests/contrib`, `test_asgi.py`, `test_wsgi.py` | the web integrations, end to end |
-| `tests/harness/helpers.py` | `Side`, the classes of each side, which the fixture `side` gives a test; fakes of a clock, a backend and a loader, and calls of either side |
+| `tests/harness/helpers.py` | `Side`, the classes of each side, which the fixture `side` gives a test; fakes of a clock, a backend and a function, and calls of either side |
 | `tests/harness/stores.py` | the stores the tests run over, memory, SQLite, Redis and the cluster: a new store is one entry there |
 | `tests/harness/servers.py` | the plugin that starts a Redis and a cluster in Docker for each test process, when its first test asks for one |
 | `tests/harness/servers.toml` | the servers the tests run against, by name, with the images of each and its cluster, which CI runs one by one: a new server is one table there |

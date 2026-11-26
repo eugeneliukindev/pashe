@@ -22,7 +22,7 @@ from pashe._internal.web.headers import (
     Header,
     Headers,
     add_cache_headers,
-    allows_no_cache,
+    honors_no_cache,
     is_cacheable,
     parse_cache_control,
 )
@@ -59,7 +59,7 @@ class CacheHeadersMiddleware:
         >>> application = CacheHeadersMiddleware(application, hook=CacheHeadersHook())
     """
 
-    __slots__ = ("_allow_no_cache", "_app", "_cache_control", "_hook")
+    __slots__ = ("_app", "_cache_control", "_honor_no_cache", "_hook")
 
     def __init__(
         self,
@@ -68,7 +68,7 @@ class CacheHeadersMiddleware:
         *,
         hook: CacheHeadersHook,
         cache_control: Directive = "private",
-        allow_no_cache: Callable[[WSGIEnvironment], bool] | None = None,
+        honor_no_cache: Callable[[WSGIEnvironment], bool] | None = None,
     ) -> None:
         """Wrap app.
 
@@ -77,7 +77,7 @@ class CacheHeadersMiddleware:
             hook: the hook of the caches the application calls, which records their calls.
             cache_control: who may keep a response: "private", the client only, as cached data may
                 belong to one user; "public" lets shared caches keep it too.
-            allow_no_cache: given the environment of a request with ``Cache-Control: no-cache``,
+            honor_no_cache: given the environment of a request with ``Cache-Control: no-cache``,
                 whether it may load past the stored results, which then store what it loaded, as
                 in pashe.no_cache; none may by default. Any client can send the header, and every
                 such request loads from the source: let only those you trust, such as staff.
@@ -88,12 +88,12 @@ class CacheHeadersMiddleware:
         """
         expect_type("app", app, FUNCTION)
         expect_type("hook", hook, CacheHeadersHook)
-        expect_type("allow_no_cache", allow_no_cache, FUNCTION | None)
+        expect_type("honor_no_cache", honor_no_cache, FUNCTION | None)
 
         self._app = app
         self._cache_control: Directive = parse_cache_control(cache_control)
         self._hook = hook
-        self._allow_no_cache = allow_no_cache
+        self._honor_no_cache = honor_no_cache
 
     def __call__(self, environ: WSGIEnvironment, start_response: StartResponse) -> Iterable[bytes]:
         """Run the request, and add the headers of caching to a GET response.
@@ -140,8 +140,8 @@ class CacheHeadersMiddleware:
         return [body]
 
     def _reloads(self, environ: WSGIEnvironment) -> bool:
-        return allows_no_cache(
-            self._allow_no_cache, environ, cache_control=environ.get(_CACHE_CONTROL), pragma=environ.get(_PRAGMA)
+        return honors_no_cache(
+            self._honor_no_cache, environ, cache_control=environ.get(_CACHE_CONTROL), pragma=environ.get(_PRAGMA)
         )
 
 

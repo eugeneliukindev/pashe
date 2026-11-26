@@ -30,7 +30,7 @@ async def product(product_id: int, lang: str = "en") -> Product:
 
 async def rename(product_id: int) -> None:
     # after the write of yours:
-    await cache.invalidate_tags(f"product:{product_id}")  # every language of it loads again
+    await cache.invalidate_tags(f"product:{product_id}")  # every language of it reloads
 
 
 # --8<-- [end:show]

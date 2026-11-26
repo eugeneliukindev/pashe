@@ -19,7 +19,7 @@ the Prometheus column, which [`PrometheusMetricsHook`](prometheus.md) writes too
 | OpenTelemetry | Prometheus | What it counts | By |
 | --- | --- | --- | --- |
 | `pashe.calls`, `{call}` | `pashe_calls_total` | every cached call and item of a batch | function, status |
-| `pashe.load.duration`, `s` | `pashe_load_duration_seconds` | every run of a loader for a call | function |
+| `pashe.load.duration`, `s` | `pashe_load_duration_seconds` | every run of a function for a call | function |
 | `pashe.errors`, `{error}` | `pashe_errors_total` | every error a cache works around | operation, `error.type` |
 | `pashe.rate_limit.calls`, `{call}` | `pashe_rate_limit_calls_total` | every call a rate limit counted | result: `allowed`, `refused` |
 | `pashe.near.reads`, `{read}` | `pashe_near_reads_total` | every key a near cache read, given the hook | source: `local`, `shared` |
@@ -29,10 +29,12 @@ the Prometheus column, which [`PrometheusMetricsHook`](prometheus.md) writes too
 The key of a call is never a label, as each key would make series of its own; the key of a rate
 limit neither, so its calls count by result only.
 
+API reference: [`OtelMetricsHook`](../../reference/contrib/opentelemetry.md#pashe.contrib.opentelemetry.OtelMetricsHook).
+
 ## Span events
 
 `OtelSpanEventsHook` adds every cached call to the current span as the event `pashe.call`, with
-the function, the key, the status and how long the result stays fresh, `pashe.fresh_for`, and every
+the function, the key, the status and how long the result stays fresh, `pashe.fresh_seconds`, and every
 error worked around as an exception
 event, so a trace tells which calls of a request the cache answered. The span keeps its status,
 as the cache answered.

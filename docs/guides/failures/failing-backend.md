@@ -4,6 +4,18 @@ A cache reads and writes through its backend; when Redis fails, cached functions
 they load from the source, and the error goes to `on_error`. A `Fallback` keeps those results so
 the source gets one load per key and process instead of one per call:
 
+=== "Sync"
+
+    ```python
+    --8<-- "staleness/fallback_sync.py"
+    ```
+
+=== "Async"
+
+    ```python
+    --8<-- "staleness/fallback_async.py"
+    ```
+
 ```mermaid
 flowchart LR
     subgraph p1["Process 1"]
@@ -26,23 +38,13 @@ flowchart LR
     style shared fill:#f7b5002e,stroke:#c98f00
 ```
 
-=== "Sync"
-
-    ```python
-    --8<-- "staleness/fallback_sync.py"
-    ```
-
-=== "Async"
-
-    ```python
-    --8<-- "staleness/fallback_async.py"
-    ```
-
 !!! warning "No invalidation reaches the fallback"
 
     While Redis is down, `invalidate_tags` and `invalidate` cannot reach the fallback, so a
     result stays there for at most `Fallback.ttl`, 30 seconds by default: a longer one spares the
     source more, a shorter one answers with older results for less time.
+
+API reference: [`Fallback`](../../reference/options.md#pashe.options.Fallback).
 
 ## Skip a backend that is down
 
@@ -77,6 +79,8 @@ A backend takes any `Breaker` of `pashe.backends`: `NoOpBreaker`, the default, l
 through. Another policy subclasses `Breaker`: `before_call` lets a call reach the backend or raises
 `CircuitOpenError`, and `on_success`, `on_failure` and `on_cancel` take how it ended.
 
+API reference: [`CircuitBreaker`](../../reference/backends.md#pashe.backends.CircuitBreaker), [`Breaker`](../../reference/backends.md#pashe.backends.Breaker), [`CircuitOpenError`](../../reference/errors.md#pashe.errors.CircuitOpenError).
+
 ---
 
-API reference: [options](../../reference/options.md), [`pashe.backends`](../../reference/backends.md).
+API reference: [`pashe.options`](../../reference/options.md), [`pashe.backends`](../../reference/backends.md).

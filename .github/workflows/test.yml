@@ -131,9 +131,13 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@v10.4.0
+      - name: Install just
+        run: uv tool install rust-just
+      - name: Install nox
+        run: uv sync --locked --only-group test
       - name: List the sessions
         id: list
-        run: echo "sessions=$(uv run --locked --only-group test nox -l --json -s lowest highest servers free_threaded | jq -c 'map({session, python, tags})')" >> "$GITHUB_OUTPUT"
+        run: echo "sessions=$(just nox-sessions)" >> "$GITHUB_OUTPUT"
 
   nox:
     name: ${{ matrix.session }}
@@ -153,10 +157,12 @@ jobs:
           python-version: ${{ matrix.python }}
           allow-prereleases: true
       - uses: astral-sh/setup-uv@v10.4.0
+      - name: Install just
+        run: uv tool install rust-just
       - name: Install nox
         run: uv sync --locked --only-group test  # nox makes the environment of the run itself
       - name: Run the session
-        run: uv run --no-sync nox -s "$SESSION"  # nox alone, installed above: the project itself is the session's to install
+        run: just nox "$SESSION"  # nox alone, installed above: the project itself is the session's to install
         env:
           SESSION: ${{ matrix.session }}  # through the environment: it is the output of another job
 

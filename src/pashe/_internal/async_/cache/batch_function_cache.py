@@ -47,7 +47,7 @@ class AsyncBatchFunctionCache[K: Hashable, V]:
         self._backend = backend
         self._fallback = fallback
 
-        self._concurrency = AsyncConcurrencyLimit(policy.stampede.max_concurrent_loads)
+        self._concurrency = AsyncConcurrencyLimit(policy.stampede.max_loads)
 
     async def get_or_load_many(self, keys: Mapping[K, str], load: AsyncBatchFunction[K, V]) -> dict[K, V]:
         states = {item: CallState(key) for item, key in keys.items()}

@@ -9,7 +9,7 @@ key, or the template of `key=` filled with the arguments. The keys below are of 
 Without `key=`, the key is the module and the qualified name of the function, then the `repr`
 of every argument, joined by `:`. Each call shows its key:
 
-```{.python title="app/users.py"}
+```python title="app/users.py"
 --8<-- "caching_functions/default_key.py:show"
 ```
 
@@ -34,7 +34,7 @@ of every argument, joined by `:`. Each call shows its key:
 `key=` is a `str.format` template over the arguments by name. A field can reach into an
 argument and take a format spec:
 
-```{.python title="app/users.py"}
+```python title="app/users.py"
 --8<-- "caching_functions/template_key.py:show"
 ```
 
@@ -71,17 +71,7 @@ A field can be a digest of the argument instead of the argument itself:
 Take `blake2b` by default; `sha256` where a policy allows only FIPS algorithms; `hmac` for
 personal data.
 
-A digest is of the value as canonical JSON, so equal values give one key in every process:
-
-```mermaid
-flowchart LR
-    value(["Filters('coffee', {'red', 'blue'})"]) --> json["canonical JSON: keys and sets sorted"]
-    json --> digest["BLAKE2b, 128 bits"]
-    digest --> key["search:30f829b6221268747b477111a6a07725"]
-    classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
-    classDef fromSource fill:#2b5b84,color:#ffffff,stroke:#1f4466
-    class key fromCache
-```
+A digest is of the value as canonical JSON, so equal values give one key in every process.
 
 === "Sync"
 
@@ -97,7 +87,7 @@ flowchart LR
     --8<-- "caching_functions/digests_async.py:calls"
     ```
 
-```{.python title="app/users.py"}
+```python title="app/users.py"
 --8<-- "caching_functions/digest_keys.py:show"
 ```
 
@@ -131,6 +121,8 @@ find the entry as calls do.
     `invalidate_tags` takes tags as they are stored. `cache.key_for(template, ...)` fills a template
     as the cache does, digests included.
 
+API reference: [`Cache.key_for`](../../reference/caches.md#pashe.Cache.key_for).
+
 ---
 
-API reference: [`pashe`](../../reference/caches.md), [options](../../reference/options.md).
+API reference: [`pashe`](../../reference/caches.md), [`pashe.options`](../../reference/options.md).

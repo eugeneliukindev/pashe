@@ -27,4 +27,4 @@ takes a `redis.asyncio.Redis`.
 
 ---
 
-API reference: [`pashe.contrib.redis`](../../reference/contrib/redis.md).
+API reference: [`RedisBackend`](../../reference/contrib/redis.md#pashe.contrib.redis.RedisBackend).

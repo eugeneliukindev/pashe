@@ -23,4 +23,4 @@ raises `ValueTooLargeError` instead of being stored.
 
 ---
 
-API reference: [`pashe.backends`](../../reference/backends.md).
+API reference: [`MemoryBackend`](../../reference/backends.md#pashe.backends.MemoryBackend).

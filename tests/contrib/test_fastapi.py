@@ -223,7 +223,7 @@ def _reloading_app(
         return source(user_id)
 
     app = FastAPI()
-    app.add_middleware(CacheHeadersMiddleware, hook=headers, allow_no_cache=allow)
+    app.add_middleware(CacheHeadersMiddleware, hook=headers, honor_no_cache=allow)
 
     @app.get("/users/{user_id}")
     async def user(user_id: int) -> dict[str, int]:

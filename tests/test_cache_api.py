@@ -14,7 +14,7 @@ from pashe.backends import AsyncMemoryBackend, MemoryBackend, NearCacheBackend
 from pashe.errors import BackendError, InvalidOptionsError, LockLostError, LockTimeoutError, RateLimitedError
 from pashe.locks import Lock
 from pashe.options import Fallback
-from pashe.ratelimit import FixedWindow, SlidingWindow, per_second
+from pashe.ratelimit import FixedWindow, SlidingWindow
 from tests.harness.helpers import LOOP_BLOCK_SECONDS, RecordingHook, call, run_block
 
 if TYPE_CHECKING:
@@ -378,10 +378,10 @@ async def test_a_sliding_window_refuses_calls_over_it(new_process_cache: NewCach
     clock.now = 1000.0  # the start of a window of one second
     cache = new_process_cache(clock=clock)
     for _ in range(3):
-        await call(cache.rate_limit, "api", per_second(3))
+        await call(cache.rate_limit, "api", SlidingWindow.per_second(3))
 
     with pytest.raises(RateLimitedError) as refused:
-        await call(cache.rate_limit, "api", per_second(3))
+        await call(cache.rate_limit, "api", SlidingWindow.per_second(3))
 
     assert 0 < refused.value.retry_after <= 2
 
@@ -390,10 +390,10 @@ async def test_a_sliding_window_lets_calls_through_once_it_passed(new_process_ca
     clock.now = 1000.0  # the start of a window of one second
     cache = new_process_cache(clock=clock)
     for _ in range(3):
-        await call(cache.rate_limit, "api", per_second(3))
+        await call(cache.rate_limit, "api", SlidingWindow.per_second(3))
 
     clock.now += 2  # both windows are past
-    state = await call(cache.rate_limit, "api", per_second(3))
+    state = await call(cache.rate_limit, "api", SlidingWindow.per_second(3))
 
     assert state is not None
     assert state.remaining == 2
@@ -418,8 +418,8 @@ async def test_the_state_of_a_sliding_window(new_process_cache: NewCache, clock:
     clock.now = 1_000_000.0  # at the start of a window, so the last one does not weigh
     cache = new_process_cache(clock=clock)
 
-    first = await call(cache.rate_limit, "api", per_second(3))
-    second = await call(cache.rate_limit, "api", per_second(3), cost=2)
+    first = await call(cache.rate_limit, "api", SlidingWindow.per_second(3))
+    second = await call(cache.rate_limit, "api", SlidingWindow.per_second(3), cost=2)
 
     assert first is not None
     assert second is not None
@@ -442,7 +442,7 @@ async def test_a_cost_over_the_limit_is_refused(new_process_cache: NewCache) -> 
     cache = new_process_cache()
 
     with pytest.raises(InvalidOptionsError):
-        await call(cache.rate_limit, "api", per_second(3), cost=4)
+        await call(cache.rate_limit, "api", SlidingWindow.per_second(3), cost=4)
 
 
 def test_a_hook_of_on_call_and_on_error_alone_hears_rate_limits_and_near_reads() -> None:

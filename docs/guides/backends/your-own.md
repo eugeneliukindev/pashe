@@ -13,4 +13,4 @@ processes call it on the same key at once.
 
 ---
 
-API reference: [`pashe.backends`](../../reference/backends.md).
+API reference: [`Backend`](../../reference/backends.md#pashe.backends.Backend), [`AsyncBackend`](../../reference/backends.md#pashe.backends.AsyncBackend).

@@ -19,8 +19,8 @@ all items in one backend call and calls the function once with the missing ones.
 
 `@cache.batch(...)` makes a `CachedBatchFunction`, an `AsyncCachedBatchFunction` on the async side.
 Items the function leaves out are absent from the result and not stored. `batch` takes `ttl`,
-`key`, `stampede` with its `jitter` and `max_concurrent_loads`, and `store`.
+`key`, `stampede` with its `jitter` and `max_loads`, and `store`.
 
 ---
 
-API reference: [`pashe`](../../reference/caches.md), [options](../../reference/options.md).
+API reference: [`Cache.batch`](../../reference/caches.md#pashe.Cache.batch), [`CachedBatchFunction`](../../reference/caches.md#pashe.CachedBatchFunction).

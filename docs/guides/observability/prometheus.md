@@ -15,4 +15,4 @@ loads has the default buckets of `prometheus_client`.
 
 ---
 
-API reference: [`pashe.contrib.prometheus`](../../reference/contrib/prometheus.md).
+API reference: [`PrometheusMetricsHook`](../../reference/contrib/prometheus.md#pashe.contrib.prometheus.PrometheusMetricsHook).

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 @pytest.fixture(autouse=True)
 def fresh_examples(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Make every test import the examples anew, so their caches start empty, and close what they opened."""
+    monkeypatch.setenv("CACHE_SECRET", "a secret of sixteen bytes or more")  # what PickleCodec of a page reads
     for name in [name for name in sys.modules if name.startswith("examples.")]:
         monkeypatch.delitem(sys.modules, name)
 

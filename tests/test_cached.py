@@ -1,4 +1,4 @@
-"""Cached functions on both sides: when a stored result answers and when the loader runs."""
+"""Cached functions on both sides: when a stored result answers and when the function runs."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from pashe.contrib.msgspec import MsgspecJsonCodec
 from pashe.errors import BackendError, InvalidOptionsError, NotFoundError
 from pashe.hooks import CacheStatus, LoggingHook, Operation
 from pashe.options import Fallback, IfError, IfSlow, Negative, Stale, Stampede, Store
-from pashe.ratelimit import per_second
+from pashe.ratelimit import SlidingWindow
 from tests.harness.helpers import (
     LOOP_BLOCK_SECONDS,
     SYNC,
@@ -412,7 +412,7 @@ async def test_get_of_a_cached_function_reads_without_loading(new_process_cache:
     assert source.calls == 1
 
 
-# Errors of the loader
+# Errors of the function
 
 
 async def test_negative_caching_keeps_a_not_found(new_process_cache: NewCache) -> None:
@@ -449,7 +449,7 @@ async def test_a_not_found_is_asked_again_after_its_ttl(new_process_cache: NewCa
     assert source.calls == 2
 
 
-async def test_loader_errors_are_not_cached(new_process_cache: NewCache) -> None:
+async def test_errors_of_the_function_are_not_cached(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     source = Source()
     source.error = RuntimeError("source is down")
@@ -514,7 +514,7 @@ async def test_a_reload_in_the_background_slower_than_its_window_still_stores(
     assert (stale, fresh) == (1, 2)
 
 
-async def test_stale_if_error_answers_a_failing_loader(new_process_cache: NewCache, clock: Clock) -> None:
+async def test_stale_if_error_answers_a_failing_function(new_process_cache: NewCache, clock: Clock) -> None:
     failures: list[Failure] = []
     outcomes: list[Outcome] = []
     cache = new_process_cache(clock=clock, hooks=[RecordingHook(outcomes=outcomes, failures=failures)])
@@ -528,7 +528,7 @@ async def test_stale_if_error_answers_a_failing_loader(new_process_cache: NewCac
 
     assert user == {"id": 1, "version": 1}
     assert results(outcomes)[-1] is CacheStatus.STALE_IF_ERROR
-    assert isinstance(failures[-1].error, RuntimeError)  # as the loader raised it, for the hooks
+    assert isinstance(failures[-1].error, RuntimeError)  # as the function raised it, for the hooks
 
 
 async def test_stale_if_error_lets_other_errors_through(new_process_cache: NewCache, clock: Clock) -> None:
@@ -623,13 +623,13 @@ async def test_revalidate_before_reloads_a_fresh_result_in_its_last_seconds(
 
 @pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
 @pytest.mark.parametrize("side", ["async"], indirect=True)
-async def test_single_flight_shares_one_load_between_tasks(new_process_cache: NewCache) -> None:
+async def test_share_loads_shares_one_load_between_tasks(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     assert isinstance(cache, AsyncCache)
     started = 0
     release = asyncio.Event()
 
-    @cache(ttl=60, stampede=Stampede(single_flight=True))
+    @cache(ttl=60, stampede=Stampede(share_loads=True))
     async def get_user(user_id: int) -> int:
         nonlocal started
         started += 1
@@ -646,13 +646,13 @@ async def test_single_flight_shares_one_load_between_tasks(new_process_cache: Ne
 
 
 @pytest.mark.parametrize("side", ["sync"], indirect=True)
-def test_single_flight_shares_one_load_between_threads(new_process_cache: NewCache) -> None:
+def test_share_loads_shares_one_load_between_threads(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     assert isinstance(cache, Cache)
     started = 0
     release = threading.Event()
 
-    @cache(ttl=60, stampede=Stampede(single_flight=True))
+    @cache(ttl=60, stampede=Stampede(share_loads=True))
     def get_user(user_id: int) -> int:
         nonlocal started
         started += 1
@@ -807,12 +807,12 @@ async def test_a_load_that_started_before_invalidate_is_neither_shared_nor_store
 
 
 @pytest.mark.parametrize("side", ["async"], indirect=True)
-async def test_max_concurrent_loads_limits_concurrent_loads(new_process_cache: NewCache) -> None:
+async def test_max_loads_limits_the_loads_at_once(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     assert isinstance(cache, AsyncCache)
     running = peak = 0
 
-    @cache(ttl=60, stampede=Stampede(max_concurrent_loads=1))
+    @cache(ttl=60, stampede=Stampede(max_loads=1))
     async def get_user(user_id: int) -> int:
         nonlocal running, peak
         running += 1
@@ -828,7 +828,7 @@ async def test_max_concurrent_loads_limits_concurrent_loads(new_process_cache: N
 
 
 async def test_a_function_that_calls_itself_loads_within_its_one_slot(side: Side) -> None:
-    stampede = Stampede(max_concurrent_loads=1)
+    stampede = Stampede(max_loads=1)
     depth: CachedFunction[[int], int] | AsyncCachedFunction[[int], int]
     if side is SYNC:
         sync_cache = Cache(MemoryBackend())
@@ -1103,7 +1103,7 @@ async def test_tags_and_rate_limits_work_with_a_compressor() -> None:
     await answer()
     await cache.invalidate_tags("answers")
     await answer()
-    state = await cache.rate_limit("api", per_second(5))
+    state = await cache.rate_limit("api", SlidingWindow.per_second(5))
 
     assert loads == 2
     assert state is not None
@@ -1435,7 +1435,7 @@ def test_an_entry_of_the_format_before_is_a_miss() -> None:
             "jitter counted",
         ),
         (lambda: Stampede(jitter=1.5), r"Stampede\.jitter is 1\.5"),
-        (lambda: Stampede(max_concurrent_loads=-1), r"Stampede\.max_concurrent_loads is -1"),
+        (lambda: Stampede(max_loads=-1), r"Stampede\.max_loads is -1"),
         (lambda: Negative(ttl=30), r"Negative\.on is empty"),
         (lambda: Negative(on=(ValueError,)), r"Negative\.ttl is 0"),
         (lambda: Store(slower_than=-1), r"Store\.slower_than is -1"),
@@ -1475,7 +1475,7 @@ def _as_untyped(value: object) -> Any:
             lambda: Stale(if_error=_as_untyped("60")),
             "Stale.if_error must be int or float or timedelta or IfError, not str",
         ),
-        (lambda: Stampede(single_flight=_as_untyped(1)), "Stampede.single_flight must be bool, not int"),
+        (lambda: Stampede(share_loads=_as_untyped(1)), "Stampede.share_loads must be bool, not int"),
         (lambda: Negative(on=_as_untyped((ValueError, 1)), ttl=30), r"Negative.on\[1\] must be a class of exceptions"),
         (lambda: Negative(on=_as_untyped([ValueError]), ttl=30), "Negative.on must be tuple, not list"),
         (lambda: Store(when=_as_untyped("active")), "Store.when must be a function or None, not str"),

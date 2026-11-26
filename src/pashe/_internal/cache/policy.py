@@ -98,7 +98,7 @@ class Policy:
 
     def storage_lifetime(self, stored: Stored) -> float:
         # how long the backend keeps an entry: fresh, then its stale windows
-        return stored.fresh_for if stored.entry.negative else stored.fresh_for + self.stale.longest_window
+        return stored.fresh_seconds if stored.entry.negative else stored.fresh_seconds + self.stale.longest_window
 
     def answer_for(self, stored: Stored | None) -> Answer | None:
         if stored is None:
@@ -187,18 +187,18 @@ class StampedePolicy:
     # Stampede with revalidate_before and lock_for in seconds
     revalidate_before: float
     jitter: float
-    single_flight: bool
+    share_loads: bool
     lock_for: float
-    max_concurrent_loads: int  # 0 means no limit
+    max_loads: int  # 0 means no limit
 
     @classmethod
     def of(cls, stampede: Stampede) -> Self:
         return cls(
             revalidate_before=duration_seconds(stampede.revalidate_before),
             jitter=stampede.jitter,
-            single_flight=stampede.single_flight,
+            share_loads=stampede.share_loads,
             lock_for=duration_seconds(stampede.lock_for),
-            max_concurrent_loads=stampede.max_concurrent_loads,
+            max_loads=stampede.max_loads,
         )
 
 

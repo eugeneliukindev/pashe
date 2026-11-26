@@ -44,7 +44,7 @@ class EntryCodec:
             return None
         stale_at = self._policy.clock() + lifetime
         return self._format.encode_negative(
-            stale_at=stale_at, fresh_for=lifetime, tag_generations=state.tag_generations
+            stale_at=stale_at, fresh_seconds=lifetime, tag_generations=state.tag_generations
         )
 
     def decode(
@@ -76,7 +76,7 @@ class EntryCodec:
         stale_at = self._policy.clock() + lifetime
         try:
             return self._format.encode(
-                value, stale_at=stale_at, fresh_for=lifetime, tag_generations=state.tag_generations
+                value, stale_at=stale_at, fresh_seconds=lifetime, tag_generations=state.tag_generations
             )
         except CodecError as error:
             self._hooks.on_error(Failure(Operation.ENCODE, state.key, error))

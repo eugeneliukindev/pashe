@@ -62,7 +62,7 @@ async def test_a_new_price_shows_at_once_and_drops_the_lists_of_its_category(sho
 
     assert product.price_cents == 990  # set stored it: no query
     assert [item.price_cents for item in listed if item.id == 1] == [990]
-    assert len(shop.selects()) == selects_before + 1  # only the list loads again
+    assert len(shop.selects()) == selects_before + 1  # only the list reloads
 
 
 async def test_a_rate_is_asked_once_and_an_unknown_currency_is_remembered(shop: Shop) -> None:

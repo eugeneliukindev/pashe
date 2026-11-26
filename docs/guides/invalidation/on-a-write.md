@@ -23,13 +23,13 @@ with the operation `invalidate`, and the call returns as it would without the de
 results stay until their TTL. A template that names no parameter of the function is refused when
 it is decorated.
 
+API reference: [`Cache.invalidates`](../../reference/caches.md#pashe.Cache.invalidates), [`Cache.invalidate_tags`](../../reference/caches.md#pashe.Cache.invalidate_tags).
+
 ## Writes in a transaction
 
-Invalidate after the commit, not before it. A read between the invalidation and the commit misses,
-loads the old row, as the write is not committed yet, and stores it under the new generation of the
-tag: the old data then answers until its TTL. A read that loads before the invalidation stores
-under the old generation, which the invalidation turns into a miss, so after the commit nothing
-more is needed.
+Invalidate after the commit, not before it: a read between the invalidation and the commit loads
+the old row, as the write is not committed yet, and stores it again, so the old data answers until
+its TTL.
 
 === "Sync"
 

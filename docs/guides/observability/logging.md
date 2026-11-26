@@ -1,6 +1,6 @@
 # Logging
 
-A cache answers from the loader when its backend fails, and raises nothing. Give it a
+A cache answers from the function when its backend fails, and raises nothing. Give it a
 `LoggingHook` of `pashe.hooks`, or an `on_error` of your own, or no one sees a backend that is
 down.
 
@@ -19,4 +19,4 @@ structured logs. pashe logs nothing without the hook.
 
 ---
 
-API reference: [`pashe.hooks`](../../reference/hooks.md).
+API reference: [`LoggingHook`](../../reference/hooks.md#pashe.hooks.LoggingHook).

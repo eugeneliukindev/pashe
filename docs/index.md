@@ -6,7 +6,7 @@ social:
 
 <div class="pashe-hero" markdown>
 
-![](images/logo.svg){ .pashe-hero__logo width="148" height="148" }
+![pashe](images/logo.svg){ .pashe-hero__logo width="148" height="148" }
 
 # pashe
 
@@ -14,7 +14,6 @@ social:
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-2b5b84?logo=python&logoColor=white)](https://www.python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-f7b500)](https://opensource.org/license/mit)
-[![Code style: wemake](https://img.shields.io/badge/style-wemake-000000.svg)](https://github.com/wemake-services/wemake-python-styleguide)
 [![Typed: mypy strict](https://img.shields.io/badge/typed-mypy%20strict-2b5b84)](https://mypy-lang.org)
 
 ```sh
@@ -31,20 +30,20 @@ shares the entries, the tags, the locks and the rate limits, and a cold key or a
 does not take the service down: callers share one load, stale results answer while the source
 is slow or failing, and a fallback keeps working while Redis is down.
 
-=== "Sync"
-
-    ```python
-    --8<-- "index/quick_start_sync.py:imports"
-    --8<-- "index/quick_start_sync.py:show"
-    --8<-- "index/quick_start_sync.py:calls"
-    ```
-
 === "Async"
 
     ```python
     --8<-- "index/quick_start_async.py:imports"
     --8<-- "index/quick_start_async.py:show"
     --8<-- "index/quick_start_async.py:calls"
+    ```
+
+=== "Sync"
+
+    ```python
+    --8<-- "index/quick_start_sync.py:imports"
+    --8<-- "index/quick_start_sync.py:show"
+    --8<-- "index/quick_start_sync.py:calls"
     ```
 
 <div class="grid cards" markdown>
@@ -94,15 +93,15 @@ is slow or failing, and a fallback keeps working while Redis is down.
     ---
 
     A cached function keeps the signature of yours, and its result decodes as its return
-    annotation. pashe ships `py.typed` and passes mypy in strict mode with extra checks,
-    pyright in strict mode, pyrefly, ruff with every rule and wemake-python-styleguide.
+    annotation. pashe ships `py.typed` and is checked with mypy, pyright and pyrefly in strict
+    mode.
 
 -   :material-test-tube:{ .lg .middle } **Tested against real servers**
 
     ---
 
-    Every scenario runs on both sides over memory, SQLite, Redis and a Redis Cluster, and on
-    Valkey and Dragonfly in CI; every example of these docs is a test.
+    Every scenario runs over memory, SQLite, Redis, Valkey, Dragonfly and a Redis Cluster, sync
+    and async; every example of these docs runs.
 
 </div>
 

@@ -18,15 +18,12 @@ jobs:
         with:
           persist-credentials: false  # nothing pushes back to the repository
       - uses: astral-sh/setup-uv@v10.4.0
+      - name: Install just
+        run: uv tool install rust-just
       - name: Compare the tag with pyproject.toml
         env:
           TAG: ${{ github.event.release.tag_name }}  # through the environment: a tag is text anyone may push
-        run: |
-          version="$(uv version --short)"
-          if [ "$TAG" != "v$version" ]; then
-            echo "::error::the tag is $TAG, pyproject.toml has version $version: publish v$version, or set the version first"
-            exit 1
-          fi
+        run: just version-matches "$TAG"
 
   tests:
     name: Every check
@@ -40,12 +37,10 @@ jobs:
         with:
           persist-credentials: false  # nothing pushes back to the repository
       - uses: astral-sh/setup-uv@v10.4.0
-      - name: Build the sdist and the wheel
-        run: uv build
-      - name: Check what PyPI reads of them
-        run: uvx twine check --strict dist/*
-      - name: Import the wheel in an environment of its own
-        run: uv run --isolated --no-project --with dist/*.whl python -c "import pashe; print(pashe.__version__)"
+      - name: Install just
+        run: uv tool install rust-just
+      - name: Build the sdist and the wheel, check them and import the wheel
+        run: just build
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: distributions

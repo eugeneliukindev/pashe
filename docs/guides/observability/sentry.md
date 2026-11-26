@@ -26,4 +26,4 @@ cached call would send one; a [metric of errors](prometheus.md) shows the same a
 
 ---
 
-API reference: [`pashe.contrib.sentry`](../../reference/contrib/sentry.md).
+API reference: [`SentryHook`](../../reference/contrib/sentry.md#pashe.contrib.sentry.SentryHook).

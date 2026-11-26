@@ -60,7 +60,7 @@ class Hook:
         """Take how a cached call, or one item of a batch, was answered; nothing by default.
 
         Args:
-            outcome: the function, the key, the status and the seconds the loader ran.
+            outcome: the function, the key, the status and the seconds the function ran.
         """
 
     def on_error(self, failure: Failure, /) -> None:
@@ -211,8 +211,8 @@ class Outcome:
             ``app.users.get_user``: a label for metrics, the same for every call of it.
         key: the stored key, with the prefixes.
         status: how the call was answered.
-        load_seconds: seconds the loader ran for this call; 0 when it did not run.
-        fresh_for: seconds the result of the call stays fresh from the call, negative for a
+        load_seconds: seconds the function ran for this call; 0 when it did not run.
+        fresh_seconds: seconds the result of the call stays fresh from the call, negative for a
             stale answer; None when no result is stored.
 
     Examples:
@@ -237,7 +237,7 @@ class Outcome:
     key: str
     status: CacheStatus
     load_seconds: float
-    fresh_for: float | None
+    fresh_seconds: float | None
 
 
 @enum.unique
@@ -247,13 +247,13 @@ class CacheStatus(enum.StrEnum):
     HIT = "hit"
     """A fresh stored result."""
     MISS = "miss"
-    """The loader ran."""
+    """The function ran."""
     STALE_WHILE_REVALIDATE = "stale-while-revalidate"
     """A stale result, answered while it is reloaded in the background."""
     STALE_IF_ERROR = "stale-if-error"
-    """A stale result, answered instead of a loader error."""
+    """A stale result, answered instead of an error of the function."""
     STALE_IF_SLOW = "stale-if-slow"
-    """A stale result, answered because the loader was slow; the load goes on in the background."""
+    """A stale result, answered because the function was slow; the load goes on in the background."""
     NOT_FOUND = "not-found"
     """A cached "not found"."""
     FALLBACK = "fallback"
@@ -268,7 +268,7 @@ class Failure:
     Attributes:
         operation: what the cache was doing.
         key: the key it was doing it with, with the prefixes; "" for a batch.
-        error: the error: a PasheError of the cache, or the one the loader raised, as it raised it.
+        error: the error: a PasheError of the cache, or the one the function raised, as it raised it.
 
     Examples:
         >>> import logging
@@ -357,12 +357,12 @@ class NearRead:
     """One read of a near cache: get, or get_many with every key it was asked.
 
     Attributes:
-        local: the keys its copies in memory answered.
-        shared: the keys it read from the shared backend, found or not.
+        from_local: how many keys its copies in memory answered.
+        from_shared: how many keys it read from the shared backend, found or not.
     """
 
-    local: int
-    shared: int
+    from_local: int
+    from_shared: int
 
     @property
     def sources(self) -> dict[Literal["local", "shared"], int]:
@@ -370,10 +370,10 @@ class NearRead:
 
         Examples:
             >>> from pashe.hooks import NearRead
-            >>> NearRead(local=2, shared=0).sources
+            >>> NearRead(from_local=2, from_shared=0).sources
             {'local': 2}
         """
-        counts: dict[Literal["local", "shared"], int] = {"local": self.local, "shared": self.shared}
+        counts: dict[Literal["local", "shared"], int] = {"local": self.from_local, "shared": self.from_shared}
         return {source: count for source, count in counts.items() if count}
 
 

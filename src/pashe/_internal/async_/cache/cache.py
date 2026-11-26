@@ -171,7 +171,7 @@ class AsyncCache:
         negative: Negative = Negative(),
         store: Store = Store(),
     ) -> AsyncCachedFunctionDecorator:
-        """Cache the results of a function, as ``@cache(ttl=60)``; the function is the loader.
+        """Cache the results of a function, as ``@cache(ttl=60)``.
 
         The function is of the side of the cache. The result is decoded as its return annotation;
         without one, as what the codec reads back on its own. Every duration is seconds or a
@@ -192,8 +192,8 @@ class AsyncCache:
                 or a tuple; a str is refused, as it would split into letters.
             stale: how long after the TTL a stale result still answers, and in which cases.
             stampede: how the loads of a key are shared and spread: revalidate_before, jitter,
-                single_flight, lock_for, max_concurrent_loads.
-            negative: loader errors that mean "there is no such data", kept as the answer for a
+                share_loads, lock_for, max_loads.
+            negative: errors of the function that mean "there is no such data", kept as the answer for a
                 while; by default Negative() keeps none.
             store: which loaded results are stored; by default every one.
 
@@ -298,9 +298,9 @@ class AsyncCache:
             ttl: as in ``@cache(...)``.
             key: a str.format template over the item, such as ``"user:{}"``; by default the
                 qualified name of the function and the repr of the item.
-            stampede: its jitter, and max_concurrent_loads: how many batches may load at once in
+            stampede: its jitter, and max_loads: how many batches may load at once in
                 this cache. A batch shares no loads and reloads nothing in the background: lock_for and
-                revalidate_before are refused, single_flight unused.
+                revalidate_before are refused, share_loads unused.
             store: as in ``@cache(...)``; slower_than is of the load of the whole batch.
 
         Returns:
@@ -601,7 +601,7 @@ class AsyncCache:
 
         Args:
             key: what the limit counts, such as ``f"ip:{ip}"``.
-            limit: the limit, such as ``per_minute(100)``.
+            limit: the limit, such as ``SlidingWindow.per_minute(100)``.
             cost: how many calls this one counts as, such as 5 for a heavy request.
             fail_open: let a call through when the backend fails; off, raise BackendError instead,
                 for limits that guard against abuse.
@@ -621,8 +621,8 @@ class AsyncCache:
             >>> from pashe import AsyncCache
             >>> from pashe.backends import AsyncMemoryBackend
             >>> cache = AsyncCache(AsyncMemoryBackend())
-            >>> from pashe.ratelimit import per_minute
-            >>> state = await cache.rate_limit("ip:203.0.113.7", per_minute(100))
+            >>> from pashe.ratelimit import SlidingWindow
+            >>> state = await cache.rate_limit("ip:203.0.113.7", SlidingWindow.per_minute(100))
             >>> state.remaining
             99
         """
@@ -636,7 +636,7 @@ class AsyncCache:
         """Count every call of a function with rate_limit before it runs.
 
         Args:
-            limit: the limit, such as ``per_minute(10)``.
+            limit: the limit, such as ``SlidingWindow.per_minute(10)``.
             key: a template like that of locked; by default one limit for the function.
 
         Returns:
@@ -650,8 +650,8 @@ class AsyncCache:
             >>> from pashe import AsyncCache
             >>> from pashe.backends import AsyncMemoryBackend
             >>> cache = AsyncCache(AsyncMemoryBackend())
-            >>> from pashe.ratelimit import per_minute
-            >>> @cache.rate_limited(per_minute(10), key="export:{user_id}")
+            >>> from pashe.ratelimit import SlidingWindow
+            >>> @cache.rate_limited(SlidingWindow.per_minute(10), key="export:{user_id}")
             ... async def export(user_id: int) -> int:
             ...     return user_id
             >>> await export(1)

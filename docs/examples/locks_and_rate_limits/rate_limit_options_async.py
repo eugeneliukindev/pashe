@@ -7,19 +7,19 @@ from pashe.ratelimit import FixedWindow, SlidingWindow
 cache = AsyncCache(AsyncMemoryBackend())
 
 exports = SlidingWindow(
-    calls=10,  # how many calls pass in any span of per
-    per=60,  # the span, in seconds
+    calls=10,  # calls that pass
+    per=60,  # in any span of this many seconds
 )
 logins = FixedWindow(
-    calls=5,  # how many calls pass in a window that starts with the first call
-    per=60,  # the length of the window, in seconds
-    ban_for=300,  # how long the first call over it blocks the key; None, the default: per
+    calls=5,  # calls that pass
+    per=60,  # per window of this many seconds
+    ban_for=300,  # the ban once over it; None: per
 )
 
 
 @cache.rate_limited(
     exports,  # the limit
-    key="user:{user_id}",  # a template over the arguments; None, the default: one limit for the function
+    key="user:{user_id}",  # a template; None: one per function
 )
 async def export(user_id: int) -> None: ...
 
@@ -28,11 +28,12 @@ async def main() -> None:
     state = await cache.rate_limit(
         "login:ada@example.com",  # what the limit counts
         logins,  # the limit
-        cost=1,  # how many calls this one counts as, such as 5 for a heavy one
-        fail_open=True,  # a failing backend lets the call through uncounted; False raises BackendError
+        cost=1,  # how many calls this one counts as
+        fail_open=True,  # let calls through a failing backend
     )  # RateLimitedError over the limit
-    if state is not None:  # None when the backend failed and the call went through uncounted
-        limit, left, resets_in = state.limit, state.remaining, state.reset_after  # for headers such as RateLimit
+    if state is not None:  # None: the backend failed
+        # what is left of the limit, for RateLimit headers
+        limit, left, resets_in = state.limit, state.remaining, state.reset_after
     await export(1)
 
 

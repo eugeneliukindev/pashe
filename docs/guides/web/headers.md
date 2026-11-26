@@ -21,6 +21,8 @@ application, ASGI for an async one.
 | `Cache-Control` | the endpoint made cached calls and set none itself | `private, max-age=` the shortest TTL of its results; `no-cache` once one is stale |
 | `Cache-Status` | the endpoint made cached calls | `pashe; hit; ttl=60` or `pashe; fwd=miss; ttl=60`, as RFC 9211 says |
 
+API reference: [`CacheHeadersMiddleware`](../../reference/http.md#pashe.asgi.CacheHeadersMiddleware), [`CacheHeadersHook`](../../reference/hooks.md#pashe.hooks.CacheHeadersHook).
+
 ## What a client sees
 
 The FastAPI service of the Async tab above, one cached function behind an endpoint, answers so.
@@ -64,7 +66,7 @@ cache-control: private, max-age=59
 cache-status: pashe; hit; ttl=59
 ```
 
-The server adds headers of its own, such as `date` and `server`; they are left out here.
+The ASGI server adds headers of its own, such as `date` and `server`; they are left out here.
 
 How the middleware picks `Cache-Control`, when the endpoint set none:
 
@@ -83,7 +85,8 @@ flowchart LR
 The middleware learns of the cached calls of a request from a `CacheHeadersHook` of `pashe.hooks`:
 give the same hook to every cache the application calls and to the middleware, and the code of
 the endpoint does not change. The calls of a cache without the hook are left out of
-`Cache-Control` and `Cache-Status`; `ETag` and `304` work either way. The ETag is a hash of the response, not of a cached value, so it is right whatever
+`Cache-Control` and `Cache-Status`; `ETag` and `304` work either way. The ETag is a hash of the
+response, not of a cached value, so it is right whatever
 else the response holds.
 
 !!! warning "Responses are private by default"
@@ -96,7 +99,7 @@ else the response holds.
 
 A browser on a hard reload, or `curl -H 'Cache-Control: no-cache'`, asks past every stored
 response; `Pragma: no-cache` of HTTP/1.0 too. The middleware lets such a request through to the
-source only if `allow_no_cache` says so: its cached calls then load, store what they loaded for
+source only if `honor_no_cache` says so: its cached calls then load, store what they loaded for
 the requests after it, and answer `Cache-Status: pashe; fwd=request`. Any other request with the
 header is answered from the cache, as if it had none.
 

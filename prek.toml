@@ -22,23 +22,15 @@ hooks = [
         id = "unasyncd",
         name = "unasyncd",
         language = "system",
-        entry = "uv run --locked unasyncd --quiet",
+        entry = "just unasyncd",
         types = ["python"],
         pass_filenames = false
     },
     {
-        id = "ruff-format",
-        name = "ruff format",
+        id = "ruff",
+        name = "ruff",
         language = "system",
-        entry = "uv run --locked ruff format --check",
-        types = ["python"],
-        pass_filenames = false
-    },
-    {
-        id = "ruff-check",
-        name = "ruff check",
-        language = "system",
-        entry = "uv run --locked ruff check",
+        entry = "just ruff",
         types = ["python"],
         pass_filenames = false
     },
@@ -46,7 +38,7 @@ hooks = [
         id = "flake8",
         name = "wemake-python-styleguide",
         language = "system",
-        entry = "uv run --locked flake8 src src/pashe/_internal/sync/threads.py src/pashe/_internal/sync/locks/lock.py src/pashe/_internal/sync/backends/redis/listeners.py",
+        entry = "just flake8",
         types = ["python"],
         pass_filenames = false
     },
@@ -54,7 +46,7 @@ hooks = [
         id = "mypy",
         name = "mypy",
         language = "system",
-        entry = "uv run --locked mypy src tests docs/examples",
+        entry = "just mypy",
         types = ["python"],
         pass_filenames = false
     },
@@ -62,7 +54,7 @@ hooks = [
         id = "pyright",
         name = "pyright",
         language = "system",
-        entry = "uv run --locked pyright",
+        entry = "just pyright",
         types = ["python"],
         pass_filenames = false
     },
@@ -70,7 +62,7 @@ hooks = [
         id = "pyrefly",
         name = "pyrefly",
         language = "system",
-        entry = "uv run --locked pyrefly check",
+        entry = "just pyrefly",
         types = ["python"],
         pass_filenames = false
     },
@@ -78,7 +70,7 @@ hooks = [
         id = "import-linter",
         name = "import-linter",
         language = "system",
-        entry = "uv run --locked lint-imports",
+        entry = "just import-linter",
         types = ["python"],
         pass_filenames = false
     },
@@ -86,7 +78,7 @@ hooks = [
         id = "deptry",
         name = "deptry",
         language = "system",
-        entry = "uv run --locked deptry src",
+        entry = "just deptry",
         files = "^(src/|pyproject\\.toml$)",
         pass_filenames = false
     },
@@ -94,14 +86,30 @@ hooks = [
         id = "codespell",
         name = "codespell",
         language = "system",
-        entry = "uv run --locked codespell",
+        entry = "just codespell",
+        pass_filenames = false
+    },
+    {
+        id = "rumdl",
+        name = "rumdl",
+        language = "system",
+        entry = "just rumdl",
+        files = "\\.md$",
+        pass_filenames = false
+    },
+    {
+        id = "vale",
+        name = "vale",
+        language = "system",
+        entry = "just vale",
+        files = "\\.md$",
         pass_filenames = false
     },
     {
         id = "actionlint",
         name = "actionlint",
         language = "system",
-        entry = "uv run --locked actionlint",
+        entry = "just actionlint",
         files = "^\\.github/workflows/",
         pass_filenames = false
     },
@@ -109,7 +117,7 @@ hooks = [
         id = "zizmor",
         name = "zizmor",
         language = "system",
-        entry = "uv run --locked zizmor --no-progress .github/workflows",
+        entry = "just zizmor",
         files = "^\\.github/",
         pass_filenames = false
     },
@@ -117,14 +125,15 @@ hooks = [
         id = "check-github-workflows",
         name = "check the schema of the workflows",
         language = "system",
-        entry = "uv run --locked check-jsonschema --builtin-schema vendor.github-workflows",
-        files = "^\\.github/workflows/.*\\.yml$"
+        entry = "just workflows",
+        files = "^\\.github/workflows/.*\\.yml$",
+        pass_filenames = false
     },
     {
         id = "format-justfile",
         name = "just --fmt",
         language = "system",
-        entry = "just --fmt --check --unstable",
+        entry = "just justfile",
         files = "^justfile$",
         pass_filenames = false
     },
@@ -132,30 +141,16 @@ hooks = [
         id = "slotscheck",
         name = "slotscheck",
         language = "system",
-        entry = "uv run --locked slotscheck -m pashe",
+        entry = "just slotscheck",
         types = ["python"],
         pass_filenames = false
     },
+    { id = "typos", name = "typos", language = "system", entry = "just typos", pass_filenames = false },
     {
-        id = "typos",
-        name = "typos",
+        id = "tombi",
+        name = "tombi",
         language = "system",
-        entry = "uv run --locked typos",
-        pass_filenames = false
-    },
-    {
-        id = "tombi-format",
-        name = "tombi format",
-        language = "system",
-        entry = "uv run --locked tombi format --check",
-        types = ["toml"],
-        pass_filenames = false
-    },
-    {
-        id = "tombi-lint",
-        name = "tombi lint",
-        language = "system",
-        entry = "uv run --locked tombi lint",
+        entry = "just tombi",
         types = ["toml"],
         pass_filenames = false
     },

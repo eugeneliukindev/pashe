@@ -26,34 +26,35 @@ uv add "pashe[redis]"
 ```python
 from typing import TypedDict
 
-from redis import Redis
+from redis.asyncio import Redis
 
-from pashe import Cache
-from pashe.contrib.redis import RedisBackend
+from pashe import AsyncCache
+from pashe.contrib.redis import AsyncRedisBackend
 from pashe.options import Stale
 
-cache = Cache(RedisBackend(Redis.from_url("redis://localhost:6379/0")), prefix="users:")
+cache = AsyncCache(AsyncRedisBackend(Redis.from_url("redis://localhost:6379/0")), prefix="users:")
 
 
 class User(TypedDict):
     id: int
 
 
-def load_user_from_the_database(user_id: int) -> User:
+async def load_user_from_the_database(user_id: int) -> User:
     return User(id=user_id)  # your query to the database
 
 
 @cache(ttl=300, tags=["users"], stale=Stale(while_revalidate=30))
-def get_user(user_id: int) -> User:
-    return load_user_from_the_database(user_id)
+async def get_user(user_id: int) -> User:
+    return await load_user_from_the_database(user_id)
 
 
-get_user(1)  # loads and stores
-get_user(1)  # answered from Redis
-cache.invalidate_tags("users")  # every entry tagged "users" is a miss now
+async def main() -> None:
+    await get_user(1)  # loads and stores
+    await get_user(1)  # answered from Redis
+    await cache.invalidate_tags("users")  # every entry tagged "users" is a miss now
 ```
 
-`AsyncCache` is the same API for `async def` code.
+`Cache` is the same API for `def` code: the same methods, not awaited.
 
 ## Why pashe
 
@@ -70,10 +71,10 @@ cache.invalidate_tags("users")  # every entry tagged "users" is a miss now
 - **Locks, rate limits, web.** Distributed locks, sliding and fixed window limits, and HTTP
   caching headers for ASGI, WSGI and FastAPI.
 - **Typed to the end.** A cached function keeps the signature of yours, and its result decodes
-  as its return annotation. pashe ships `py.typed` and passes mypy in strict mode with extra
-  checks, pyright in strict mode, pyrefly, ruff with every rule and wemake-python-styleguide.
-- **Tested against real servers.** Every scenario runs on both sides over memory, SQLite, Redis
-  and a Redis Cluster, and on Valkey and Dragonfly in CI; every example of the docs is a test.
+  as its return annotation. pashe ships `py.typed` and is checked with mypy, pyright and pyrefly
+  in strict mode.
+- **Tested against real servers.** Every scenario runs over memory, SQLite, Redis, Valkey,
+  Dragonfly and a Redis Cluster, sync and async; every example of the docs runs.
 
 ## Documentation
 

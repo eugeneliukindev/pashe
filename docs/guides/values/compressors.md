@@ -2,20 +2,41 @@
 
 A compressor shrinks the bytes of the codec before they are stored:
 
-=== "Sync"
+=== "GzipCompressor"
 
-    ```python
-    --8<-- "codecs/compressor_sync.py:show"
-    ```
+    === "Sync"
 
-=== "Async"
+        ```python
+        --8<-- "codecs/gzip_sync.py:show"
+        ```
 
-    ```python
-    --8<-- "codecs/compressor_async.py:show"
-    ```
+    === "Async"
+
+        ```python
+        --8<-- "codecs/gzip_async.py:show"
+        ```
+
+=== "ZstdCompressor"
+
+    === "Sync"
+
+        ```python
+        --8<-- "codecs/zstd_sync.py:show"
+        ```
+
+    === "Async"
+
+        ```python
+        --8<-- "codecs/zstd_async.py:show"
+        ```
 
 `ZstdCompressor` of `pashe.contrib.zstd` is faster for the same size; it uses `compression.zstd`
 of Python 3.14, or its backport before.
+
+A cache without `compressor=` has `NoOpCompressor`, which stores the bytes of the codec as they
+are. A compressor of your own subclasses `Compressor` of `pashe.compressors`: `compress` and
+`decompress` turn bytes into bytes, and `min_size` is the length below which a value is stored as
+it is.
 
 ## How they compare
 
@@ -41,11 +62,6 @@ bytes on the network; it costs CPU on every read and write.
     ```python
     Cache(backend, compressor=GzipCompressor(min_size=4096))
     ```
-
-A cache without `compressor=` has `NoOpCompressor`, which stores the bytes of the codec as they
-are. A compressor of your own subclasses `Compressor` of `pashe.compressors`: `compress` and
-`decompress` turn bytes into bytes, and `min_size` is the length below which a value is stored as
-it is.
 
 ---
 

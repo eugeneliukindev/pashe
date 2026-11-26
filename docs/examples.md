@@ -58,7 +58,7 @@ sequenceDiagram
     --8<-- "shop/slow_query_async.py:calls"
     ```
 
-```{.text title="Queries to the database"}
+```text title="Queries to the database"
 get_product(1)  1 query
 get_product(1)  0 queries
 ```
@@ -72,7 +72,7 @@ depends on what, and tell the cache when you write:
 flowchart LR
     write(["change_price(1, 990)"]) --> set["get_product.set: product:1 holds the new price"]
     write --> tags["invalidate_tags: every list tagged category:coffee is dropped"]
-    tags --> next["the next list_category loads again"]
+    tags --> next["the next list_category reloads"]
     classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
     classDef fromSource fill:#2b5b84,color:#ffffff,stroke:#1f4466
     class set fromCache
@@ -206,7 +206,7 @@ flowchart LR
     --8<-- "shop/feed_async.py:calls"
     ```
 
-```{.text title="Queries to the database"}
+```text title="Queries to the database"
 get_prices([1, 2])     1 query
 get_prices([1, 2, 3])  1 query
 ```
@@ -310,7 +310,7 @@ sequenceDiagram
 
 A second request with the `ETag` of the first in `If-None-Match` gets `304`, without the body:
 
-```{.console title="Two requests to the service" hl_lines="5 6 7 11"}
+```console title="Two requests to the service" hl_lines="5 6 7 11"
 $ curl -i http://localhost:8000/products/1
 HTTP/1.1 200 OK
 content-length: 68

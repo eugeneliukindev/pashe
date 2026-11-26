@@ -25,7 +25,7 @@ from pashe._internal.web.headers import (
     Directive,
     Header,
     add_cache_headers,
-    allows_no_cache,
+    honors_no_cache,
     is_cacheable,
     parse_cache_control,
 )
@@ -71,7 +71,7 @@ class CacheHeadersMiddleware:
         >>> app.add_middleware(CacheHeadersMiddleware, hook=CacheHeadersHook(), cache_control="public")
     """
 
-    __slots__ = ("_allow_no_cache", "_app", "_cache_control", "_hook")
+    __slots__ = ("_app", "_cache_control", "_honor_no_cache", "_hook")
 
     def __init__(
         self,
@@ -79,7 +79,7 @@ class CacheHeadersMiddleware:
         *,
         hook: CacheHeadersHook,
         cache_control: Directive = "private",
-        allow_no_cache: Callable[[Scope], bool] | None = None,
+        honor_no_cache: Callable[[Scope], bool] | None = None,
     ) -> None:
         """Wrap app.
 
@@ -88,7 +88,7 @@ class CacheHeadersMiddleware:
             hook: the hook of the caches the application calls, which records their calls.
             cache_control: who may keep a response: "private", the client only, as cached data may
                 belong to one user; "public" lets shared caches keep it too.
-            allow_no_cache: given the scope of a request with ``Cache-Control: no-cache``, whether
+            honor_no_cache: given the scope of a request with ``Cache-Control: no-cache``, whether
                 it may load past the stored results, which then store what it loaded, as in
                 pashe.no_cache; none may by default. Any client can send the header, and every
                 such request loads from the source: let only those you trust, such as staff.
@@ -99,12 +99,12 @@ class CacheHeadersMiddleware:
         """
         expect_type("app", app, FUNCTION)
         expect_type("hook", hook, CacheHeadersHook)
-        expect_type("allow_no_cache", allow_no_cache, FUNCTION | None)
+        expect_type("honor_no_cache", honor_no_cache, FUNCTION | None)
 
         self._app = app
         self._cache_control: Directive = parse_cache_control(cache_control)
         self._hook = hook
-        self._allow_no_cache = allow_no_cache
+        self._honor_no_cache = honor_no_cache
 
     async def __call__(
         self,
@@ -123,8 +123,8 @@ class CacheHeadersMiddleware:
             await self._app(scope, receive, send)
             return
         headers = _joined(scope["headers"])
-        reload = allows_no_cache(
-            self._allow_no_cache,
+        reload = honors_no_cache(
+            self._honor_no_cache,
             scope,
             cache_control=headers.get(Header.CACHE_CONTROL),
             pragma=headers.get(Header.PRAGMA),
@@ -156,12 +156,14 @@ class RateLimitMiddleware:
         >>> from pashe import AsyncCache
         >>> from pashe.asgi import RateLimitMiddleware
         >>> from pashe.backends import AsyncMemoryBackend
-        >>> from pashe.ratelimit import per_minute
+        >>> from pashe.ratelimit import SlidingWindow
         >>> cache = AsyncCache(AsyncMemoryBackend())
         >>> def client(scope) -> str:
         ...     return dict(scope["headers"])[b"x-forwarded-for"].decode().split(",")[0]
         >>> app = Starlette(
-        ...     middleware=[Middleware(RateLimitMiddleware, cache=cache, limit=per_minute(100), key=client)]
+        ...     middleware=[
+        ...         Middleware(RateLimitMiddleware, cache=cache, limit=SlidingWindow.per_minute(100), key=client)
+        ...     ]
         ... )
     """
 
@@ -182,7 +184,7 @@ class RateLimitMiddleware:
         Args:
             app: the ASGI application, or the route.
             cache: the cache whose backend keeps the counters.
-            limit: the limit, such as ``per_minute(100)``.
+            limit: the limit, such as ``SlidingWindow.per_minute(100)``.
             key: what a request counts under, from its scope, such as the address of its client;
                 required, as behind a proxy the address of the connection is the address of the proxy.
             cost: how many calls a request counts as.

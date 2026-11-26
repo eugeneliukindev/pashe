@@ -63,7 +63,7 @@ class BackendFallbackStore(FallbackStore):
     def set(self, key: str, stored: Stored | None) -> None:
         if stored is None:
             return
-        kept_for = min(stored.fresh_for, self._ttl) if stored.fresh_for > 0 else self._ttl
+        kept_for = min(stored.fresh_seconds, self._ttl) if stored.fresh_seconds > 0 else self._ttl
         try:
             self._backend.set(key, pack(replace(stored.entry, tag_generations=())), ttl=kept_for)
         except BackendError as error:

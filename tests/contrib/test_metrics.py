@@ -129,7 +129,7 @@ def test_otel_span_events_tell_the_span_of_calls_and_errors(clock: Clock) -> Non
     (span,) = exporter.get_finished_spans()
     events = [(event.name, dict(event.attributes or {})) for event in span.events]
     call = {"pashe.function": _FUNCTION, "pashe.key": "rate", "pashe.status": "miss"}
-    assert events[0] == ("pashe.call", call | {"pashe.fresh_for": 60.0})
+    assert events[0] == ("pashe.call", call | {"pashe.fresh_seconds": 60.0})
     assert events[1][0] == "exception"
     assert events[1][1]["exception.type"] == _ERROR_TYPE
     assert (events[1][1]["pashe.operation"], events[1][1]["pashe.key"]) == ("get", "rate")

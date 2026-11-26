@@ -12,6 +12,7 @@ nav = [
     { "Start here" = [
         { "Getting started" = "getting-started.md" },
         { "Core concepts" = "concepts.md" },
+        { "Glossary" = "glossary.md" },
     ] },
     { "Caching functions" = [
         { "Caching a function" = "guides/caching/decorator.md" },
@@ -19,7 +20,7 @@ nav = [
         { "What is stored, and for how long" = "guides/caching/what-is-stored.md" },
         { "Types" = "guides/caching/types.md" },
         { "Batches" = "guides/caching/batches.md" },
-        { "Values without a loader" = "guides/caching/value.md" },
+        { "Values no function loads" = "guides/caching/value.md" },
         { "Reusing options" = "guides/caching/reusing-options.md" },
     ] },
     { "Freshness" = [

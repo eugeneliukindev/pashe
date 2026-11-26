@@ -14,29 +14,20 @@ the cache works in its process only, as [Core concepts](../concepts.md#where-eac
 | tags and `invalidate_tags` | the backend | every process of every machine | every process of one machine | one process |
 | `lock`, `try_lock` and `@locked` | the backend | every process of every machine | every process of one machine | one process |
 | `rate_limit` and `@rate_limited` | the backend | every process of every machine | every process of one machine | one process |
-| `Stampede.lock_for` | the backend | every process of every machine | every process of one machine | one process, where `single_flight` does it for less |
+| `Stampede.lock_for` | the backend | every process of every machine | every process of one machine | one process, where `share_loads` does it for less |
 | `Stampede.revalidate_before` | the backend | every process of every machine | every process of one machine | one process |
-| `Stampede.single_flight` | the cache | one process | one process | one process |
-| `Stampede.max_concurrent_loads` | the cache | one process | one process | one process |
+| `Stampede.share_loads` | the cache | one process | one process | one process |
+| `Stampede.max_loads` | the cache | one process | one process | one process |
 | the copies of a near cache | the cache | one process | one process | one process |
 | a `Fallback` | its own backend, memory as a rule | one process | one process | one process |
 
 ## Where entries live
 
-```mermaid
-flowchart LR
-    start{"How many processes<br/>serve the data?"} -- one --> memory["MemoryBackend"]
-    start -- "several on one machine,<br/>no Redis" --> sqlite["SQLiteBackend"]
-    start -- "several machines" --> redis["RedisBackend<br/>with a Fallback"]
-    classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
-    class memory,sqlite,redis fromCache
-```
-
 | You have | Take | See |
 | --- | --- | --- |
 | one process, or tests | `MemoryBackend` | [Memory](backends/memory.md) |
 | several processes on one machine and no Redis, or entries that outlive a restart | `SQLiteBackend` | [SQLite](backends/sqlite.md) |
-| several processes or servers | `RedisBackend` | [Redis and Valkey](backends/redis.md) |
+| several processes or machines | `RedisBackend` | [Redis and Valkey](backends/redis.md) |
 | Redis Cluster | `RedisBackend` over a `RedisCluster` client | [Redis Cluster](backends/cluster.md) |
 | another store | a backend of your own | [Writing your own backend](backends/your-own.md) |
 
@@ -44,16 +35,6 @@ flowchart LR
 
 A near cache keeps copies in process memory in front of the shared backend: a read it answers
 costs no round trip, and a copy may be up to `local_ttl` old.
-
-```mermaid
-flowchart LR
-    hot{"Hot keys on<br/>every request?"} -- no --> none["no near cache"]
-    hot -- yes --> writes{"Who writes<br/>the keys?"}
-    writes -- "only pashe, or<br/>a Redis Cluster" --> pubsub["RedisPubSubBus"]
-    writes -- "others too,<br/>one Redis node" --> tracking["RedisTrackingBus"]
-    classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
-    class pubsub,tracking fromCache
-```
 
 | You have | Take | See |
 | --- | --- | --- |
@@ -106,9 +87,9 @@ feature that lives in it.
 
 | You have | Take | Reaches | See |
 | --- | --- | --- | --- |
-| concurrent calls of a key in one process | nothing: `Stampede(single_flight=True)` is the default | one process | [Stampede protection](failures/stampedes.md) |
+| concurrent calls of a key in one process | nothing: `Stampede(share_loads=True)` is the default | one process | [Stampede protection](failures/stampedes.md) |
 | an expensive load, and many processes that miss the key at once | `Stampede(lock_for=...)`: one process loads, the others wait and take its result | every process | [Locking a load across processes](failures/stampedes.md#locking-a-load-across-processes) |
-| a source that takes only so many loads at once | `Stampede(max_concurrent_loads=...)` | one process | [Limiting loads at once](failures/stampedes.md#limiting-loads-at-once) |
+| a source that takes only so many loads at once | `Stampede(max_loads=...)` | one process | [Limiting loads at once](failures/stampedes.md#limiting-loads-at-once) |
 | many entries stored at once, such as after a deploy | `Stampede(jitter=0.1)`, so they do not expire together | every process | [Stampede protection](failures/stampedes.md) |
 | "not found" asked again and again, such as for unknown ids | `Negative(on=(UserNotFoundError,), ttl=...)` | every process | [Negative caching](caching/what-is-stored.md#negative-caching) |
 
@@ -121,7 +102,7 @@ feature that lives in it.
 | a function one process at a time may run, each call doing its work | `@cache.locked(...)` | every process | the same |
 | a function a few at a time may run, such as three exports at once | `@cache.locked(..., holders=3)` | every process | [Several holders](locks/locks.md#several-holders) |
 | a cached function whose load one process at a time may run, the others taking its result | `Stampede(lock_for=...)`, not `@cache.locked` | every process | [Locking a load across processes](failures/stampedes.md#locking-a-load-across-processes) |
-| a limit such as "100 a minute", even across its windows | `SlidingWindow`, or `per_minute(100)` | every process | [Rate limits](locks/rate-limits.md) |
+| a limit such as "100 a minute", even across its windows | `SlidingWindow`, such as `SlidingWindow.per_minute(100)` | every process | [Rate limits](locks/rate-limits.md) |
 | a limit that bans for a while once it is passed, such as logins | `FixedWindow(..., ban_for=...)` | every process | the same |
 | a limit of a whole ASGI application | `RateLimitMiddleware` of `pashe.asgi` | every process | [Rate limits for HTTP](web/rate-limits.md) |
 | a limit of a FastAPI route, by the current user | `rate_limit` of `pashe.contrib.fastapi` | every process | [FastAPI](web/fastapi.md) |

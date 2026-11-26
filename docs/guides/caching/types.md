@@ -18,34 +18,11 @@ encoded into.
     --8<-- "caching_functions/types_async.py:calls"
     ```
 
-## What a type checker sees
-
-| You write | It is typed as |
-| --- | --- |
-| `@cache(...)` over `def get_user(user_id: int) -> User` | `CachedFunction[[int], User]`: `get_user(1)` takes what the function takes and returns a `User` |
-| the same over `async def` | `AsyncCachedFunction[[int], User]`: `await get_user(1)` returns a `User` |
-| a cached method | bound to its instance as a method is, without `self` |
-| `get_user.get(1)` | `User | None`: `None` on a miss |
-| `get_user.set(user, 1)` | takes a `User` first, then the arguments of the function |
-| `@cache.batch(...)` over `def get_users(user_ids: list[int]) -> dict[int, User]` | `CachedBatchFunction[int, User]` |
-| `@cache.value(...)` over `def session(sid: str) -> Session` | `CachedValue[[str], Session]` |
-
-A wrong argument or a wrong use of the result is then an error of mypy, pyright or pyrefly, as
-it would be without the cache. pashe ships `py.typed` and is checked with all three, mypy and
-pyright in strict mode.
-
 ## What a result decodes as
 
 The return annotation of the function says what a stored result decodes as; for a batch, the
 type of the values of the `dict` it returns. The codec does the work, so the codec decides which
-types come back whole:
-
-| Codec | A result comes back as |
-| --- | --- |
-| `JsonCodec`, the default; `OrjsonCodec` | what JSON holds: `dict`, `list`, `str`, numbers, `bool`, `None`; a `TypedDict`, which is a `dict` |
-| `MsgspecJsonCodec`, `MsgspecMsgpackCodec` | your dataclasses, `TypedDict`s, `msgspec.Struct`s, enums, dates, UUIDs and more |
-| `PydanticCodec` | pydantic models, and what a `TypeAdapter` validates |
-| `PickleCodec` | any object pickle holds |
+types come back whole: [Codecs](../values/codecs.md) tells which.
 
 A type the codec would give back as another one is refused when the function is decorated, not
 when its first result is read: a dataclass under `JsonCodec` raises `InvalidOptionsError`, which

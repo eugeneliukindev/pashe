@@ -13,10 +13,4 @@
 
 ::: pashe.ratelimit.Limit
 
-::: pashe.ratelimit.per_second
-
-::: pashe.ratelimit.per_minute
-
-::: pashe.ratelimit.per_hour
-
 ::: pashe.ratelimit.RateLimitState

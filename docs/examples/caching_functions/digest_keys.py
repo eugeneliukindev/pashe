@@ -3,14 +3,8 @@ from dataclasses import dataclass
 
 from pashe import Cache
 from pashe.backends import MemoryBackend
-from pashe.hooks import Outcome
-
-from examples.recorded import Record
 
 __name__ = "app.users"  # the module of the page, so the keys read as it says
-
-outcomes: list[Outcome] = []  # the key of every call, for the test
-cache = Cache(MemoryBackend(), prefix="shop:", hooks=[Record(outcomes)])
 
 
 @dataclass
@@ -20,6 +14,9 @@ class Filters:
 
 
 # --8<-- [start:show]
+cache = Cache(MemoryBackend(), prefix="shop:")  # every key starts with the prefix
+
+
 @cache(ttl=60, key="search:{filters:blake2b}")
 def search(filters: Filters) -> list[int]:
     return [1, 2, 3]  # the ids your search finds

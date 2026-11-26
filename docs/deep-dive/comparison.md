@@ -29,7 +29,7 @@ come from the releases on PyPI as of November 2026: cachetools 8.0.3, aiocache 0
 - **One process, and nothing else:** cachetools. It keeps objects as they are, without encoding
   them, and needs no backend.
 - **Memcached:** dogpile.cache or aiocache. pashe has no Memcached backend, as [Choosing a
-  backend](../guides/backends/index.md#every-store) tells why.
+  backend](../guides/backends/index.md#supported-servers) tells why.
 - **A large sync codebase on dogpile.cache:** its regions and their invalidation are mature, and
   moving them buys little.
 - **Async code and a disk cache through `diskcache`:** cashews. pashe keeps entries on disk with

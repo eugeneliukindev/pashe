@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Final, final
+from typing import Final, Self, final
 
-from pashe._internal.checks import expect_positive, expect_type
+from pashe._internal.checks import expect_positive
 
-__all__ = ["FixedWindow", "Limit", "RateLimitState", "SlidingWindow", "per_hour", "per_minute", "per_second"]
+__all__ = ["FixedWindow", "Limit", "RateLimitState", "SlidingWindow"]
 
 
 type Limit = SlidingWindow | FixedWindow
@@ -47,6 +47,69 @@ class SlidingWindow:
         """
         expect_positive("SlidingWindow.calls", self.calls, "how many calls the window allows, 1 or more", kind=int)
         expect_positive("SlidingWindow.per", self.per, "the span of the window, more than 0 seconds")
+
+    @classmethod
+    def per_second(cls, calls: int, /) -> Self:
+        """Allow ``calls`` calls in any second.
+
+        Args:
+            calls: how many calls the window allows.
+
+        Returns:
+            A sliding window of one second.
+
+        Raises:
+            TypeError: calls is not an int.
+            InvalidOptionsError: calls is not positive.
+
+        Examples:
+            >>> from pashe.ratelimit import SlidingWindow
+            >>> SlidingWindow.per_second(100)
+            SlidingWindow(calls=100, per=1)
+        """
+        return cls(calls=calls, per=1)
+
+    @classmethod
+    def per_minute(cls, calls: int, /) -> Self:
+        """Allow ``calls`` calls in any minute.
+
+        Args:
+            calls: how many calls the window allows.
+
+        Returns:
+            A sliding window of one minute.
+
+        Raises:
+            TypeError: calls is not an int.
+            InvalidOptionsError: calls is not positive.
+
+        Examples:
+            >>> from pashe.ratelimit import SlidingWindow
+            >>> SlidingWindow.per_minute(100)
+            SlidingWindow(calls=100, per=60.0)
+        """
+        return cls(calls=calls, per=_MINUTE)
+
+    @classmethod
+    def per_hour(cls, calls: int, /) -> Self:
+        """Allow ``calls`` calls in any hour.
+
+        Args:
+            calls: how many calls the window allows.
+
+        Returns:
+            A sliding window of one hour.
+
+        Raises:
+            TypeError: calls is not an int.
+            InvalidOptionsError: calls is not positive.
+
+        Examples:
+            >>> from pashe.ratelimit import SlidingWindow
+            >>> SlidingWindow.per_hour(100)
+            SlidingWindow(calls=100, per=3600.0)
+        """
+        return cls(calls=calls, per=_HOUR)
 
 
 @final
@@ -90,68 +153,71 @@ class FixedWindow:
         """How long the first call over the limit blocks the key."""
         return self.ban_for or self.per  # ban_for is positive, or None
 
+    @classmethod
+    def per_second(cls, calls: int, /, *, ban_for: float | None = None) -> Self:
+        """Allow ``calls`` calls per window of one second.
 
-def per_second(calls: int, /) -> SlidingWindow:
-    """Allow calls in any second.
+        Args:
+            calls: how many calls the window allows.
+            ban_for: how long the first call over the limit blocks the key; None means the window.
 
-    Args:
-        calls: how many calls the window allows.
+        Returns:
+            A fixed window of one second.
 
-    Returns:
-        A sliding window of one second.
+        Raises:
+            TypeError: calls is not an int.
+            InvalidOptionsError: calls or ban_for is not positive.
 
-    Raises:
-        InvalidOptionsError: calls is not positive.
+        Examples:
+            >>> from pashe.ratelimit import FixedWindow
+            >>> FixedWindow.per_second(5, ban_for=300)
+            FixedWindow(calls=5, per=1, ban_for=300)
+        """
+        return cls(calls=calls, per=1, ban_for=ban_for)
 
-    Examples:
-        >>> from pashe.ratelimit import per_second
-        >>> per_second(100)
-        SlidingWindow(calls=100, per=1)
-    """
-    expect_type("calls", calls, int)
-    return SlidingWindow(calls=calls, per=1)
+    @classmethod
+    def per_minute(cls, calls: int, /, *, ban_for: float | None = None) -> Self:
+        """Allow ``calls`` calls per window of one minute.
 
+        Args:
+            calls: how many calls the window allows.
+            ban_for: how long the first call over the limit blocks the key; None means the window.
 
-def per_minute(calls: int, /) -> SlidingWindow:
-    """Allow calls in any minute.
+        Returns:
+            A fixed window of one minute.
 
-    Args:
-        calls: how many calls the window allows.
+        Raises:
+            TypeError: calls is not an int.
+            InvalidOptionsError: calls or ban_for is not positive.
 
-    Returns:
-        A sliding window of one minute.
+        Examples:
+            >>> from pashe.ratelimit import FixedWindow
+            >>> FixedWindow.per_minute(5, ban_for=300)
+            FixedWindow(calls=5, per=60.0, ban_for=300)
+        """
+        return cls(calls=calls, per=_MINUTE, ban_for=ban_for)
 
-    Raises:
-        InvalidOptionsError: calls is not positive.
+    @classmethod
+    def per_hour(cls, calls: int, /, *, ban_for: float | None = None) -> Self:
+        """Allow ``calls`` calls per window of one hour.
 
-    Examples:
-        >>> from pashe.ratelimit import per_minute
-        >>> per_minute(100)
-        SlidingWindow(calls=100, per=60.0)
-    """
-    expect_type("calls", calls, int)
-    return SlidingWindow(calls=calls, per=_MINUTE)
+        Args:
+            calls: how many calls the window allows.
+            ban_for: how long the first call over the limit blocks the key; None means the window.
 
+        Returns:
+            A fixed window of one hour.
 
-def per_hour(calls: int, /) -> SlidingWindow:
-    """Allow calls in any hour.
+        Raises:
+            TypeError: calls is not an int.
+            InvalidOptionsError: calls or ban_for is not positive.
 
-    Args:
-        calls: how many calls the window allows.
-
-    Returns:
-        A sliding window of one hour.
-
-    Raises:
-        InvalidOptionsError: calls is not positive.
-
-    Examples:
-        >>> from pashe.ratelimit import per_hour
-        >>> per_hour(100)
-        SlidingWindow(calls=100, per=3600.0)
-    """
-    expect_type("calls", calls, int)
-    return SlidingWindow(calls=calls, per=_HOUR)
+        Examples:
+            >>> from pashe.ratelimit import FixedWindow
+            >>> FixedWindow.per_hour(5, ban_for=300)
+            FixedWindow(calls=5, per=3600.0, ban_for=300)
+        """
+        return cls(calls=calls, per=_HOUR, ban_for=ban_for)
 
 
 @final

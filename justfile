@@ -26,36 +26,119 @@ install *args='':
 [group('dev')]
 fmt:
     # unasyncd exits 1 when it rewrote a file: that is what we asked for here.
-    -uv run unasyncd --quiet
+    -just unasyncd
     uv run ruff format
     uv run ruff check --fix
     uv run tombi format
 
-[doc('Run all linters')]
-[group('dev')]
-lint:
+[doc('Run every linter, one recipe each')]
+[group('lint')]
+lint: ruff flake8 pydoclint slotscheck import-linter deptry typos codespell rumdl vale tombi justfile actionlint zizmor workflows dead-fixtures
+
+[doc('Generate the sync side from the async one; exits 1 when it rewrote a file, so a stale side fails')]
+[group('lint')]
+unasyncd:
+    uv run unasyncd --quiet
+
+[doc('Lint and check the format of the code with ruff')]
+[group('lint')]
+ruff:
     uv run ruff check --exit-non-zero-on-fix
     uv run ruff format --check --diff
+
+[doc('Run wemake-python-styleguide and the plugins of flake8 that ruff has no rules for')]
+[group('lint')]
+flake8:
     uv run flake8 src src/pashe/_internal/sync/threads.py src/pashe/_internal/sync/locks/lock.py src/pashe/_internal/sync/backends/redis/listeners.py
+
+[doc('Check that the docstrings match the signatures')]
+[group('lint')]
+pydoclint:
     uv run pydoclint --quiet src
+
+[doc('Check the __slots__ of every class')]
+[group('lint')]
+slotscheck:
     uv run slotscheck -m pashe
+
+[doc('Check that the modules import one another in the allowed directions')]
+[group('lint')]
+import-linter:
     uv run lint-imports
+
+[doc('Check that the dependencies are declared as they are imported')]
+[group('lint')]
+deptry:
     uv run deptry src
+
+[doc('Find typos with typos')]
+[group('lint')]
+typos:
     uv run typos
+
+[doc('Find misspelled words with codespell')]
+[group('lint')]
+codespell:
     uv run codespell
+
+[doc('Lint the Markdown of the docs and the README with rumdl')]
+[group('lint')]
+rumdl:
+    uv run rumdl check docs README.md
+
+[doc('Check the prose of the docs and the README against the glossary with Vale')]
+[group('lint')]
+vale:
+    uv run vale docs README.md
+
+[doc('Check the format of the TOML files, and lint them')]
+[group('lint')]
+tombi:
     uv run tombi format --check
     uv run tombi lint
+
+[doc('Check the format of this justfile')]
+[group('lint')]
+justfile:
     just --fmt --check --unstable
+
+[doc('Lint the GitHub workflows with actionlint')]
+[group('lint')]
+actionlint:
     uv run actionlint
+
+[doc('Audit the GitHub workflows for security with zizmor')]
+[group('lint')]
+zizmor:
     uv run zizmor --no-progress .github/workflows
+
+[doc('Validate the GitHub workflows against their schema')]
+[group('lint')]
+workflows:
     uv run check-jsonschema --builtin-schema vendor.github-workflows .github/workflows/*.yml
+
+[doc('Find fixtures of the tests that no test uses')]
+[group('lint')]
+dead-fixtures:
     uv run pytest --dead-fixtures -n 0 --no-cov -p no:randomly --quiet
 
-[doc('Run the type checkers')]
-[group('dev')]
-types:
+[doc('Run every type checker, one recipe each')]
+[group('types')]
+types: mypy pyright pyrefly
+
+[doc('Check the types with mypy, strict')]
+[group('types')]
+mypy:
     uv run mypy src tests docs/examples noxfile.py
+
+[doc('Check the types with pyright')]
+[group('types')]
+pyright:
     uv run pyright
+
+[doc('Check the types with pyrefly')]
+[group('types')]
+pyrefly:
     uv run pyrefly check
 
 [doc('Run the linters, the type checkers and the dependency checks at once')]
@@ -115,6 +198,16 @@ test-servers server='' *args='':
 test-free-threaded python='' *args='':
     uv run nox -s free_threaded{{ if python == '' { '' } else { '-' + python } }} -- {{ args }}
 
+[doc('Run one session of noxfile.py, such as lowest or "servers(valkey-9)", as a job of CI does')]
+[group('testing')]
+nox session *args='':
+    uv run nox -s '{{ session }}' -- {{ args }}
+
+[doc('List the sessions of noxfile.py that CI runs, as JSON for the matrix of its jobs')]
+[group('testing')]
+nox-sessions:
+    @uv run nox -l --json -s lowest highest servers free_threaded | jq -c 'map({session, python, tags})'
+
 [doc('Validate the lock file and the installed dependencies, and look for known vulnerabilities in them')]
 [group('testing')]
 deps:
@@ -144,3 +237,22 @@ docs-links: (_lychee 'docs' 'src')
 [private]
 _lychee +paths:
     docker run --rm --volume "$PWD:/input:ro" --workdir /input {{ lychee_image }} --no-progress --extensions md,py {{ paths }}
+
+[doc('Fail unless the tag, such as v1.2.3, is v and the version of pyproject.toml')]
+[group('release')]
+[positional-arguments]
+version-matches tag:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version="$(uv version --short)"
+    if [ "$1" != "v$version" ]; then  # the tag as an argument, never in the text of the script
+        echo "::error::the tag is $1, pyproject.toml has version $version: publish v$version, or set the version first"
+        exit 1
+    fi
+
+[doc('Build the sdist and the wheel into dist/, check what PyPI reads of them, and import the wheel alone')]
+[group('release')]
+build:
+    uv build
+    uvx twine check --strict dist/*
+    uv run --isolated --no-project --with dist/*.whl python -c "import pashe; print(pashe.__version__)"

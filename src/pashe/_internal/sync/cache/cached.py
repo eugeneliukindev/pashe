@@ -235,7 +235,7 @@ class CachedFunction[**P, R](CachedValue[P, R]):
     def refresh(self, *args: P.args, **kwargs: P.kwargs) -> R:
         """Call the function and cache its result whatever is cached, as after the data changed.
 
-        A loader error leaves the cached result alone; a result the policy does not store, such
+        An error of the function leaves the cached result alone; a result the policy does not store, such
         as one Store.when rejects, deletes it.
 
         Args:
@@ -320,7 +320,7 @@ class CachedFunctionDecorator:
         """Cache the results of function.
 
         Args:
-            function: the loader, of the side of the cache.
+            function: the function to cache, of the side of the cache.
 
         Returns:
             The cached function.

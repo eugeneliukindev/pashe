@@ -1,0 +1,9 @@
+# One word for each thing, as docs/glossary.md names it.
+extends: substitution
+message: "Write '%s', not '%s': see docs/glossary.md."
+level: error
+ignorecase: true
+swap:
+  loaders?: function
+  loads? again: reload
+  single[ -]flight: share_loads

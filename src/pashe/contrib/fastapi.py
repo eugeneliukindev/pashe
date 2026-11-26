@@ -8,7 +8,7 @@ The headers of caching come from pashe.asgi, with the CacheHeadersHook of pashe.
     app.add_middleware(CacheHeadersMiddleware, hook=headers)
 
 
-    @app.get("/search", dependencies=[Depends(rate_limit(cache, per_minute(100), key=client_key))])
+    @app.get("/search", dependencies=[Depends(rate_limit(cache, SlidingWindow.per_minute(100), key=client_key))])
     async def search() -> list[Result]: ...
 """
 
@@ -48,12 +48,14 @@ class rate_limit:  # noqa: N801 - a dependency is named as what it does, as Depe
         >>> from pashe import AsyncCache
         >>> from pashe.backends import AsyncMemoryBackend
         >>> from pashe.contrib.fastapi import rate_limit
-        >>> from pashe.ratelimit import per_minute
+        >>> from pashe.ratelimit import SlidingWindow
         >>> cache = AsyncCache(AsyncMemoryBackend())
         >>> app = FastAPI()
         >>> def client_key(request: Request) -> str:
         ...     return request.headers["x-forwarded-for"].split(",")[0]
-        >>> @app.get("/search", dependencies=[Depends(rate_limit(cache, per_minute(100), key=client_key))])
+        >>> @app.get(
+        ...     "/search", dependencies=[Depends(rate_limit(cache, SlidingWindow.per_minute(100), key=client_key))]
+        ... )
         ... async def search() -> list[str]:
         ...     return []
     """
@@ -74,7 +76,7 @@ class rate_limit:  # noqa: N801 - a dependency is named as what it does, as Depe
 
         Args:
             cache: the cache whose backend keeps the counters.
-            limit: the limit, such as ``per_minute(100)``.
+            limit: the limit, such as ``SlidingWindow.per_minute(100)``.
             key: what to count a request under, such as the address of its client; required, as
                 behind a proxy the address of the connection is the address of the proxy.
             cost: how many calls a request counts as.

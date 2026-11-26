@@ -6,10 +6,10 @@ cache = AsyncCache(AsyncMemoryBackend())
 
 
 @cache.locked(
-    ttl=30,  # how long the lock lives without an extension, in seconds or a timedelta
-    key="report:{report_id}",  # a template over the arguments; None, the default: one lock for the function
-    timeout=None,  # the most a call waits for the lock, then LockTimeoutError; None waits as long as it takes
-    holders=1,  # how many calls run at once, in every process over the backend
+    ttl=30,  # the lock lives this long unextended
+    key="report:{report_id}",  # a template; None: one per function
+    timeout=None,  # the longest wait; None: forever
+    holders=1,  # how many hold it at once
 )
 async def build(report_id: int) -> None: ...
 
@@ -25,10 +25,10 @@ async def main() -> None:
 
     lock = await cache.try_lock(
         "nightly-export",  # the name of the lock
-        ttl=30,  # as in locked; try_lock waits for nothing, so it takes no timeout
+        ttl=30,  # as in locked; no wait, no timeout
         holders=1,  # as in locked
     )
-    if lock is not None:  # None: as many as holders hold it now
+    if lock is not None:  # None: it is taken
         async with lock:
             await build(1)
 

@@ -30,7 +30,7 @@ class PrometheusMetricsHook(Hook):
     - ``pashe_calls_total``: every cached call and item of a batch, by ``pashe_function`` and
       ``pashe_status``.
     - ``pashe_load_duration_seconds``, a histogram with the default buckets of prometheus_client:
-      every run of a loader for a call, by ``pashe_function``.
+      every run of a function for a call, by ``pashe_function``.
     - ``pashe_errors_total``: every error a cache works around, by ``pashe_operation`` and
       ``error_type``, the qualified name of its class.
     - ``pashe_rate_limit_calls_total``: every call a rate limit counted, by
@@ -73,7 +73,7 @@ class PrometheusMetricsHook(Hook):
             registry=registry,
         )
         self._loads = prometheus_client.Histogram(
-            "pashe_load_duration_seconds", "Runs of loaders for cached calls.", ("pashe_function",), registry=registry
+            "pashe_load_duration_seconds", "Runs of functions for cached calls.", ("pashe_function",), registry=registry
         )
         self._errors = prometheus_client.Counter(
             "pashe_errors",

@@ -9,7 +9,7 @@ requests of a route with a rate limit of the cache.
 
 `rate_limit` counts every request of the route and tells what is left in `RateLimit-Limit`,
 `RateLimit-Remaining` and `RateLimit-Reset`. Over the limit it raises `RateLimitedError`, and
-`OverloadedError` comes from `Stampede.max_concurrent_loads`: answer them with handlers of your own, in the
+`OverloadedError` comes from `Stampede.max_loads`: answer them with handlers of your own, in the
 format of errors your API already has; above they are `429` with `Retry-After`, and `503`.
 
 A request within the limit says what is left of it:
@@ -50,4 +50,4 @@ content-type: application/json
 
 ---
 
-API reference: [`pashe.contrib.fastapi`](../../reference/contrib/fastapi.md).
+API reference: [`rate_limit`](../../reference/contrib/fastapi.md#pashe.contrib.fastapi.rate_limit).

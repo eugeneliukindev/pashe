@@ -99,8 +99,10 @@ lint = [
     "flake8-pyproject>=1.2.4,<2",
     "import-linter>=2.5.2,<2.6",  # 2.6 pins grimp 3.13, which has no wheels for 3.15; 2.7 needs rich 14, unasyncd pins 13.6
     "pydoclint>=0.12.0,<0.13",
+    "rumdl>=0.3.6,<0.4",
     "slotscheck>=0.21.0,<0.22",
     "typos>=1.52.2,<2",
+    "vale>=3.28.1.0,<4",
     "wemake-python-styleguide>=1.9.0,<2",
     "zizmor>=1.33.1,<2",
 ]
@@ -413,6 +415,7 @@ typing-extensions = false
 "docs/examples/**/test_*.py" = ["ANN401", "D", "PLR2004", "S101", "S105"]
 # The examples of the testing guide are tests of yours.
 "docs/examples/testing/*.py" = ["S101"]
+"docs/examples/codecs/*.py" = ["S101"]  # main checks what each codec gives back, past the part a page shows
 # An example imports as a reader would write it, with no TYPE_CHECKING block.
 "docs/examples/**/*.py" = ["TC001", "TC002", "TC003"]
 # Types the options take, as pydantic.types; imports inside pashe are absolute, so it shadows nothing.
@@ -449,6 +452,25 @@ convention = "google"
 max-args = 16
 max-positional-args = 3
 max-public-methods = 32
+
+[tool.rumdl]
+flavor = "mkdocs"  # tabs, admonitions and snippets of the docs are not indented code
+line-length = 120  # as ruff: prose wraps before it
+# the anchors of the reference are made by mkdocstrings at build time, which rumdl does not see;
+# the strict build checks the links
+disable = ["MD051"]
+
+[tool.rumdl.per-file-ignores]
+"README.md" = ["MD033", "MD041"]  # a centered head of HTML, as GitHub renders it
+"docs/index.md" = ["MD025", "MD057"]  # the hero has the title; llms.txt is made at build time
+"docs/reference/**" = ["MD066"]  # a filter such as "!^_[^_]" of mkdocstrings reads as a footnote
+
+[tool.rumdl.MD013]
+tables = false  # a row is one line, however long
+code-blocks = false  # a console line is as long as it is
+
+[tool.rumdl.MD033]
+allowed-elements = ["a", "b", "br", "div", "img", "p"]  # the head of the README and the cards of the home page
 
 [tool.slotscheck]
 strict-imports = true

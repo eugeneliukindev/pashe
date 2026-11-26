@@ -67,7 +67,7 @@ class ValueTooLargeError(PasheError):
 class NotFoundError(PasheError, LookupError):
     """A cached function raised, or negative caching kept, the answer "there is no such data".
 
-    When the loader raised it, the loader's exception is the ``__cause__``. The basic API does
+    When the function raised it, the exception of the function is the ``__cause__``. The basic API does
     not raise it: ``get`` returns None on a miss.
 
     Attributes:
@@ -234,7 +234,7 @@ class RateLimitedError(PasheError):
 
 
 class OverloadedError(PasheError):
-    """A load refused by ``Stampede.max_concurrent_loads``: every slot was taken and an old result can answer."""
+    """A load refused by ``Stampede.max_loads``: every slot was taken and an old result can answer."""
 
     @override
     def __str__(self) -> str:

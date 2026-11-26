@@ -46,14 +46,14 @@ of `pashe.errors`, so `except PasheError` takes them all.
 ??? question "After a deploy that changed a type, old entries are misses"
 
     That is on purpose. An entry remembers the shape of the type it was stored as: its classes
-    and fields. When the shape changes, the entry is a miss and loads again, instead of decoding
+    and fields. When the shape changes, the entry is a miss and reloads, instead of decoding
     into the wrong form.
 
 ??? question "I changed a cached result and another caller saw the change"
 
-    With `Stampede(single_flight=True)`, the default, concurrent callers of a key share one load
+    With `Stampede(share_loads=True)`, the default, concurrent callers of a key share one load
     and get the same object. Copy a result before you change it, or pass
-    `stampede=Stampede(single_flight=False)` for that function.
+    `stampede=Stampede(share_loads=False)` for that function.
 
 ??? question "InvalidOptionsError: ttl is 0 and no Stale window is set"
 
@@ -67,7 +67,7 @@ of `pashe.errors`, so `except PasheError` takes them all.
 
 ??? question "OverloadedError"
 
-    `Stampede.max_concurrent_loads` is reached and a stale result can answer the call instead.
+    `Stampede.max_loads` is reached and a stale result can answer the call instead.
     With a stale window the cache answers with it; without one, the call waits for a slot instead
     of raising.
 
@@ -79,5 +79,5 @@ of `pashe.errors`, so `except PasheError` takes them all.
 
 ??? question "NotFoundError"
 
-    The function raised one of `Negative.on`, now or when the answer was cached. The loader
+    The function raised one of `Negative.on`, now or when the answer was cached. The function
     error is the `__cause__` when it just loaded; a cached "not found" has none.

@@ -12,7 +12,7 @@ from pashe.backends import AsyncMemoryBackend
 from pashe.contrib.fastapi import rate_limit
 from pashe.errors import OverloadedError, RateLimitedError
 from pashe.hooks import CacheHeadersHook
-from pashe.ratelimit import per_minute
+from pashe.ratelimit import SlidingWindow
 
 headers = CacheHeadersHook()
 cache = AsyncCache(AsyncMemoryBackend(), hooks=[headers])
@@ -42,7 +42,7 @@ def client_key(request: Request) -> str:
     return request.headers["x-forwarded-for"].split(",")[0]
 
 
-@app.get("/search", dependencies=[Depends(rate_limit(cache, per_minute(100), key=client_key))])
+@app.get("/search", dependencies=[Depends(rate_limit(cache, SlidingWindow.per_minute(100), key=client_key))])
 async def search(query: str) -> list[Result]:
     return [Result(id=1)]
 

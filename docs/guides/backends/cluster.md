@@ -21,8 +21,8 @@ given. Every command of one key goes to the node of its slot, and a command of m
 by node: a cached call reads its entry and the counters of its tags with one `MGET` per node they
 live on, and a batch writes with one pipeline per node. pashe needs no atomicity across keys, so
 nothing else changes: tags, batches, locks, rate limits and a near cache with `RedisPubSubBus`
-work as on one node. The tests run every core scenario on a cluster of three primaries.
+work as on one node.
 
 ---
 
-API reference: [`pashe.contrib.redis`](../../reference/contrib/redis.md).
+API reference: [`RedisBackend`](../../reference/contrib/redis.md#pashe.contrib.redis.RedisBackend).

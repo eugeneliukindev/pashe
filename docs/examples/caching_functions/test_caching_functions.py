@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import importlib
 import re
 from dataclasses import dataclass
@@ -8,21 +9,26 @@ from pathlib import Path
 import pytest
 from tests.harness.helpers import call, recording_calls
 
+import pashe
 from pashe import Cache
 from pashe.backends import MemoryBackend
 from pashe.errors import InvalidOptionsError
-from pashe.hooks import CacheStatus
+from pashe.hooks import CacheStatus, Outcome
+
+from examples.recorded import Record
 
 _KEY = re.compile(r"# (shop:.+)$", re.MULTILINE)  # the key a call of the page says it has
 
 
 @pytest.mark.parametrize("name", ["default_key", "template_key", "digest_keys"])
-def test_every_call_has_the_key_the_page_says(name: str) -> None:
+def test_every_call_has_the_key_the_page_says(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
     said = _KEY.findall((Path(__file__).parent / f"{name}.py").read_text())
+    outcomes: list[Outcome] = []
+    monkeypatch.setattr(pashe, "Cache", functools.partial(Cache, hooks=[Record(outcomes)]))  # the page leaves it out
 
-    example = importlib.import_module(f"examples.caching_functions.{name}")
+    importlib.import_module(f"examples.caching_functions.{name}")
 
-    assert [outcome.key for outcome in example.outcomes] == said
+    assert [outcome.key for outcome in outcomes] == said
 
 
 @pytest.mark.parametrize("side", ["sync", "async"])

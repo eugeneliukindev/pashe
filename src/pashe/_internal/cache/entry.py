@@ -36,7 +36,7 @@ class EntryFormat:
         value: object,
         *,
         stale_at: float,
-        fresh_for: float,
+        fresh_seconds: float,
         tag_generations: Generations,
     ) -> Stored:
         payload, compressed = self._serializer.encode(value)
@@ -48,13 +48,13 @@ class EntryFormat:
             tag_generations=tag_generations,
             payload=payload,
         )
-        return Stored(entry, self._value_of(entry), fresh_for)
+        return Stored(entry, self._value_of(entry), fresh_seconds)
 
     def encode_negative(
         self,
         *,
         stale_at: float,
-        fresh_for: float,
+        fresh_seconds: float,
         tag_generations: Generations,
     ) -> Stored:
         entry = Entry(
@@ -65,7 +65,7 @@ class EntryFormat:
             tag_generations=tag_generations,
             payload=b"",
         )
-        return Stored(entry, None, fresh_for)
+        return Stored(entry, None, fresh_seconds)
 
     def decode(self, raw: bytes) -> Stored | None:
         # None for an entry stored as another type, such as before a deploy changed it
@@ -83,7 +83,7 @@ class EntryFormat:
 class Stored:
     entry: Entry
     value: object  # decoded as the return type
-    fresh_for: float = 0
+    fresh_seconds: float = 0
 
     @property
     def raw(self) -> bytes:

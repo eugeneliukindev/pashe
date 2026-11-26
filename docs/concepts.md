@@ -1,5 +1,7 @@
 # Core concepts
 
+How pashe works, in a few pages' worth; the [Glossary](glossary.md) names each thing in one word.
+
 ## How a cached call is answered
 
 Every call of a cached function reads its entry and decides how to answer:
@@ -42,20 +44,15 @@ are misses instead of decoding into the wrong form.
 
 ## Tags
 
-A tag has a generation counter, and an entry remembers the generations of its tags. Invalidating
-a tag bumps its counter, two calls to the backend however many entries it covers, and every entry
-stored with the old generation becomes a miss. Nothing is scanned.
-
-| | `__tag:users` | `user:1`, stored with `users` | `get_user(1)` |
-| --- | --- | --- | --- |
-| stored | `4711` | remembers `users: 4711` | HIT |
-| `invalidate_tags("users")` | `4712` | still remembers `4711` | MISS: loads, stores with `4712` |
+`invalidate_tags("users")` makes every result stored with the tag `users` a miss, however many
+there are: it costs two calls to the backend and scans no key. [What is in Redis](deep-dive/storage.md#the-keys-of-the-cache)
+shows how.
 
 ## Where each feature works
 
 A feature that lives in the backend works for every process over that backend; one that lives in
 the cache works in its process only. So the backend decides how far a lock, a limit or a tag
-reaches: over memory, a lock keeps apart the threads and tasks of one process, not two servers.
+reaches: over memory, a lock keeps apart the threads and tasks of one process, not two machines.
 
 [What to choose](guides/choosing.md#where-each-feature-works) lists where every feature lives.
 
@@ -65,7 +62,7 @@ processes, each with its own memory; the yellow box is Redis, shared by every pr
 ```mermaid
 flowchart LR
     subgraph p1["Process 1"]
-        one["Stampede: single_flight, max_concurrent_loads; near cache copies; fallback"]
+        one["Stampede: share_loads, max_loads; near cache copies; fallback"]
     end
     subgraph p2["Process 2"]
         two["the same, of its own"]
@@ -84,5 +81,4 @@ flowchart LR
 
 `Cache` is for `def` code over a sync backend, `AsyncCache` for `async def` code over an async
 one: the same classes and methods, the async ones awaited. A function of the other side is
-refused when it is decorated. The sync side is generated from the async one, so both behave
-the same.
+refused when it is decorated. Both behave the same.

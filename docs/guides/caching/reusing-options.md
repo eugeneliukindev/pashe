@@ -17,4 +17,4 @@ several groups at once, a `functools.partial` keeps every argument checked by ty
 
 ---
 
-API reference: [`pashe`](../../reference/caches.md), [options](../../reference/options.md).
+API reference: [`pashe`](../../reference/caches.md), [`pashe.options`](../../reference/options.md).
