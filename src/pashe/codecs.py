@@ -123,8 +123,9 @@ class JsonCodec(Codec):
     """JSON through the json module, for values JSON holds as they are: dict, list, str, numbers, bool, None.
 
     It reads back what it wrote as those types, so a TypedDict works. A function that returns
-    another type, such as a dataclass, a model or a tuple, is refused with InvalidOptionsError
-    when it is decorated: for those use MsgspecJsonCodec or PydanticCodec. It is the default codec.
+    another type at any depth, such as a dataclass, a model, the tuples of list[tuple[int, int]]
+    or the int keys of dict[int, str], is refused with InvalidOptionsError when it is decorated:
+    for those use MsgspecJsonCodec or PydanticCodec. It is the default codec.
 
     Examples:
         >>> from pashe.codecs import JsonCodec

@@ -3,14 +3,28 @@ from __future__ import annotations
 import inspect
 import re
 import types
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Final, NewType, TypeAliasType, get_args, get_origin, is_typeddict
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    ClassVar,
+    Final,
+    Literal,
+    NewType,
+    TypeAliasType,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+    is_typeddict,
+)
 
 from pashe.errors import InvalidOptionsError, WrongTypeError
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Iterator
 
     from pashe.options import Duration
 
@@ -48,6 +62,8 @@ _DECIMAL: Final = re.compile(rb"0|-?[1-9][0-9]*")  # a counter as Redis takes it
 # Any and object promise no type, so whatever JSON gives back is it.
 _JSON_TYPES: Final = frozenset((dict, list, str, int, float, bool, types.NoneType, Any, object))
 _JSON_VALUES: Final = (dict, list, str, int, float, bool, types.NoneType)  # what json reads back
+_JSON_KEYS: Final = frozenset((str, Any, object))  # JSON writes every key of an object as str
+_UNIONS: Final = (types.UnionType, Union)  # the origins of X | Y and of Optional[X] before 3.14
 
 
 def expect_type(
@@ -114,25 +130,63 @@ def parse_counter(backend_name: str, data: bytes) -> int:
     return parsed
 
 
-def expect_json_type(codec_name: str, form: object) -> None:
-    # A codec of JSON gives back dict, list, str, numbers, bool and None: refuse a class it would
-    # read back as one of them, such as a dataclass, a model, or the tuple of tuple[int, int]. What
-    # a generic or a union holds is not looked into.
-    while isinstance(form, TypeAliasType | NewType):  # what the alias stands for
-        form = form.__value__ if isinstance(form, TypeAliasType) else form.__supertype__
+def _type_parts(form: object) -> Iterator[object]:  # noqa: WPS231 - one walk through every kind of type
+    # Every type a value of form is made of, form first, each once: what an alias or a NewType
+    # stands for, the arguments of a generic and the fields of a class. A Literal holds values and
+    # Annotated metadata, not types; a class whose annotations name what is not defined has no parts.
+    seen: dict[int, object] = {}  # by id, as an argument such as the [int] of Callable[[int], str] has no hash
+    stack = [form]
+    while stack:
+        part = stack.pop()
+        if id(part) in seen:
+            continue
+        seen[id(part)] = part  # kept, so its id is not reused while the walk lasts
+        if isinstance(part, TypeAliasType | NewType):  # in place of what it stands for
+            stack.append(part.__value__ if isinstance(part, TypeAliasType) else part.__supertype__)
+            continue
 
-    kind = get_origin(form) or form
-    if not isinstance(kind, type) or kind in _JSON_TYPES or kind is types.UnionType or is_typeddict(kind):
-        return
-    # a class one of them is, such as Sequence, which a list is
-    if any(issubclass(read, kind) for read in _JSON_VALUES):  # pyrefly: ignore[implicit-any-type-argument] - issubclass takes the classes bare
-        return
+        yield part
+        origin = get_origin(part)
+        if origin is Annotated:
+            stack.append(get_args(part)[0])
+        elif origin is not None and origin is not Literal:
+            stack.extend(get_args(part))
+        elif inspect.isclass(part):
+            try:
+                hints = get_type_hints(part)
+            except (NameError, TypeError):
+                continue
+            # a field of data, not one of the class itself, such as __pydantic_extra__ or a ClassVar
+            stack.extend(
+                hint for name, hint in hints.items() if not name.startswith("__") and get_origin(hint) is not ClassVar
+            )
 
-    msg = (
-        f"{codec_name} reads {kind.__name__} back as another type: return dict, list, str, numbers, bool"
-        " or None, or give the cache MsgspecJsonCodec or PydanticCodec, which rebuild it"
-    )
-    raise InvalidOptionsError(msg)
+
+def expect_json_type(codec_name: str, form: object) -> None:  # noqa: WPS231 - every part of the type, and the keys of its dicts
+    # A codec of JSON gives back dict, list, str, numbers, bool and None: refuse a type with a part
+    # it would read back as another one, at any depth, such as a dataclass, a tuple, or a dict of
+    # int keys, which JSON writes as str. Any and object promise no type: whatever comes back is it.
+    for part in _type_parts(form):
+        origin = get_origin(part)
+        kind = part if origin is None else origin
+        if origin in _UNIONS or not inspect.isclass(kind) or is_typeddict(kind):  # by their parts; a Literal, a TypeVar
+            continue
+        # a class one of them is, such as Sequence, which a list is
+        if kind not in _JSON_TYPES and not any(issubclass(read, kind) for read in _JSON_VALUES):  # pyrefly: ignore[implicit-any-type-argument] - issubclass takes the classes bare
+            msg = (
+                f"{codec_name} reads {kind.__name__} back as another type: return dict, list, str, numbers,"
+                " bool or None, or give the cache MsgspecJsonCodec or PydanticCodec, which rebuild it"
+            )
+            raise InvalidOptionsError(msg)
+
+        arguments = get_args(part)
+        key = next(_type_parts(arguments[0])) if issubclass(kind, Mapping) and arguments else str
+        if inspect.isclass(key) and key not in _JSON_KEYS:
+            msg = (
+                f"{codec_name} reads the keys of {part!r} back as str: key it by str, or give the cache"
+                " MsgspecJsonCodec or PydanticCodec, which rebuild it"
+            )
+            raise InvalidOptionsError(msg)
 
 
 def parse_secret(name: str, secret: object) -> bytes:

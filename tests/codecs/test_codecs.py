@@ -7,7 +7,7 @@ import pickle
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 import pytest
 
@@ -106,6 +106,32 @@ type _Pair = tuple[int, int]
 def test_json_refuses_what_a_type_alias_stands_for() -> None:
     with pytest.raises(InvalidOptionsError, match="reads tuple back"):
         JsonCodec().check(_Pair)
+
+
+class _Point(TypedDict):
+    at: tuple[int, int]
+
+
+@pytest.mark.parametrize("codec", json_codecs(), ids=lambda codec: type(codec).__name__)
+@pytest.mark.parametrize("form", [list[tuple[int, int]], dict[str, set[int]], tuple[int] | None, _Point], ids=repr)
+def test_json_refuses_what_it_reads_back_as_another_type_at_any_depth(codec: Codec, form: object) -> None:
+    with pytest.raises(InvalidOptionsError, match="back as another type"):
+        codec.check(form)
+
+
+@pytest.mark.parametrize("codec", json_codecs(), ids=lambda codec: type(codec).__name__)
+def test_json_refuses_a_dict_of_keys_it_reads_back_as_str(codec: Codec) -> None:
+    with pytest.raises(InvalidOptionsError, match="reads the keys of dict"):
+        codec.check(dict[int, str])
+
+
+type _Json = dict[str, _Json] | list[_Json] | str | int | float | bool | None
+
+
+@pytest.mark.parametrize("codec", json_codecs(), ids=lambda codec: type(codec).__name__)
+@pytest.mark.parametrize("form", [dict[str, list[int]], list[Any], Literal["a", 1], UserDict, _Json], ids=repr)
+def test_json_takes_what_it_reads_back_as_it_is(codec: Codec, form: object) -> None:
+    codec.check(form)
 
 
 def test_pickle_rejects_what_it_cannot_pickle() -> None:

@@ -69,7 +69,7 @@ def try_acquire_slot(
 ) -> tuple[str, bytes] | None:
     first = random.randrange(len(slots))  # noqa: S311 - spreads the holders over the slots, not a secret
     for slot in (*slots[first:], *slots[:first]):
-        owner = try_acquire(backend, slot, ttl)
+        owner = try_acquire(backend, slot, ttl)  # noqa: WPS476 - the next place only if this one is taken
         if owner is not None:
             return slot, owner
     return None

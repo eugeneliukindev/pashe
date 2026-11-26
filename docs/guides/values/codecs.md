@@ -88,10 +88,11 @@ decorated, a type it cannot give back as it is; it takes every type by default.
 !!! warning "A type JSON does not give back is refused when the function is decorated"
 
     `JsonCodec` and `OrjsonCodec` read every value back as `dict`, `list`, `str`, numbers, `bool`
-    or `None`. A function that returns another type, such as a dataclass, a pydantic model, a
-    `tuple` or a `set`, raises `InvalidOptionsError` at the decorator, when the app starts: its
-    results would not be the type it says. Only the type itself is checked, not what a
-    `list[User]` or a `User | None` holds. Give its cache `MsgspecJsonCodec` or `PydanticCodec`, which rebuild it.
+    or `None`, and every key of a `dict` as `str`. A function that returns another type at any
+    depth, such as a dataclass, a pydantic model, a `tuple`, a `set`, a `list[User]`, a
+    `User | None` or a `dict[int, str]`, raises `InvalidOptionsError` at the decorator, when the
+    app starts: its results would not be the type it says. Give its cache `MsgspecJsonCodec` or
+    `PydanticCodec`, which rebuild it.
 
 !!! danger "PickleCodec runs code from the backend"
 
