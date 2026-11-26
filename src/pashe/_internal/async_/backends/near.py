@@ -175,10 +175,9 @@ class AsyncNearCacheBackend(AsyncBackend):
     async def get(self, key: str, /) -> bytes | None:
         self._listen()
         copy = await self._local.get(key)
-        if self._hooks:  # with no hooks, no event to make on every read
-            self._hooks.on_near_read(
-                NearRead(from_local=0, from_shared=1) if copy is None else NearRead(from_local=1, from_shared=0)
-            )
+        self._hooks.on_near_read(
+            NearRead(from_local=0, from_shared=1) if copy is None else NearRead(from_local=1, from_shared=0)
+        )
         if copy is not None:
             return copy
 
@@ -192,8 +191,7 @@ class AsyncNearCacheBackend(AsyncBackend):
         self._listen()
         found = await self._local.get_many(keys)
         indexes = [index for index, value in enumerate(found) if value is None]
-        if self._hooks:
-            self._hooks.on_near_read(NearRead(from_local=len(keys) - len(indexes), from_shared=len(indexes)))
+        self._hooks.on_near_read(NearRead(from_local=len(keys) - len(indexes), from_shared=len(indexes)))
         if not indexes:
             return found
 

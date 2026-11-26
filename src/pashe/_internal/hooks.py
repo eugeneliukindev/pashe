@@ -20,10 +20,6 @@ class AllHooks(Hook):
 
         self._hooks = tuple(hooks)
 
-    def __bool__(self) -> bool:
-        # whether any hook listens: a caller with nothing to tell skips making the event
-        return bool(self._hooks)
-
     @override
     def on_call(self, outcome: Outcome, /) -> None:
         for hook in self._hooks:

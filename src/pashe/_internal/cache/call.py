@@ -78,7 +78,7 @@ class Answer:
 @final
 class CallReporter:
     # tells the hooks how every call of one cached function was answered
-    __slots__ = ("_clock", "_full_key", "_function", "_has_hooks", "_hooks")
+    __slots__ = ("_clock", "_full_key", "_function", "_hooks")
 
     def __init__(
         self,
@@ -93,8 +93,6 @@ class CallReporter:
         self._hooks = hooks
         self._clock = clock
 
-        self._has_hooks = bool(hooks)  # False for the hooks of a cache given none: an outcome would go nowhere
-
     def report(
         self,
         key: str,
@@ -103,8 +101,6 @@ class CallReporter:
         load_seconds: float = 0,
         stale_at: float | None = None,
     ) -> None:
-        if not self._has_hooks:
-            return
         left = None if stale_at is None else stale_at - self._clock()
         self._hooks.on_call(Outcome(self._function, self._full_key(key), status, load_seconds, left))
 
