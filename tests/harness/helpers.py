@@ -236,14 +236,14 @@ class Side:
     def redis(self, url: str) -> RedisBackend | AsyncRedisBackend:
         """Return a Redis backend of the side, with a client of its own to the server at url."""
         if self.is_async:
-            return AsyncRedisBackend(AsyncRedis.from_url(url))
-        return RedisBackend(Redis.from_url(url))
+            return AsyncRedisBackend(AsyncRedis.from_url(url, socket_timeout=1))
+        return RedisBackend(Redis.from_url(url, socket_timeout=1))
 
     def redis_cluster(self, url: str) -> RedisBackend | AsyncRedisBackend:
         """Return a Redis backend of the side, with a client of its own to the cluster of the node at url."""
         if self.is_async:
-            return AsyncRedisBackend(AsyncRedisCluster.from_url(url))
-        return RedisBackend(RedisCluster.from_url(url))
+            return AsyncRedisBackend(AsyncRedisCluster.from_url(url, socket_timeout=1))
+        return RedisBackend(RedisCluster.from_url(url, socket_timeout=1))
 
     def near(self) -> NearCacheBackend | AsyncNearCacheBackend:
         """Return a near cache of the side, with a memory backend as the near store and another as the shared one."""

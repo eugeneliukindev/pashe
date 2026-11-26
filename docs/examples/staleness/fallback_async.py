@@ -6,6 +6,6 @@ from pashe.contrib.redis import AsyncRedisBackend
 from pashe.options import Fallback
 
 cache = AsyncCache(
-    AsyncRedisBackend(Redis.from_url("redis://localhost:6379/0")),
+    AsyncRedisBackend(Redis.from_url("redis://localhost:6379/0", socket_timeout=1)),
     fallback=Fallback(AsyncMemoryBackend(), ttl=30),
 )

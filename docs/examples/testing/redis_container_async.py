@@ -16,5 +16,5 @@ def redis_url() -> Iterator[str]:
 
 
 async def test_the_cache_over_redis(redis_url: str) -> None:
-    async with AsyncCache(AsyncRedisBackend(Redis.from_url(redis_url))) as cache:
+    async with AsyncCache(AsyncRedisBackend(Redis.from_url(redis_url, socket_timeout=1))) as cache:
         await cache.ping()

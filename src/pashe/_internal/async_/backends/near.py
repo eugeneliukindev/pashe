@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import functools
 import threading
 from abc import ABC, abstractmethod
@@ -7,7 +8,7 @@ from typing import TYPE_CHECKING, Final, final, override
 
 from pashe._internal.async_.backends.backend import AsyncBackend
 from pashe._internal.async_.backends.memory import AsyncMemoryBackend
-from pashe._internal.checks import expect_item_types, expect_type, parse_seconds
+from pashe._internal.checks import expect_type, parse_seconds
 from pashe._internal.hooks import AllHooks
 from pashe.errors import BackendError, ValueTooLargeError
 from pashe.hooks import Failure, Hook, NearRead, Operation
@@ -158,14 +159,12 @@ class AsyncNearCacheBackend(AsyncBackend):
         expect_type("shared", shared, AsyncBackend)
         local_ttl = parse_seconds("local_ttl", local_ttl, "how long a copy is kept", positive=True)
         expect_type("bus", bus, AsyncInvalidationBus)
-        expect_type("hooks", hooks, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
-        expect_item_types("hooks", hooks, Hook)
 
         self._local = local
         self._shared = shared
         self._local_ttl = local_ttl
         self._bus = bus
-        self._hooks = AllHooks(tuple(hooks))
+        self._hooks = AllHooks(hooks)
 
         self._drops = _DropVersions()
         self._listen_lock = threading.Lock()  # one listener, also when threads read at once
@@ -284,13 +283,17 @@ class AsyncNearCacheBackend(AsyncBackend):
 
     @override
     async def aclose(self) -> None:
-        """Stop listening to the bus, and close both backends; the bus shares a client, so it stays open."""
+        """Stop listening to the bus, and close both backends; the bus shares a client, so it stays open.
+
+        Each is closed even when one before it fails; the error of the last one that failed is raised.
+        """
         stop = self._stop
         self._stop = None
-        if stop is not None:
-            await stop()
-        await self._local.aclose()
-        await self._shared.aclose()
+        async with contextlib.AsyncExitStack() as closing:  # run in reverse: the bus, local, shared
+            closing.push_async_callback(self._shared.aclose)
+            closing.push_async_callback(self._local.aclose)
+            if stop is not None:
+                closing.push_async_callback(stop)
 
     def _listen(self) -> None:
         if self._stop is not None:

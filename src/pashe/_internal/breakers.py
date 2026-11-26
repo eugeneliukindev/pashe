@@ -6,7 +6,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, final, override
 
-from pashe._internal.checks import FUNCTION, expect_item_types, expect_type, parse_int, parse_seconds
+from pashe._internal.checks import FUNCTION, expect_type, parse_int, parse_seconds
 from pashe._internal.hooks import AllHooks
 from pashe.errors import BackendError, CircuitOpenError
 from pashe.hooks import Circuit, Hook
@@ -115,7 +115,7 @@ class CircuitBreaker(Breaker):
         >>> from redis import Redis
         >>> from pashe.backends import CircuitBreaker
         >>> from pashe.contrib.redis import RedisBackend
-        >>> backend = RedisBackend(Redis(), breaker=CircuitBreaker(failure_threshold=5, open_for=10))
+        >>> backend = RedisBackend(Redis(socket_timeout=1), breaker=CircuitBreaker(failure_threshold=5, open_for=10))
     """
 
     __slots__ = (
@@ -159,11 +159,9 @@ class CircuitBreaker(Breaker):
             "CircuitBreaker.open_for", open_for, "how long it skips the backend", positive=True
         )
 
-        expect_type("hooks", hooks, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
-        expect_item_types("hooks", hooks, Hook)
         expect_type("clock", clock, FUNCTION)
 
-        self._hooks = AllHooks(tuple(hooks))
+        self._hooks = AllHooks(hooks)
         self._clock = clock
 
         self._lock = threading.Lock()  # the calls of threads and of tasks change it at once

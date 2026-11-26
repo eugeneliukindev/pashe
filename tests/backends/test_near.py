@@ -25,7 +25,7 @@ from pashe.contrib.redis import (
     RedisTrackingBus,
 )
 from pashe.errors import BackendError, InvalidOptionsError
-from pashe.hooks import Operation
+from pashe.hooks import Hook, Operation
 from pashe.invalidation import InvalidationBus
 from pashe.options import Fallback
 from tests.harness.helpers import MemoryBus, RecordingHook
@@ -81,9 +81,9 @@ def test_local_ttl_must_be_positive() -> None:
 
 
 def test_redis_bus(redis_url: str) -> None:
-    with Redis.from_url(redis_url) as admin:
+    with Redis.from_url(redis_url, socket_timeout=1) as admin:
         admin.flushdb()
-    clients = [Redis.from_url(redis_url) for _ in range(2)]
+    clients = [Redis.from_url(redis_url, socket_timeout=1) for _ in range(2)]
     first, second = (
         NearCacheBackend(MemoryBackend(), RedisBackend(client), bus=RedisPubSubBus(client, channel=redis_url))
         for client in clients
@@ -100,9 +100,9 @@ def test_redis_bus(redis_url: str) -> None:
 
 
 async def test_async_redis_bus(redis_url: str) -> None:
-    async with AsyncRedis.from_url(redis_url) as admin:
+    async with AsyncRedis.from_url(redis_url, socket_timeout=1) as admin:
         await admin.flushdb()
-    clients = [AsyncRedis.from_url(redis_url) for _ in range(2)]
+    clients = [AsyncRedis.from_url(redis_url, socket_timeout=1) for _ in range(2)]
     first, second = (
         AsyncNearCacheBackend(
             AsyncMemoryBackend(), AsyncRedisBackend(client), bus=AsyncRedisPubSubBus(client, channel=redis_url)
@@ -121,7 +121,7 @@ async def test_async_redis_bus(redis_url: str) -> None:
 
 
 def test_a_pub_sub_bus_over_a_cluster(redis_cluster_url: str, key_prefix: str) -> None:
-    clients = [RedisCluster.from_url(redis_cluster_url) for _ in range(2)]
+    clients = [RedisCluster.from_url(redis_cluster_url, socket_timeout=1) for _ in range(2)]
     first, second = (
         NearCacheBackend(MemoryBackend(), RedisBackend(client), bus=RedisPubSubBus(client, channel=key_prefix))
         for client in clients
@@ -141,7 +141,7 @@ def test_a_pub_sub_bus_over_a_cluster(redis_cluster_url: str, key_prefix: str) -
 
 @_ASYNC_CLUSTER_PUB_SUB
 async def test_an_async_pub_sub_bus_over_a_cluster(redis_cluster_url: str, key_prefix: str) -> None:
-    clients = [AsyncRedisCluster.from_url(redis_cluster_url) for _ in range(2)]
+    clients = [AsyncRedisCluster.from_url(redis_cluster_url, socket_timeout=1) for _ in range(2)]
     first, second = (
         AsyncNearCacheBackend(
             AsyncMemoryBackend(), AsyncRedisBackend(client), bus=AsyncRedisPubSubBus(client, channel=key_prefix)
@@ -165,7 +165,7 @@ async def test_an_async_pub_sub_bus_over_a_cluster(redis_cluster_url: str, key_p
 async def test_an_async_pub_sub_bus_listens_over_a_cluster_it_has_not_used_yet(
     redis_cluster_url: str, key_prefix: str
 ) -> None:
-    client = AsyncRedisCluster.from_url(redis_cluster_url)
+    client = AsyncRedisCluster.from_url(redis_cluster_url, socket_timeout=1)
     bus = AsyncRedisPubSubBus(client, channel=key_prefix)
     heard: list[list[str] | None] = []
 
@@ -191,19 +191,21 @@ def test_a_pub_sub_bus_refuses_an_async_cluster_without_pub_sub(monkeypatch: pyt
 
 
 def test_a_tracking_bus_refuses_a_cluster(redis_cluster_url: str) -> None:
-    client = RedisCluster.from_url(redis_cluster_url)  # connects to the nodes already, unlike the async one
+    client = RedisCluster.from_url(
+        redis_cluster_url, socket_timeout=1
+    )  # connects to the nodes already, unlike the async one
 
     with pytest.raises(TypeError, match="client must be Redis, not RedisCluster"):
         RedisTrackingBus(client)  # type: ignore[arg-type]  # as a caller without types
     client.close()
     with pytest.raises(TypeError, match="client must be Redis, not RedisCluster"):
-        AsyncRedisTrackingBus(AsyncRedisCluster.from_url(redis_cluster_url))  # type: ignore[arg-type]  # as above
+        AsyncRedisTrackingBus(AsyncRedisCluster.from_url(redis_cluster_url, socket_timeout=1))  # type: ignore[arg-type]  # as above
 
 
 @pytest.fixture
 def tracking_prefix(redis_url: str) -> str:
     """A prefix of keys only this test writes; skips a server without CLIENT TRACKING, such as some clones of Redis."""
-    client = Redis.from_url(redis_url)
+    client = Redis.from_url(redis_url, socket_timeout=1)
     try:
         client.client_tracking_on(prefix=["probe:"], bcast=True)
     except ResponseError as error:
@@ -214,7 +216,7 @@ def tracking_prefix(redis_url: str) -> str:
 
 
 def test_redis_tracking_bus_drops_copies_of_any_write(redis_url: str, tracking_prefix: str) -> None:
-    clients = [Redis.from_url(redis_url) for _ in range(2)]
+    clients = [Redis.from_url(redis_url, socket_timeout=1) for _ in range(2)]
     first, second = (
         NearCacheBackend(MemoryBackend(), RedisBackend(client), bus=RedisTrackingBus(client, prefix=tracking_prefix))
         for client in clients
@@ -225,7 +227,7 @@ def test_redis_tracking_bus_drops_copies_of_any_write(redis_url: str, tracking_p
     time.sleep(0.2)  # the listener of second turns tracking on in a thread of its own
     first.set(key, b"2")
     _wait_for(lambda: second.get(key) == b"2")
-    with Redis.from_url(redis_url) as outsider:
+    with Redis.from_url(redis_url, socket_timeout=1) as outsider:
         outsider.set(key, b"3")
     _wait_for(lambda: second.get(key) == b"3")
     first.close()
@@ -233,7 +235,7 @@ def test_redis_tracking_bus_drops_copies_of_any_write(redis_url: str, tracking_p
 
 
 async def test_async_redis_tracking_bus_drops_copies_of_any_write(redis_url: str, tracking_prefix: str) -> None:
-    clients = [AsyncRedis.from_url(redis_url) for _ in range(2)]
+    clients = [AsyncRedis.from_url(redis_url, socket_timeout=1) for _ in range(2)]
     first, second = (
         AsyncNearCacheBackend(
             AsyncMemoryBackend(), AsyncRedisBackend(client), bus=AsyncRedisTrackingBus(client, prefix=tracking_prefix)
@@ -244,7 +246,7 @@ async def test_async_redis_tracking_bus_drops_copies_of_any_write(redis_url: str
     await first.set(key, b"1")
     assert await second.get(key) == b"1"
     await asyncio.sleep(0.2)  # the listener of second turns tracking on in a task
-    async with AsyncRedis.from_url(redis_url) as outsider:
+    async with AsyncRedis.from_url(redis_url, socket_timeout=1) as outsider:
         await outsider.set(key, b"3")
     async with asyncio.timeout(_WAIT):
         while await second.get(key) != b"3":  # noqa: ASYNC110 - polls what a message from Redis changes
@@ -258,6 +260,72 @@ def _wait_for(done: Callable[[], bool]) -> None:
     while not done() and time.monotonic() < deadline:
         time.sleep(0.01)
     assert done()
+
+
+class _FlushFails(Hook):
+    # a hook with a bug: every drop of every copy raises in the listener of the bus
+    __slots__ = ()
+
+    @override
+    def on_near_flush(self) -> None:
+        msg = "a bug of a hook"
+        raise ValueError(msg)
+
+
+def test_a_redis_pub_sub_bus_tells_an_error_while_it_listens(redis_url: str, key_prefix: str) -> None:
+    client = Redis.from_url(redis_url, socket_timeout=1)
+    heard = RecordingHook()
+    bus = RedisPubSubBus(client, channel=key_prefix, hooks=[heard])
+    near = NearCacheBackend(MemoryBackend(), RedisBackend(client), bus=bus, hooks=[_FlushFails()])
+    near.get("k")  # starts listening
+
+    RedisPubSubBus(client, channel=key_prefix).publish(None)
+    _wait_for(lambda: bool(heard.failures))
+    near.close()
+
+    assert (heard.failures[0].operation, type(heard.failures[0].error)) == (Operation.LISTEN, ValueError)
+
+
+async def test_an_async_redis_pub_sub_bus_tells_an_error_while_it_listens(redis_url: str, key_prefix: str) -> None:
+    client = AsyncRedis.from_url(redis_url, socket_timeout=1)
+    heard = RecordingHook()
+    bus = AsyncRedisPubSubBus(client, channel=key_prefix, hooks=[heard])
+    near = AsyncNearCacheBackend(AsyncMemoryBackend(), AsyncRedisBackend(client), bus=bus, hooks=[_FlushFails()])
+
+    await near.get("k")  # starts listening: the subscription drops every copy
+    async with asyncio.timeout(_WAIT):
+        while not heard.failures:  # noqa: ASYNC110 - polls what the task of the listener records
+            await asyncio.sleep(0.01)
+    await near.aclose()
+
+    assert (heard.failures[0].operation, type(heard.failures[0].error)) == (Operation.LISTEN, ValueError)
+
+
+class _CountsFlushes(Hook):
+    __slots__ = ("flushes",)
+
+    def __init__(self) -> None:
+        self.flushes = 0
+
+    @override
+    def on_near_flush(self) -> None:
+        self.flushes += 1
+
+
+async def test_an_async_redis_pub_sub_bus_keeps_its_copies_through_a_quiet_longer_than_socket_timeout(
+    redis_url: str,
+    key_prefix: str,
+) -> None:
+    client = AsyncRedis.from_url(redis_url, socket_timeout=0.1)
+    counted = _CountsFlushes()
+    bus = AsyncRedisPubSubBus(client, channel=key_prefix)
+    near = AsyncNearCacheBackend(AsyncMemoryBackend(), AsyncRedisBackend(client), bus=bus, hooks=[counted])
+
+    await near.get("k")  # starts listening: the subscription drops every copy, once
+    await asyncio.sleep(0.5)  # no message: a read that failed after socket_timeout would drop them again
+    await near.aclose()
+
+    assert counted.flushes == 1
 
 
 def test_a_write_that_changes_nothing_is_not_published() -> None:
@@ -278,7 +346,8 @@ def test_a_write_that_changes_nothing_is_not_published() -> None:
 
 
 def test_a_pub_sub_bus_over_a_redis_that_is_down_lets_the_cache_answer() -> None:
-    client = Redis(host="127.0.0.1", port=1, socket_connect_timeout=0.2)  # nothing listens on port 1
+    # nothing listens on port 1
+    client = Redis(host="127.0.0.1", port=1, socket_timeout=0.2, socket_connect_timeout=0.2)
     failures: list[Failure] = []
     near = NearCacheBackend(MemoryBackend(), RedisBackend(client), bus=RedisPubSubBus(client))
     cache = Cache(near, hooks=[RecordingHook(failures=failures)], fallback=Fallback(MemoryBackend()))
@@ -293,7 +362,7 @@ def test_a_pub_sub_bus_over_a_redis_that_is_down_lets_the_cache_answer() -> None
 
 
 def test_near_caches_that_share_a_pub_sub_bus_hear_every_write_of_each_other(redis_url: str, key_prefix: str) -> None:
-    client = Redis.from_url(redis_url)
+    client = Redis.from_url(redis_url, socket_timeout=1)
     bus = RedisPubSubBus(client, channel=key_prefix)
     heard_mine: list[list[str] | None] = []
     heard_theirs: list[list[str] | None] = []
@@ -414,7 +483,7 @@ def _write_while_disconnected(
     key: str,
 ) -> None:
     """Drop the pub/sub connection of the client named name and write key at once, so its message is lost."""
-    with Redis.from_url(redis_url) as admin:
+    with Redis.from_url(redis_url, socket_timeout=1) as admin:
         [listener] = [client["id"] for client in admin.client_list(_type="pubsub") if client["name"] == name]
         with admin.pipeline(transaction=True) as both:
             both.client_kill_filter(_id=listener)
@@ -423,7 +492,7 @@ def _write_while_disconnected(
 
 
 def test_a_pub_sub_bus_that_reconnects_on_its_own_drops_every_copy(redis_url: str, key_prefix: str) -> None:
-    client = Redis.from_url(redis_url, client_name=key_prefix)
+    client = Redis.from_url(redis_url, client_name=key_prefix, socket_timeout=1)
     near = NearCacheBackend(
         MemoryBackend(), RedisBackend(client), local_ttl=60, bus=RedisPubSubBus(client, channel=key_prefix)
     )
@@ -441,7 +510,7 @@ def test_a_pub_sub_bus_that_reconnects_on_its_own_drops_every_copy(redis_url: st
 async def test_an_async_pub_sub_bus_that_reconnects_on_its_own_drops_every_copy(
     redis_url: str, key_prefix: str
 ) -> None:
-    client = AsyncRedis.from_url(redis_url, client_name=key_prefix)
+    client = AsyncRedis.from_url(redis_url, client_name=key_prefix, socket_timeout=1)
     near = AsyncNearCacheBackend(
         AsyncMemoryBackend(),
         AsyncRedisBackend(client),

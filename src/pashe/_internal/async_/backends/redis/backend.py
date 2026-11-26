@@ -51,13 +51,14 @@ class AsyncRedisBackend(AsyncBackend):
 
         Args:
             client: a redis-py client of the side of the backend, of one node or of a cluster,
-                without decode_responses: a backend stores bytes.
+                without decode_responses, as a backend stores bytes, and with socket_timeout, so a
+                Redis that hangs fails a call instead of holding it.
             breaker: decides whether a call may reach Redis, such as a CircuitBreaker that skips it for a
                 while after it failed several times in a row; NoOpBreaker, which skips none, by default.
 
         Raises:
             TypeError: an argument is not of the type its annotation names.
-            InvalidOptionsError: client has decode_responses on.
+            InvalidOptionsError: client has decode_responses on, or no socket_timeout.
         """
         expect_type("client", client, redis.asyncio.Redis | redis.asyncio.cluster.RedisCluster)
         check_client(client)

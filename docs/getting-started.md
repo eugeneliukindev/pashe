@@ -85,7 +85,21 @@ tests and on a single process it can be memory:
     ```
 
 `prefix` goes in front of every key, so several services can share one Redis. Close the cache
-when the application stops, or use it as a context manager: it closes its backend.
+when the application stops, or use it as a context manager: it closes its backend and its
+fallback, each even when another fails to close. A script takes the block of `with`; an
+application closes it in its lifespan, here of FastAPI:
+
+=== "Sync"
+
+    ```python
+    --8<-- "getting_started/close_sync.py"
+    ```
+
+=== "Async"
+
+    ```python
+    --8<-- "getting_started/close_async.py"
+    ```
 
 ## A cached function
 

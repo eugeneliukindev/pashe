@@ -12,6 +12,7 @@ import pashe
 from pashe import AsyncCache, Cache
 from pashe.backends import AsyncMemoryBackend, MemoryBackend, NearCacheBackend
 from pashe.errors import BackendError, InvalidOptionsError, LockLostError, LockTimeoutError, RateLimitedError
+from pashe.hooks import Operation
 from pashe.locks import Lock
 from pashe.options import Fallback
 from pashe.ratelimit import FixedWindow, SlidingWindow
@@ -443,6 +444,72 @@ async def test_a_cost_over_the_limit_is_refused(new_process_cache: NewCache) -> 
 
     with pytest.raises(InvalidOptionsError):
         await call(cache.rate_limit, "api", SlidingWindow.per_second(3), cost=4)
+
+
+class _CloseFails(MemoryBackend):
+    __slots__ = ()
+
+    @override
+    def close(self) -> None:
+        msg = "the backend is down"
+        raise BackendError(msg)
+
+
+class _RecordsClose(MemoryBackend):
+    __slots__ = ("closed",)
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        self.closed = False
+
+    @override
+    def close(self) -> None:
+        self.closed = True
+        super().close()
+
+
+def test_closing_a_cache_closes_the_fallback_when_the_backend_fails_to_close() -> None:
+    fallback = _RecordsClose()
+    cache = Cache(_CloseFails(), fallback=Fallback(fallback))
+
+    with pytest.raises(BackendError):
+        cache.close()
+
+    assert fallback.closed
+
+
+class _UndoFails(MemoryBackend):
+    # the backend fails to take back the count of a refused call
+    __slots__ = ()
+
+    @override
+    def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
+        if by < 0:
+            msg = "the backend is down"
+            raise BackendError(msg)
+        return super().incr(key, by, ttl=ttl)
+
+
+def test_a_call_over_the_limit_is_refused_when_taking_back_its_count_fails() -> None:
+    hook = RecordingHook()
+    cache = Cache(_UndoFails(), hooks=[hook])
+    limit = SlidingWindow(calls=1, per=60)
+    cache.rate_limit("api", limit)
+
+    with pytest.raises(RateLimitedError):
+        cache.rate_limit("api", limit)
+
+    assert [(failure.operation, type(failure.error)) for failure in hook.failures] == [
+        (Operation.RATE_LIMIT, BackendError)
+    ]
 
 
 def test_a_hook_of_on_call_and_on_error_alone_hears_rate_limits_and_near_reads() -> None:

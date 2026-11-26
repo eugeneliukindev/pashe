@@ -74,7 +74,12 @@ async def backend(
 
 def test_redis_needs_bytes() -> None:
     with pytest.raises(InvalidOptionsError):
-        RedisBackend(Redis(decode_responses=True))
+        RedisBackend(Redis(decode_responses=True, socket_timeout=1))
+
+
+def test_redis_needs_a_timeout() -> None:
+    with pytest.raises(InvalidOptionsError, match="socket_timeout"):
+        RedisBackend(Redis(socket_timeout=None))  # as every client before redis-py 8 has by default
 
 
 async def test_get_set(backend: AsyncBackend) -> None:

@@ -2,13 +2,14 @@
 # src/pashe/_internal/async_/cache/cache.py
 from __future__ import annotations
 
+import contextlib
 import time
-from typing import TYPE_CHECKING, Final, Self, final
+from typing import TYPE_CHECKING, Self, final
 
 from pashe._internal.cache.entry import Serializer
-from pashe._internal.cache.keys import KeyPrefix, KeyTemplate
+from pashe._internal.cache.keys import KeyPrefix, KeyTemplate, parse_key, parse_tags
 from pashe._internal.cache.policy import Policy
-from pashe._internal.checks import FUNCTION, duration_seconds, expect_item_types, expect_type, parse_secret, parse_ttl
+from pashe._internal.checks import FUNCTION, duration_seconds, expect_item_types, expect_type, parse_secret
 from pashe._internal.hooks import AllHooks
 from pashe._internal.limits import LIMIT, parse_cost
 from pashe._internal.locks.lock import lock_slots, parse_lock_holders, parse_lock_timeout, parse_lock_ttl
@@ -26,18 +27,15 @@ from pashe._internal.sync.threads import BackgroundTasks
 from pashe.codecs import Codec, JsonCodec
 from pashe.compressors import Compressor, NoOpCompressor
 from pashe.errors import InvalidOptionsError
-from pashe.hooks import Hook
 from pashe.options import Fallback, Negative, Stale, Stampede, Store
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from types import TracebackType
 
+    from pashe.hooks import Hook
     from pashe.options import TTL, Duration
     from pashe.ratelimit import Limit, RateLimitState
-
-
-_TTL_MEANING: Final = "how long a result is fresh"
 
 
 @final
@@ -129,8 +127,6 @@ class Cache:
         expect_type("backend", backend, Backend)
         expect_type("prefix", prefix, str)
         expect_type("codec", codec, Codec)
-        expect_type("hooks", hooks, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
-        expect_item_types("hooks", hooks, Hook)
         expect_type("fallback", fallback, Fallback | None)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
         if fallback is not None:
             expect_type("Fallback.backend", fallback.backend, Backend)
@@ -139,7 +135,7 @@ class Cache:
         expect_type("clock", clock, FUNCTION)
 
         self._backend = PrefixedBackend(backend, prefix)
-        self._hooks = AllHooks(tuple(hooks))
+        self._hooks = AllHooks(hooks)
         self._fallback: FallbackStore = (
             NoOpFallbackStore()
             if fallback is None
@@ -212,16 +208,6 @@ class Cache:
             >>> get_user(1)
             {'id': 1}
         """
-        ttl = parse_ttl("ttl", ttl, _TTL_MEANING)
-        expect_type("key", key, str | None)
-        # not a str, which would split into one tag per letter; isinstance takes no list[str]
-        expect_type("tags", tags, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
-        expect_item_types("tags", tags, str)
-        expect_type("stale", stale, Stale)
-        expect_type("stampede", stampede, Stampede)
-        expect_type("negative", negative, Negative)
-        expect_type("store", store, Store)
-
         policy = Policy.of(
             ttl=ttl,
             stale=stale,
@@ -232,8 +218,8 @@ class Cache:
         )
         return CachedFunctionDecorator(
             policy,
-            key=None if key is None else KeyTemplate(key, secret=self._key_secret),
-            tags=tuple(KeyTemplate(tag, secret=self._key_secret) for tag in tags),
+            key=parse_key(key, secret=self._key_secret),
+            tags=parse_tags(tags, secret=self._key_secret),
             serializer=self._serializer,
             backend=self._backend,
             tag_store=self._tags,
@@ -319,11 +305,6 @@ class Cache:
             >>> get_users([1, 2])
             {1: {'id': 1}, 2: {'id': 2}}
         """
-        ttl = parse_ttl("ttl", ttl, _TTL_MEANING)
-        expect_type("key", key, str | None)
-        expect_type("stampede", stampede, Stampede)
-        expect_type("store", store, Store)
-
         policy = Policy.of(
             ttl=ttl,
             stale=Stale(),
@@ -340,7 +321,7 @@ class Cache:
             raise InvalidOptionsError(msg)
         return CachedBatchFunctionDecorator(
             policy,
-            key=None if key is None else KeyTemplate(key, secret=self._key_secret),
+            key=parse_key(key, secret=self._key_secret),
             serializer=self._serializer,
             backend=self._backend,
             fallback=self._fallback,
@@ -437,11 +418,7 @@ class Cache:
             >>> rename_user(1, "Ada")
             'Ada'
         """
-        expect_type("tags", tags, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
-        expect_item_types("tags", tags, str)
-        return InvalidatingDecorator(
-            tuple(KeyTemplate(tag, secret=self._key_secret) for tag in tags), self._tags, hooks=self._hooks
-        )
+        return InvalidatingDecorator(parse_tags(tags, secret=self._key_secret), self._tags, hooks=self._hooks)
 
     def lock(
         self,
@@ -572,11 +549,9 @@ class Cache:
             >>> build(1)
             1
         """
-        expect_type("key", key, str | None)
-        template = None if key is None else KeyTemplate(key, secret=self._key_secret)
         return LockedDecorator(
             self,
-            template,
+            parse_key(key, secret=self._key_secret),
             self._key_secret,
             ttl=parse_lock_ttl(ttl),
             timeout=parse_lock_timeout(timeout),
@@ -656,9 +631,7 @@ class Cache:
             1
         """
         expect_type("limit", limit, LIMIT)
-        expect_type("key", key, str | None)
-        template = None if key is None else KeyTemplate(key, secret=self._key_secret)
-        return RateLimitedDecorator(self, template, self._key_secret, limit=limit)
+        return RateLimitedDecorator(self, parse_key(key, secret=self._key_secret), self._key_secret, limit=limit)
 
     def ping(self) -> None:
         """Check that the backend is reachable.
@@ -677,7 +650,8 @@ class Cache:
     def close(self) -> None:
         """Wait for the background reloads, then close the backend and the fallback.
 
-        The cache owns what it was given, as a backend owns its client.
+        The cache owns what it was given, as a backend owns its client. Each part is closed even
+        when one before it fails or the call is cancelled; the error of the last one that failed is raised.
 
         Examples:
             >>> from pashe import Cache
@@ -685,9 +659,10 @@ class Cache:
             >>> cache = Cache(MemoryBackend())
             >>> cache.close()
         """
-        self._background.close()
-        self._backend.close()
-        self._fallback.close()
+        with contextlib.ExitStack() as closing:  # run in reverse: background, backend, fallback
+            closing.callback(self._fallback.close)
+            closing.callback(self._backend.close)
+            closing.callback(self._background.close)
 
     def __enter__(self) -> Self:
         """Return the cache."""

@@ -37,7 +37,7 @@ class _Circuits(Hook):
 
 @pytest.fixture
 def client(redis_url: str) -> Iterator[Redis]:
-    client = Redis.from_url(redis_url)
+    client = Redis.from_url(redis_url, socket_timeout=1)
     yield client
     client.close()
 
@@ -149,7 +149,7 @@ def test_options_that_cannot_work_are_refused(make: Callable[[], object], messag
 
 
 async def test_an_async_backend_skips_redis_once_it_is_open(redis_url: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    client = redis.asyncio.Redis.from_url(redis_url)
+    client = redis.asyncio.Redis.from_url(redis_url, socket_timeout=1)
     backend = AsyncRedisBackend(client, breaker=CircuitBreaker(failure_threshold=1, open_for=10, clock=Clock()))
 
     async def get(_key: str) -> Never:

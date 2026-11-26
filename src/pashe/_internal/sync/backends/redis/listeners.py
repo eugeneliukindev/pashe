@@ -14,6 +14,7 @@ from pashe._internal.redis.listening import (
     INVALIDATE_CHANNEL,
     POLL,
     ReconnectBackoff,
+    listen_failure,
     listening_connection,
     tracking_command,
 )
@@ -26,19 +27,23 @@ if TYPE_CHECKING:
     from redis.connection import AbstractConnection
 
     from pashe._internal.sync.backends.near import InvalidationHandler
+    from pashe.hooks import Hook
 
 
 @final
 class PubSubListener:
-    __slots__ = ("_on_invalidate", "_pubsub", "_retries", "_stopped", "_thread")
+    __slots__ = ("_hooks", "_on_invalidate", "_pubsub", "_retries", "_stopped", "_thread")
 
     def __init__(
         self,
         client: Redis | RedisCluster,
         channel: str,
         on_invalidate: InvalidationHandler,
+        *,
+        hooks: Hook,
     ) -> None:
         self._on_invalidate = on_invalidate
+        self._hooks = hooks
 
         self._retries = ReconnectBackoff()
         self._stopped = threading.Event()  # wakes the wait before a retry, so stop returns at once
@@ -58,27 +63,36 @@ class PubSubListener:
 
     def _handle_lost(
         self,
-        _error: Exception,
+        error: BaseException,
         _pubsub: PubSub,
         _thread: PubSubWorkerThread,
     ) -> None:
-        self._on_invalidate(None)  # messages may have been lost meanwhile
+        # redis-py hands over every error of its thread, a bug of pashe or of a hook too
+        if not isinstance(error, Exception):
+            raise error  # such as SystemExit: the thread ends
+        if isinstance(error, RedisError):
+            self._on_invalidate(None)  # messages may have been lost meanwhile
+        else:  # the error may be of on_invalidate itself: told, and the next message is read
+            self._hooks.on_error(listen_failure(error))
         self._stopped.wait(self._retries.next_delay())
 
 
 @final
 class TrackingListener:
-    __slots__ = ("_connection", "_on_invalidate", "_pool", "_prefix", "_retries", "_stopped", "_thread")
+    __slots__ = ("_connection", "_hooks", "_on_invalidate", "_pool", "_prefix", "_retries", "_stopped", "_thread")
 
     def __init__(
         self,
         client: Redis,
         prefix: str,
         on_invalidate: InvalidationHandler,
+        *,
+        hooks: Hook,
     ) -> None:
         self._pool = client.connection_pool
         self._prefix = prefix
         self._on_invalidate = on_invalidate
+        self._hooks = hooks
 
         self._retries = ReconnectBackoff()
         self._stopped = threading.Event()
@@ -99,9 +113,11 @@ class TrackingListener:
                 self._listen()
             except RedisError:
                 self._handle_lost()
-            except (OSError, ValueError):
-                if not self._stopped.is_set():
-                    raise  # a read of the socket stop closed fails so, past the errors of redis-py
+            except Exception as error:  # noqa: BLE001 - told through on_error below
+                if self._stopped.is_set() and isinstance(error, OSError | ValueError):
+                    return  # a read of the socket stop closed fails so, past the errors of redis-py
+                self._hooks.on_error(listen_failure(error))  # the next tracking drops every copy
+                self._stopped.wait(self._retries.next_delay())
 
     def _handle_lost(self) -> None:
         if self._stopped.is_set():

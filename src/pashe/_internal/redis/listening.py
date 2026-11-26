@@ -7,10 +7,12 @@ from typing import TYPE_CHECKING, Final, final
 
 from redis.exceptions import ResponseError
 
+from pashe.hooks import Failure, Operation
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-POLL: Final = 1.0  # seconds the thread of a sync pub/sub bus waits for a message before it checks again
+POLL: Final = 1.0  # seconds a pub/sub bus waits for a message before it checks again
 _FIRST_RETRY: Final = 1.0  # seconds a bus waits before it listens again after Redis failed
 _LONGEST_RETRY: Final = 30.0
 _RETRY_JITTER: Final = 0.5  # a wait is cut by up to this share, so processes do not reconnect together
@@ -36,6 +38,11 @@ class ReconnectBackoff:
         self._delay = _FIRST_RETRY if calm else min(self._delay * 2, _LONGEST_RETRY)
         self._failed_at = now
         return self._delay * random.uniform(1 - _RETRY_JITTER, 1)  # noqa: S311 - jitter, not a secret
+
+
+def listen_failure(error: Exception) -> Failure:
+    # an error of a listener other than a lost connection, such as of the near cache it calls: told, not dropped
+    return Failure(Operation.LISTEN, "", error)
 
 
 def listening_connection[C](connection_class: type[C], settings: Mapping[str, object]) -> C:

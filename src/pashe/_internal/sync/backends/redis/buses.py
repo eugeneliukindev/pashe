@@ -18,6 +18,7 @@ import redis.cluster
 
 from pashe._internal.breakers import Breaker, NoOpBreaker
 from pashe._internal.checks import expect_type
+from pashe._internal.hooks import AllHooks
 from pashe._internal.redis.clients import translated_errors
 from pashe._internal.redis.messages import encode_message
 from pashe._internal.sync.backends.near import InvalidationBus
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
     from pashe._internal.sync.backends.near import InvalidationHandler
+    from pashe.hooks import Hook
 
 
 @final
@@ -39,7 +41,7 @@ class RedisPubSubBus(InvalidationBus):
     disconnected, so after an error it drops all its copies.
     """
 
-    __slots__ = ("_breaker", "_channel", "_client")
+    __slots__ = ("_breaker", "_channel", "_client", "_hooks")
 
     def __init__(
         self,
@@ -48,6 +50,7 @@ class RedisPubSubBus(InvalidationBus):
         *,
         channel: str = "pashe:near-cache",
         breaker: Breaker = NoOpBreaker(),
+        hooks: list[Hook] | tuple[Hook, ...] = (),
     ) -> None:
         """Create a bus over client, which it does not close.
 
@@ -56,6 +59,8 @@ class RedisPubSubBus(InvalidationBus):
             channel: the pub/sub channel; the near caches over the same backend use the same one.
             breaker: decides whether a call may reach Redis; give it the breaker of the backend
                 over the same Redis, so both skip it together; NoOpBreaker, which skips none, by default.
+            hooks: what the bus tells, through on_error, of an error while it listens other than a lost
+                connection, such as of a hook of the near cache; give it the hooks of the cache to see it.
 
         Raises:
             TypeError: an argument is not of the type its annotation names.
@@ -72,6 +77,7 @@ class RedisPubSubBus(InvalidationBus):
         self._client = client
         self._channel = channel
         self._breaker = breaker
+        self._hooks = AllHooks(hooks)
 
     @override
     def publish(self, keys: Sequence[str] | None, /) -> None:
@@ -80,7 +86,7 @@ class RedisPubSubBus(InvalidationBus):
 
     @override
     def listen(self, on_invalidate: InvalidationHandler, /) -> Callable[[], None]:
-        return PubSubListener(self._client, self._channel, on_invalidate).stop
+        return PubSubListener(self._client, self._channel, on_invalidate, hooks=self._hooks).stop
 
 
 @final
@@ -95,24 +101,35 @@ class RedisTrackingBus(InvalidationBus):
     to the channel Redis sends them to.
     """
 
-    __slots__ = ("_client", "_prefix")
+    __slots__ = ("_client", "_hooks", "_prefix")
 
-    def __init__(self, client: redis.Redis, /, *, prefix: str = "") -> None:
+    def __init__(
+        self,
+        client: redis.Redis,
+        /,
+        *,
+        prefix: str = "",
+        hooks: list[Hook] | tuple[Hook, ...] = (),
+    ) -> None:
         """Create a bus over client, which it does not close.
 
         Args:
             client: the client of the backend, or another one of the same Redis, of one node.
             prefix: the prefix of the cache: only writes of keys under it reach the near caches.
+            hooks: what the bus tells, through on_error, of an error while it listens other than a lost
+                connection, such as of a hook of the near cache; give it the hooks of the cache to see it.
 
         Raises:
-            TypeError: client is not of one node, such as of a Redis Cluster: a node of a cluster
-                tracks only its own keys, so take RedisPubSubBus there.
+            TypeError: an argument is not of the type its annotation names, or client is not of
+                one node, such as of a Redis Cluster: a node of a cluster tracks only its own keys,
+                so take RedisPubSubBus there.
         """
         expect_type("client", client, redis.Redis)
         expect_type("prefix", prefix, str)
 
         self._client = client
         self._prefix = prefix
+        self._hooks = AllHooks(hooks)
 
     @override
     def publish(self, keys: Sequence[str] | None, /) -> None:
@@ -124,4 +141,4 @@ class RedisTrackingBus(InvalidationBus):
 
     @override
     def listen(self, on_invalidate: InvalidationHandler, /) -> Callable[[], None]:
-        return TrackingListener(self._client, self._prefix, on_invalidate).stop
+        return TrackingListener(self._client, self._prefix, on_invalidate, hooks=self._hooks).stop

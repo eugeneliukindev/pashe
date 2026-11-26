@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import time
-from typing import TYPE_CHECKING, Final, Self, final
+from typing import TYPE_CHECKING, Self, final
 
 from pashe._internal.async_.backends.backend import AsyncBackend
 from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend
@@ -19,27 +20,24 @@ from pashe._internal.async_.locks.lock import AsyncLock
 from pashe._internal.async_.locks.locking import atry_acquire_slot
 from pashe._internal.async_.tasks import AsyncBackgroundTasks
 from pashe._internal.cache.entry import Serializer
-from pashe._internal.cache.keys import KeyPrefix, KeyTemplate
+from pashe._internal.cache.keys import KeyPrefix, KeyTemplate, parse_key, parse_tags
 from pashe._internal.cache.policy import Policy
-from pashe._internal.checks import FUNCTION, duration_seconds, expect_item_types, expect_type, parse_secret, parse_ttl
+from pashe._internal.checks import FUNCTION, duration_seconds, expect_item_types, expect_type, parse_secret
 from pashe._internal.hooks import AllHooks
 from pashe._internal.limits import LIMIT, parse_cost
 from pashe._internal.locks.lock import lock_slots, parse_lock_holders, parse_lock_timeout, parse_lock_ttl
 from pashe.codecs import Codec, JsonCodec
 from pashe.compressors import Compressor, NoOpCompressor
 from pashe.errors import InvalidOptionsError
-from pashe.hooks import Hook
 from pashe.options import Fallback, Negative, Stale, Stampede, Store
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from types import TracebackType
 
+    from pashe.hooks import Hook
     from pashe.options import TTL, Duration
     from pashe.ratelimit import Limit, RateLimitState
-
-
-_TTL_MEANING: Final = "how long a result is fresh"
 
 
 @final
@@ -131,8 +129,6 @@ class AsyncCache:
         expect_type("backend", backend, AsyncBackend)
         expect_type("prefix", prefix, str)
         expect_type("codec", codec, Codec)
-        expect_type("hooks", hooks, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
-        expect_item_types("hooks", hooks, Hook)
         expect_type("fallback", fallback, Fallback | None)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
         if fallback is not None:
             expect_type("Fallback.backend", fallback.backend, AsyncBackend)
@@ -141,7 +137,7 @@ class AsyncCache:
         expect_type("clock", clock, FUNCTION)
 
         self._backend = AsyncPrefixedBackend(backend, prefix)
-        self._hooks = AllHooks(tuple(hooks))
+        self._hooks = AllHooks(hooks)
         self._fallback: AsyncFallbackStore = (
             AsyncNoOpFallbackStore()
             if fallback is None
@@ -214,16 +210,6 @@ class AsyncCache:
             >>> await get_user(1)
             {'id': 1}
         """
-        ttl = parse_ttl("ttl", ttl, _TTL_MEANING)
-        expect_type("key", key, str | None)
-        # not a str, which would split into one tag per letter; isinstance takes no list[str]
-        expect_type("tags", tags, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
-        expect_item_types("tags", tags, str)
-        expect_type("stale", stale, Stale)
-        expect_type("stampede", stampede, Stampede)
-        expect_type("negative", negative, Negative)
-        expect_type("store", store, Store)
-
         policy = Policy.of(
             ttl=ttl,
             stale=stale,
@@ -234,8 +220,8 @@ class AsyncCache:
         )
         return AsyncCachedFunctionDecorator(
             policy,
-            key=None if key is None else KeyTemplate(key, secret=self._key_secret),
-            tags=tuple(KeyTemplate(tag, secret=self._key_secret) for tag in tags),
+            key=parse_key(key, secret=self._key_secret),
+            tags=parse_tags(tags, secret=self._key_secret),
             serializer=self._serializer,
             backend=self._backend,
             tag_store=self._tags,
@@ -321,11 +307,6 @@ class AsyncCache:
             >>> await get_users([1, 2])
             {1: {'id': 1}, 2: {'id': 2}}
         """
-        ttl = parse_ttl("ttl", ttl, _TTL_MEANING)
-        expect_type("key", key, str | None)
-        expect_type("stampede", stampede, Stampede)
-        expect_type("store", store, Store)
-
         policy = Policy.of(
             ttl=ttl,
             stale=Stale(),
@@ -342,7 +323,7 @@ class AsyncCache:
             raise InvalidOptionsError(msg)
         return AsyncCachedBatchFunctionDecorator(
             policy,
-            key=None if key is None else KeyTemplate(key, secret=self._key_secret),
+            key=parse_key(key, secret=self._key_secret),
             serializer=self._serializer,
             backend=self._backend,
             fallback=self._fallback,
@@ -439,11 +420,7 @@ class AsyncCache:
             >>> await rename_user(1, "Ada")
             'Ada'
         """
-        expect_type("tags", tags, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
-        expect_item_types("tags", tags, str)
-        return AsyncInvalidatingDecorator(
-            tuple(KeyTemplate(tag, secret=self._key_secret) for tag in tags), self._tags, hooks=self._hooks
-        )
+        return AsyncInvalidatingDecorator(parse_tags(tags, secret=self._key_secret), self._tags, hooks=self._hooks)
 
     def lock(
         self,
@@ -574,11 +551,9 @@ class AsyncCache:
             >>> await build(1)
             1
         """
-        expect_type("key", key, str | None)
-        template = None if key is None else KeyTemplate(key, secret=self._key_secret)
         return AsyncLockedDecorator(
             self,
-            template,
+            parse_key(key, secret=self._key_secret),
             self._key_secret,
             ttl=parse_lock_ttl(ttl),
             timeout=parse_lock_timeout(timeout),
@@ -658,9 +633,7 @@ class AsyncCache:
             1
         """
         expect_type("limit", limit, LIMIT)
-        expect_type("key", key, str | None)
-        template = None if key is None else KeyTemplate(key, secret=self._key_secret)
-        return AsyncRateLimitedDecorator(self, template, self._key_secret, limit=limit)
+        return AsyncRateLimitedDecorator(self, parse_key(key, secret=self._key_secret), self._key_secret, limit=limit)
 
     async def ping(self) -> None:
         """Check that the backend is reachable.
@@ -679,7 +652,8 @@ class AsyncCache:
     async def aclose(self) -> None:
         """Wait for the background reloads, then close the backend and the fallback.
 
-        The cache owns what it was given, as a backend owns its client.
+        The cache owns what it was given, as a backend owns its client. Each part is closed even
+        when one before it fails or the call is cancelled; the error of the last one that failed is raised.
 
         Examples:
             >>> from pashe import AsyncCache
@@ -687,9 +661,10 @@ class AsyncCache:
             >>> cache = AsyncCache(AsyncMemoryBackend())
             >>> await cache.aclose()
         """
-        await self._background.aclose()
-        await self._backend.aclose()
-        await self._fallback.aclose()
+        async with contextlib.AsyncExitStack() as closing:  # run in reverse: background, backend, fallback
+            closing.push_async_callback(self._fallback.aclose)
+            closing.push_async_callback(self._backend.aclose)
+            closing.push_async_callback(self._background.aclose)
 
     async def __aenter__(self) -> Self:
         """Return the cache."""

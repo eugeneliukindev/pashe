@@ -7,7 +7,7 @@ from pashe.contrib.redis import AsyncRedisBackend, AsyncRedisTrackingBus
 url = "redis://localhost:6379/0"
 
 
-client = Redis.from_url(url)
+client = Redis.from_url(url, socket_timeout=1)
 backend = AsyncNearCacheBackend(
     AsyncMemoryBackend(max_entries=1000),
     AsyncRedisBackend(client),

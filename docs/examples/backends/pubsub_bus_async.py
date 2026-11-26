@@ -4,7 +4,7 @@ from redis.asyncio import Redis
 from pashe.backends import AsyncMemoryBackend, AsyncNearCacheBackend
 from pashe.contrib.redis import AsyncRedisBackend, AsyncRedisPubSubBus
 
-client = Redis.from_url("redis://localhost:6379/0")
+client = Redis.from_url("redis://localhost:6379/0", socket_timeout=1)
 backend = AsyncNearCacheBackend(
     AsyncMemoryBackend(max_entries=1000),
     AsyncRedisBackend(client),

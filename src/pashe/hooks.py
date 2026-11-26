@@ -267,7 +267,7 @@ class Failure:
 
     Attributes:
         operation: what the cache was doing.
-        key: the key it was doing it with, with the prefixes; "" for a batch.
+        key: the key it was doing it with, with the prefixes; "" for a batch and for listening to a bus.
         error: the error: a PasheError of the cache, or the one the function raised, as it raised it.
 
     Examples:
@@ -324,9 +324,11 @@ class Operation(enum.StrEnum):
     REVALIDATION = "revalidation"
     """A reload in the background."""
     RATE_LIMIT = "rate_limit"
-    """Counting a call of a rate limit: it is let through."""
+    """Counting a call of a rate limit: it is let through; or taking back the count of a refused one, which stays."""
     PUBLISH = "publish"
     """Telling the other near caches through the bus which keys changed: their copies stay up to local_ttl."""
+    LISTEN = "listen"
+    """Listening to the bus, failed past a lost connection: every copy goes, and the bus listens again."""
     INVALIDATE = "invalidate"
     """Invalidating the tags of cache.invalidates after a write: their results stay up to their TTL."""
 

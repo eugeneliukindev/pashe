@@ -2,12 +2,13 @@
 # src/pashe/_internal/async_/backends/near.py
 from __future__ import annotations
 
+import contextlib
 import functools
 import threading
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Final, final, override
 
-from pashe._internal.checks import expect_item_types, expect_type, parse_seconds
+from pashe._internal.checks import expect_type, parse_seconds
 from pashe._internal.hooks import AllHooks
 from pashe._internal.sync.backends.backend import Backend
 from pashe._internal.sync.backends.memory import MemoryBackend
@@ -160,14 +161,12 @@ class NearCacheBackend(Backend):
         expect_type("shared", shared, Backend)
         local_ttl = parse_seconds("local_ttl", local_ttl, "how long a copy is kept", positive=True)
         expect_type("bus", bus, InvalidationBus)
-        expect_type("hooks", hooks, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
-        expect_item_types("hooks", hooks, Hook)
 
         self._local = local
         self._shared = shared
         self._local_ttl = local_ttl
         self._bus = bus
-        self._hooks = AllHooks(tuple(hooks))
+        self._hooks = AllHooks(hooks)
 
         self._drops = _DropVersions()
         self._listen_lock = threading.Lock()  # one listener, also when threads read at once
@@ -286,13 +285,17 @@ class NearCacheBackend(Backend):
 
     @override
     def close(self) -> None:
-        """Stop listening to the bus, and close both backends; the bus shares a client, so it stays open."""
+        """Stop listening to the bus, and close both backends; the bus shares a client, so it stays open.
+
+        Each is closed even when one before it fails; the error of the last one that failed is raised.
+        """
         stop = self._stop
         self._stop = None
-        if stop is not None:
-            stop()
-        self._local.close()
-        self._shared.close()
+        with contextlib.ExitStack() as closing:  # run in reverse: the bus, local, shared
+            closing.callback(self._shared.close)
+            closing.callback(self._local.close)
+            if stop is not None:
+                closing.callback(stop)
 
     def _listen(self) -> None:
         if self._stop is not None:

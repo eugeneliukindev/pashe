@@ -195,17 +195,25 @@ class AsyncFunctionCache[V]:
             with timed(state):
                 return await load()
 
-    async def _load_and_store(self, state: CallState, load: AsyncLoad[V]) -> Answer:
+    async def _load_or_not_found(
+        self,
+        state: CallState,
+        load: AsyncLoad[V],
+        keep: Callable[[Stored], Awaitable[None]],
+    ) -> V:
+        # an error Negative names is kept by keep as the answer of the calls after it
         try:
-            value = await self._run(state, load)
+            return await self._run(state, load)
         except Exception as error:
             if not self._policy.is_negative(error):
                 raise
             stored = self._codec.encode_negative(state)
             if stored is not None:
-                await self._store(state, stored)
+                await keep(stored)
             raise NotFoundError(state.key) from error
 
+    async def _load_and_store(self, state: CallState, load: AsyncLoad[V]) -> Answer:
+        value = await self._load_or_not_found(state, load, functools.partial(self._store, state))
         stored = self._codec.encode_loaded(state, value)
         if stored is None:
             return Answer(value, CacheStatus.MISS, state.load_seconds)
@@ -274,12 +282,6 @@ class AsyncFunctionCache[V]:
             if kept.entry.negative:
                 return Answer(None, CacheStatus.NOT_FOUND)
             return Answer(kept.value, CacheStatus.FALLBACK, stale_at=kept.entry.stale_at)
-        try:
-            value = await self._run(state, load)
-        except Exception as error:
-            if not self._policy.is_negative(error):
-                raise
-            await self._fallback.set(state.key, self._codec.encode_negative(state))
-            raise NotFoundError(state.key) from error
+        value = await self._load_or_not_found(state, load, functools.partial(self._fallback.set, state.key))
         await self._fallback.set(state.key, self._codec.encode_loaded(state, value))
         return Answer(value, CacheStatus.MISS, state.load_seconds)

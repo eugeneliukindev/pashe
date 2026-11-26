@@ -16,7 +16,8 @@ Valkey.
     ```
 
 Every process that uses the same Redis shares the entries. A backend takes over its client and
-closes it; the client must return bytes, so leave `decode_responses` off. `AsyncRedisBackend`
+closes it; the client must return bytes, so leave `decode_responses` off, and have a
+`socket_timeout`, so a Redis that hangs fails a call instead of holding it. `AsyncRedisBackend`
 takes a `redis.asyncio.Redis`.
 
 !!! info "Client-side caching of redis-py"

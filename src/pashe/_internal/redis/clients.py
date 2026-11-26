@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import contextlib
+import inspect
 import math
 from typing import TYPE_CHECKING, Final
 
+from redis.connection import AbstractConnection
 from redis.exceptions import RedisError, ResponseError
 
 from pashe.errors import BackendError, InvalidOptionsError, WrongTypeError
@@ -22,6 +24,8 @@ if TYPE_CHECKING:
 _MILLISECONDS: Final = 1000
 _NO_KEY: Final = -2  # what PTTL answers for a missing key
 _NO_EXPIRY: Final = -1  # what PTTL answers for a key without a TTL
+# what a connection of a client not given socket_timeout takes, as from_url: 5 seconds from redis-py 8, none before
+_DEFAULT_TIMEOUT: Final = inspect.signature(AbstractConnection.__init__).parameters["socket_timeout"].default
 
 # Compare-and-delete and compare-and-expire: only the owner of a lock releases or extends it.
 DELETE_IF_EQUALS: Final = """
@@ -59,8 +63,13 @@ def translate_error(error: RedisError) -> OverflowError | WrongTypeError | Backe
 
 
 def check_client(client: Redis | AsyncRedis | RedisCluster | AsyncRedisCluster) -> None:
-    if client.get_connection_kwargs().get("decode_responses"):
+    settings = client.get_connection_kwargs()
+    if settings.get("decode_responses"):
         msg = "redis: a backend needs a client without decode_responses: it stores bytes"
+        raise InvalidOptionsError(msg)
+    # a Redis that hangs would hang every call, past the breaker
+    if settings.get("socket_timeout", _DEFAULT_TIMEOUT) is None:
+        msg = "redis: a backend needs a client with socket_timeout, such as Redis.from_url(url, socket_timeout=1)"
         raise InvalidOptionsError(msg)
 
 

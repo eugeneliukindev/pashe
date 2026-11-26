@@ -2,27 +2,29 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, NamedTuple, Self, final
+from typing import TYPE_CHECKING, Any, Final, NamedTuple, Self, final
 
 from pashe._internal.cache.call import Answer
-from pashe._internal.checks import duration_seconds
+from pashe._internal.checks import duration_seconds, expect_type, parse_ttl
 from pashe.errors import InvalidOptionsError, NotFoundError, OverloadedError
 from pashe.hooks import CacheStatus
-from pashe.options import IfError
+from pashe.options import IfError, Negative, Stale, Stampede, Store
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from pashe._internal.cache.call import CallState
     from pashe._internal.cache.entry import Stored
-    from pashe.options import Duration, Negative, Stale, Stampede, Store
+    from pashe.options import TTL, Duration
+
+_TTL_MEANING: Final = "how long a result is fresh"
 
 
 @final
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Policy:
-    # How one cached function behaves, from its options checked once: its function cache asks it
-    # and trusts it. Only decisions: encoding is EntryFormat's, telling the hooks the caller's.
+    # How one cached function behaves, from its options checked once, here: its function cache asks
+    # it and trusts it. Only decisions: encoding is EntryFormat's, telling the hooks the caller's.
     ttl: Callable[[Any], Duration]  # of the result: a fixed ttl is a function that returns it
     stale: StalePolicy
     stampede: StampedePolicy
@@ -35,13 +37,20 @@ class Policy:
     def of(
         cls,
         *,
-        ttl: float | Callable[[Any], Duration],
+        ttl: TTL,
         stale: Stale,
         stampede: Stampede,
         negative: Negative,
         store: Store,
         clock: Callable[[], float],
     ) -> Self:
+        # the options a user gave a cached function, with the names of its arguments
+        ttl = parse_ttl("ttl", ttl, _TTL_MEANING)
+        expect_type("stale", stale, Stale)
+        expect_type("stampede", stampede, Stampede)
+        expect_type("negative", negative, Negative)
+        expect_type("store", store, Store)
+
         stale_policy = StalePolicy.of(stale)
         if ttl == 0 and stale_policy.longest_window == 0:  # a function as ttl is never 0
             msg = "ttl is 0 and no Stale window is set, so no result would ever be stored: set either"

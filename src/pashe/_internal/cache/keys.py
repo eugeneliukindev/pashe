@@ -13,6 +13,7 @@ import string
 import uuid
 from typing import TYPE_CHECKING, Final, NamedTuple, final, override
 
+from pashe._internal.checks import expect_item_types, expect_type
 from pashe.errors import InvalidOptionsError
 
 if TYPE_CHECKING:
@@ -99,6 +100,19 @@ class KeyAndTags(NamedTuple):
     # what the arguments of a call make: its key, and its tags filled in
     key: str
     tags: tuple[str, ...]
+
+
+def parse_key(key: str | None, *, secret: bytes | None) -> KeyTemplate | None:
+    # the key= of a decorator: a template, or None for the name of the function and its arguments
+    expect_type("key", key, str | None)
+    return None if key is None else KeyTemplate(key, secret=secret)
+
+
+def parse_tags(tags: list[str] | tuple[str, ...], *, secret: bytes | None) -> tuple[KeyTemplate, ...]:
+    # the tags= of a decorator: not a str, which would split into one tag per letter
+    expect_type("tags", tags, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
+    expect_item_types("tags", tags, str)
+    return tuple(KeyTemplate(tag, secret=secret) for tag in tags)
 
 
 @final

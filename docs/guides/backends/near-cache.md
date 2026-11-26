@@ -59,7 +59,9 @@ API reference: [`NearCacheBackend`](../../reference/backends.md#pashe.backends.N
 
 `hooks=` takes the hooks of the cache, such as the metrics of `pashe.contrib.opentelemetry`: a
 near cache tells them how many keys its copies answered, with `on_near_read`, and when it dropped
-every copy, with `on_near_flush`. See [Metrics and logs](../observability/hooks.md).
+every copy, with `on_near_flush`. A Redis bus takes `hooks=` too: it tells `on_error` of an
+error while it listens other than a lost connection, such as of a hook, and listens again. See
+[Metrics and logs](../observability/hooks.md).
 
 ## Telling the other processes
 

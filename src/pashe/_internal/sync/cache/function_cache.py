@@ -196,17 +196,25 @@ class FunctionCache[V]:
         with self._concurrency.slot(has_stale_answer=state.has_stale_answer), timed(state):
             return load()
 
-    def _load_and_store(self, state: CallState, load: Load[V]) -> Answer:
+    def _load_or_not_found(
+        self,
+        state: CallState,
+        load: Load[V],
+        keep: Callable[[Stored], None],
+    ) -> V:
+        # an error Negative names is kept by keep as the answer of the calls after it
         try:
-            value = self._run(state, load)
+            return self._run(state, load)
         except Exception as error:
             if not self._policy.is_negative(error):
                 raise
             stored = self._codec.encode_negative(state)
             if stored is not None:
-                self._store(state, stored)
+                keep(stored)
             raise NotFoundError(state.key) from error
 
+    def _load_and_store(self, state: CallState, load: Load[V]) -> Answer:
+        value = self._load_or_not_found(state, load, functools.partial(self._store, state))
         stored = self._codec.encode_loaded(state, value)
         if stored is None:
             return Answer(value, CacheStatus.MISS, state.load_seconds)
@@ -275,12 +283,6 @@ class FunctionCache[V]:
             if kept.entry.negative:
                 return Answer(None, CacheStatus.NOT_FOUND)
             return Answer(kept.value, CacheStatus.FALLBACK, stale_at=kept.entry.stale_at)
-        try:
-            value = self._run(state, load)
-        except Exception as error:
-            if not self._policy.is_negative(error):
-                raise
-            self._fallback.set(state.key, self._codec.encode_negative(state))
-            raise NotFoundError(state.key) from error
+        value = self._load_or_not_found(state, load, functools.partial(self._fallback.set, state.key))
         self._fallback.set(state.key, self._codec.encode_loaded(state, value))
         return Answer(value, CacheStatus.MISS, state.load_seconds)

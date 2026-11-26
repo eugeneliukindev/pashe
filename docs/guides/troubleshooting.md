@@ -65,6 +65,13 @@ of `pashe.errors`, so `except PasheError` takes them all.
     A backend stores bytes: the codec decides what they mean. Create the client without
     `decode_responses=True`, as `Redis.from_url(url)` does by default.
 
+??? question "InvalidOptionsError: redis: a backend needs a client with socket_timeout"
+
+    Without it a call waits for a Redis that hangs as long as it hangs: no error comes, so neither
+    the fallback nor a `CircuitBreaker` steps in. Give the client a timeout, such as
+    `Redis.from_url(url, socket_timeout=1)`. A client of redis-py 8 or later has one of 5 seconds
+    unless given `socket_timeout=None`; before 8 a client has none.
+
 ??? question "OverloadedError"
 
     `Stampede.max_loads` is reached and a stale result can answer the call instead.

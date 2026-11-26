@@ -84,7 +84,10 @@ class RateLimiter:
 
         if used > limit.calls + _ROUNDING:  # at the edge retry_after gave, rounding must not refuse
             # refused calls are not counted; a counter evicted meanwhile comes back with its ttl, not forever
-            self._backend.incr(current_key, -cost, ttl=_WINDOWS_KEPT * limit.per)
+            try:
+                self._backend.incr(current_key, -cost, ttl=_WINDOWS_KEPT * limit.per)
+            except BackendError as error:  # refused all the same: the counter is too high until the window ends
+                self._hooks.on_error(Failure(Operation.RATE_LIMIT, key, error))
             raise RateLimitedError(_retry_after(limit, previous=previous, before=current - cost, now=now, cost=cost))
         return RateLimitState(limit.calls, max(0, math.floor(limit.calls - used)), limit.per - elapsed)
 

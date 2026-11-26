@@ -19,3 +19,29 @@ async def test_a_cached_function_loads_once_and_its_methods_do_what_they_say(
 
     assert loads == [(1,), (1,), (1,)]  # the first call, refresh, and the call after invalidate
     assert after_invalidate == {"id": "1", "name": "Ann"}
+
+
+class _RecordsClose:
+    # stands for the cache of an example: what its lifespan does with it when the application stops
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.parametrize("side", ["sync", "async"])
+async def test_the_lifespan_closes_the_cache_when_the_application_stops(
+    side: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    example = importlib.import_module(f"examples.getting_started.close_{side}")
+    cache = _RecordsClose()
+    monkeypatch.setattr(example, "cache", cache)
+
+    async with example.lifespan(example.app):
+        assert not cache.closed
+
+    assert cache.closed
