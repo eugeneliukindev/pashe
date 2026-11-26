@@ -140,11 +140,9 @@ class Policy:
         state: CallState,
         stored: Stored,
         error: Exception,
-        *,
-        within_if_error: bool,
-        within_if_slow: bool,
     ) -> Answer | None:
-        # the stale result that answers instead of error, if a window of Stale lets it
+        # the stale result that answers instead of error, if a window of Stale lets it now
+        within_if_error, within_if_slow = self.stale_windows(stored)
         if isinstance(error, OverloadedError) and state.has_stale_answer:
             status = CacheStatus.STALE_IF_SLOW if within_if_slow else CacheStatus.STALE_IF_ERROR
             return Answer(stored.value, status, state.load_seconds, stored.entry.stale_at)

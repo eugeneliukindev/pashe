@@ -267,7 +267,7 @@ class AsyncFunctionCache[V]:
             else:
                 loaded = await self._load_and_store(state, load)
         except Exception as error:
-            stale = self._policy.stale_answer(state, stored, error, within_if_error=if_error, within_if_slow=if_slow)
+            stale = self._policy.stale_answer(state, stored, error)
             if stale is None:
                 raise
             self._hooks.on_error(Failure(Operation.LOAD, state.key, error))

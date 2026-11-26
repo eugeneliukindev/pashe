@@ -2,32 +2,43 @@
 # src/pashe/_internal/async_/cache/batch_function_cache.py
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, final
 
-from pashe._internal.cache.call import CallState, in_no_cache, timed
+from pashe._internal.cache.call import Answer, CallReporter, CallState, in_no_cache, timed
 from pashe._internal.sync.threads import ConcurrencyLimit
 from pashe.errors import BackendError
 from pashe.hooks import CacheStatus, Failure, Operation
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Hashable, Mapping, Sequence
+    from collections.abc import Callable, Hashable, Mapping
 
-    from pashe._internal.cache.call import Answer, CallReporter
-    from pashe._internal.cache.entry import Generations, Stored
+    from pashe._internal.cache.entry import Stored
     from pashe._internal.cache.entry_codec import EntryCodec
+    from pashe._internal.cache.keys import KeyAndTags
     from pashe._internal.cache.policy import Policy
     from pashe._internal.sync.backends.prefixed import PrefixedBackend
     from pashe._internal.sync.cache.fallback import FallbackStore
     from pashe._internal.sync.cache.tags import Tags
     from pashe.hooks import Hook
 
-type _States[K: Hashable] = dict[K, CallState]
-type _ToStore[K: Hashable] = dict[K, Stored]
-type _Found[K: Hashable] = dict[K, object]  # values decoded as the value type
-type _Missing[K: Hashable] = dict[K, Stored | None]  # the items to load, with the stale entry each may answer with
-type BatchCalls[K: Hashable] = Mapping[K, tuple[str, tuple[str, ...]]]  # the key and the tags of every item
 type BatchFunction[K: Hashable, V] = Callable[[list[K]], Mapping[K, V]]
+type _Store = Callable[[dict[str, Stored]], None]  # keeps what a batch loaded, by key
+
+
+@final
+@dataclass(slots=True)
+class _Item[K: Hashable]:
+    # one item of a batch call, from the read to the store
+    item: K
+    state: CallState  # its key and tags, and the generations of the tags once read
+    stored: Stored | None = None  # what the backend kept past its TTL: it may answer if the load fails
+    answered: bool = False
+    value: object = None  # decoded as the value type, once answered
+
+    def answer(self, value: object) -> None:
+        self.answered = True
+        self.value = value
 
 
 @final
@@ -56,164 +67,116 @@ class BatchFunctionCache[K: Hashable, V]:
 
         self._concurrency = ConcurrencyLimit(policy.stampede.max_loads)
 
-    def get_or_load_many(self, calls: BatchCalls[K], load: BatchFunction[K, V]) -> dict[K, V]:
-        states = {item: CallState(key, tags) for item, (key, tags) in calls.items()}
+    def get_or_load_many(self, calls: Mapping[K, KeyAndTags], load: BatchFunction[K, V]) -> dict[K, V]:
+        items = [_Item(item, CallState(key, tags)) for item, (key, tags) in calls.items()]
+        store: _Store = self._store
         if in_no_cache():  # every item loads, and is stored for the calls after it
-            self._read_generations(states)
-            found: _Found[K] = {}
-            self._store_all(states, self._load(states, found, missing=dict.fromkeys(states), load=load))
-            return {item: found[item] for item in states if item in found}  # type: ignore[misc]  # decoded as the value type
-        try:
-            read = self._tags.read_many([(state.key, state.tags) for state in states.values()])
-        except BackendError as error:
-            self._hooks.on_error(Failure(Operation.GET_MANY, "", error))
-            return self._serve_from_fallback(states, load)
-
-        found, missing = self._sort(states, self._decode(states, read), CacheStatus.HIT)
-        self._store_all(states, self._load(states, found, missing=missing, load=load))
-        return {item: found[item] for item in states if item in found}  # type: ignore[misc]  # decoded as the value type
+            self._read_generations(items)
+        else:
+            try:
+                self._read(items)
+            except BackendError as error:
+                self._hooks.on_error(Failure(Operation.GET_MANY, "", error))
+                self._read_fallback(items)
+                store = self._store_in_fallback
+        store(self._load([item for item in items if not item.answered], load))
+        return {item.item: item.value for item in items if item.answered}  # type: ignore[misc]  # decoded as the value type
 
     def delete(self, key: str) -> bool:
         return self._backend.delete(key)
 
-    def _decode(self, states: _States[K], read: Sequence[tuple[bytes | None, Generations]]) -> list[Stored | None]:
-        stored: list[Stored | None] = []
-        for state, (raw, generations) in zip(states.values(), read, strict=True):
-            state.tag_generations = generations  # what a load after it stores with, as in a cached function
-            stored.append(self._codec.decode(state.key, raw, generations))
-        return stored
+    def _read(self, items: list[_Item[K]]) -> None:
+        read = self._tags.read_many([(item.state.key, item.state.tags) for item in items])
+        for item, (raw, generations) in zip(items, read, strict=True):
+            item.state.tag_generations = generations  # what a load after it stores with, as in a cached function
+            self._answer(item, self._codec.decode(item.state.key, raw, generations), CacheStatus.HIT)
 
-    def _serve_from_fallback(self, states: _States[K], load: BatchFunction[K, V]) -> dict[K, V]:
-        stored = [
-            self._codec.decode(state.key, self._fallback.get(state.key), ())  # noqa: WPS476 - memory, nothing to win
-            for state in states.values()
-        ]
-        found, missing = self._sort(states, stored, CacheStatus.FALLBACK)
-        self._store_all_in_fallback(states, self._load(states, found, missing=missing, load=load))
-        return {item: found[item] for item in states if item in found}  # type: ignore[misc]  # decoded as the value type
+    def _read_fallback(self, items: list[_Item[K]]) -> None:
+        for item in items:
+            kept = self._fallback.get(item.state.key)  # noqa: WPS476 - memory, nothing to win at once
+            self._answer(item, self._codec.decode(item.state.key, kept, ()), CacheStatus.FALLBACK)  # it keeps no tags
 
-    def _read_generations(self, states: _States[K]) -> None:
+    def _read_generations(self, items: list[_Item[K]]) -> None:
         # the generations of the tags alone, for what no_cache loads and stores
         try:
-            read = self._tags.read_many([(state.key, state.tags) for state in states.values()])
+            read = self._tags.read_many([(item.state.key, item.state.tags) for item in items])
         except BackendError as error:  # stored untagged, each is a miss for the calls after it
             self._hooks.on_error(Failure(Operation.READ_TAGS, "", error))
             return
-        for state, (_, generations) in zip(states.values(), read, strict=True):
-            state.tag_generations = generations
+        for item, (_, generations) in zip(items, read, strict=True):
+            item.state.tag_generations = generations
 
-    def _sort(
-        self,
-        states: _States[K],
-        stored: Sequence[Stored | None],
-        status: CacheStatus,
-    ) -> tuple[_Found[K], _Missing[K]]:
-        found: _Found[K] = {}
-        missing: _Missing[K] = {}
-        for (item, state), entry in zip(states.items(), stored, strict=True):
-            answer = self._policy.answer_for(entry)
-            if answer is not None and answer.status is not CacheStatus.NOT_FOUND:  # a batch keeps no "not found"
-                found[item] = answer.value
-                self._reporter.report(state.key, status, stale_at=answer.stale_at)
-            else:
-                missing[item] = None if entry is None or entry.entry.negative else entry
-        return found, missing
+    def _answer(self, item: _Item[K], stored: Stored | None, status: CacheStatus) -> None:
+        answer = self._policy.answer_for(stored)
+        if answer is not None and answer.status is not CacheStatus.NOT_FOUND:  # a batch keeps no "not found"
+            item.answer(answer.value)
+            self._reporter.report(item.state.key, status, stale_at=answer.stale_at)
+        elif stored is not None and not stored.entry.negative:
+            item.stored = stored
 
-    def _load(
-        self,
-        states: _States[K],
-        found: _Found[K],
-        *,
-        missing: _Missing[K],
-        load: BatchFunction[K, V],
-    ) -> _ToStore[K]:
+    def _load(self, missing: list[_Item[K]], load: BatchFunction[K, V]) -> dict[str, Stored]:
+        # loads the missing items in one call; what it returns is to be stored, by key
         if not missing:
             return {}
 
         batch = CallState("")
         try:
-            loaded = self._run(batch, list(missing), load)
+            with self._concurrency.slot(has_stale_answer=False), timed(batch):
+                loaded = load([item.item for item in missing])
         except Exception as error:
-            if not self._answer_stale(states, found, missing=missing, error=error):
+            if not self._answer_stale(missing, error):
                 raise
             return {}
-        return self._encode_loaded(states, found, missing=missing, loaded=loaded, load_seconds=batch.load_seconds)
+        return self._take(missing, loaded, batch.load_seconds)
 
-    def _run(
+    def _take(
         self,
-        batch: CallState,
-        items: list[K],
-        load: BatchFunction[K, V],
-    ) -> Mapping[K, V]:
-        with self._concurrency.slot(has_stale_answer=False), timed(batch):
-            return load(items)
-
-    def _encode_loaded(
-        self,
-        states: _States[K],
-        found: _Found[K],
-        *,
-        missing: _Missing[K],
+        missing: list[_Item[K]],
         loaded: Mapping[K, V],
         load_seconds: float,
-    ) -> _ToStore[K]:
-        to_store: _ToStore[K] = {}
+    ) -> dict[str, Stored]:
+        # answers the items with what the batch loaded; what is to be stored, by key
+        to_store: dict[str, Stored] = {}
         for item in missing:
-            state = replace(states[item], load_seconds=load_seconds)  # every item took the whole batch
-            if item not in loaded:  # the function left it out: absent from the result, not stored
+            state = replace(item.state, load_seconds=load_seconds)  # every item took the whole batch
+            if item.item not in loaded:  # the function left it out: absent from the result, not stored
                 self._reporter.report(state.key, CacheStatus.MISS, load_seconds=state.load_seconds)
                 continue
-            stored = self._codec.encode_loaded(state, loaded[item])
-            found[item] = loaded[item] if stored is None else stored.value
+            stored = self._codec.encode_loaded(state, loaded[item.item])
+            item.answer(loaded[item.item] if stored is None else stored.value)
             self._reporter.report(
-                state.key,
-                CacheStatus.MISS,
-                load_seconds=state.load_seconds,
-                stale_at=stored and stored.entry.stale_at,
+                state.key, CacheStatus.MISS, load_seconds=state.load_seconds, stale_at=stored and stored.entry.stale_at
             )
             if stored is not None:
-                to_store[item] = stored
-
+                to_store[state.key] = stored
         return to_store
 
-    def _answer_stale(
-        self,
-        states: _States[K],
-        found: _Found[K],
-        *,
-        missing: _Missing[K],
-        error: Exception,
-    ) -> bool:
+    def _answer_stale(self, missing: list[_Item[K]], error: Exception) -> bool:
         # The load failed: stale results answer, if each item it was for has one in Stale.if_error;
         # the items are one call, so with one of them missing the error goes to the caller.
-        answers: dict[K, Answer] = {}
-        for item, stored in missing.items():
-            answer = None
-            if stored is not None:
-                within = self._policy.stale_windows(stored).within_if_error
-                answer = self._policy.stale_answer(
-                    states[item], stored, error, within_if_error=within, within_if_slow=False
-                )
+        answers: list[Answer] = []
+        for item in missing:
+            answer = None if item.stored is None else self._policy.stale_answer(item.state, item.stored, error)
             if answer is None:
                 return False
-            answers[item] = answer
+            answers.append(answer)
 
         self._hooks.on_error(Failure(Operation.LOAD, "", error))
-        for item, answer in answers.items():
-            found[item] = answer.value
-            self._reporter.report(states[item].key, answer.status, stale_at=answer.stale_at)
+        for item, stale in zip(missing, answers, strict=True):
+            item.answer(stale.value)
+            self._reporter.report(item.state.key, stale.status, stale_at=stale.stale_at)
         return True
 
-    def _store_all(self, states: _States[K], to_store: _ToStore[K]) -> None:
+    def _store(self, to_store: dict[str, Stored]) -> None:
         if not to_store:
             return
-        raws = {states[item].key: stored.raw for item, stored in to_store.items()}
+        raws = {key: stored.raw for key, stored in to_store.items()}
         try:
             self._backend.set_many(raws, ttl=max(map(self._policy.storage_lifetime, to_store.values())))
         except BackendError as error:
             self._hooks.on_error(Failure(Operation.SET_MANY, "", error))
-            self._store_all_in_fallback(states, to_store)
+            self._store_in_fallback(to_store)
 
-    def _store_all_in_fallback(self, states: _States[K], to_store: _ToStore[K]) -> None:
-        for item, stored in to_store.items():
-            self._fallback.set(states[item].key, stored)  # noqa: WPS476 - memory, nothing to win at once
+    def _store_in_fallback(self, to_store: dict[str, Stored]) -> None:
+        for key, stored in to_store.items():
+            self._fallback.set(key, stored)  # noqa: WPS476 - memory, nothing to win at once

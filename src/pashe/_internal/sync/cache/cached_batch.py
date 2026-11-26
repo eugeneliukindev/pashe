@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, final
 from pashe._internal.cache.call import CallReporter
 from pashe._internal.cache.entry import EntryFormat
 from pashe._internal.cache.entry_codec import EntryCodec
-from pashe._internal.cache.keys import item_key, key_name, qualified_name
+from pashe._internal.cache.keys import KeyAndTags, item_key, key_name, qualified_name
 from pashe._internal.cache.value_types import item_type
 from pashe._internal.sync.cache.batch_function_cache import BatchFunctionCache
 from pashe._internal.sync.threads import check_side
@@ -93,7 +93,9 @@ class CachedBatchFunction[K: Hashable, V]:
             {1: {'id': 1}}
         """
         calls = {
-            item: (item_key(self._name, self._key, item), tuple(tag.render((item,), {}) for tag in self._tags))
+            item: KeyAndTags(
+                item_key(self._name, self._key, item), tuple(tag.render((item,), {}) for tag in self._tags)
+            )
             for item in items
         }
         return self._batch.get_or_load_many(calls, self._function)

@@ -8,7 +8,7 @@ from pashe._internal.async_.tasks import acheck_side
 from pashe._internal.cache.call import CallReporter
 from pashe._internal.cache.entry import EntryFormat
 from pashe._internal.cache.entry_codec import EntryCodec
-from pashe._internal.cache.keys import item_key, key_name, qualified_name
+from pashe._internal.cache.keys import KeyAndTags, item_key, key_name, qualified_name
 from pashe._internal.cache.value_types import item_type
 
 if TYPE_CHECKING:
@@ -91,7 +91,9 @@ class AsyncCachedBatchFunction[K: Hashable, V]:
             {1: {'id': 1}}
         """
         calls = {
-            item: (item_key(self._name, self._key, item), tuple(tag.render((item,), {}) for tag in self._tags))
+            item: KeyAndTags(
+                item_key(self._name, self._key, item), tuple(tag.render((item,), {}) for tag in self._tags)
+            )
             for item in items
         }
         return await self._batch.get_or_load_many(calls, self._function)
