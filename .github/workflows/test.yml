@@ -99,7 +99,7 @@ jobs:
   test:
     name: Tests, Python ${{ matrix.python-version }}, ${{ matrix.redis-image }}
     runs-on: ubuntu-latest
-    # Python 3.16 is in alpha and the free-threaded builds are new: their failures are reported, not blocking.
+    # the free-threaded builds are new: their failures are reported, not blocking
     continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
@@ -127,9 +127,6 @@ jobs:
             free-threaded: true
             experimental: true
             install-args: '--no-install-package orjson'  # orjson has no build for a Python without the GIL
-          - python-version: '3.16'
-            redis-image: 'redis:8-alpine'
-            experimental: true
     steps:
       - uses: actions/checkout@v7.0.1
         with:

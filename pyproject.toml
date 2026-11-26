@@ -1,29 +1,51 @@
 [project]
 name = "pashe"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Caching for Python services: stale results, stampede protection, tags, locks and rate limits"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.16"  # each new Python is added once the tests pass on it
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "Eugene Liukin" }]
-keywords = ["async", "cache", "rate-limit", "redis"]
+authors = [{ name = "Eugene Liukin", email = "eugeneliukin.dev@gmail.com" }]
+maintainers = [{ name = "Eugene Liukin", email = "eugeneliukin.dev@gmail.com" }]
+keywords = [
+    "asgi",
+    "async",
+    "cache",
+    "caching",
+    "distributed-lock",
+    "fastapi",
+    "rate-limit",
+    "redis",
+    "stampede",
+    "valkey",
+]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 4 - Beta",
     "Framework :: AsyncIO",
+    "Framework :: FastAPI",
     "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3.15",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Database",
+    "Topic :: Internet :: WWW/HTTP",
     "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
     "Typing :: Typed",
 ]
 dependencies = []
 
 [project.urls]
+Documentation = "https://eugeneliukindev.github.io/pashe/"
+Homepage = "https://eugeneliukindev.github.io/pashe/"
+Issues = "https://github.com/eugeneliukindev/pashe/issues"
 Repository = "https://github.com/eugeneliukindev/pashe"
 
 [project.optional-dependencies]
