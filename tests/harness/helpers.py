@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, Any, Final, override
 
 from pashe import AsyncCache, Cache
 from pashe.backends import AsyncMemoryBackend, MemoryBackend
@@ -25,6 +25,10 @@ if TYPE_CHECKING:
 
 
 type NewCache = Callable[..., Any]  # makes a Cache or an AsyncCache that stands for a process of its own
+
+# A sync call that waits in the loop, as for a busy file, blocks it for seconds; a busy machine of CI
+# stalls it for a fifth of a second, the default of pyleak, as it opens a file.
+LOOP_BLOCK_SECONDS: Final = 1.0
 
 
 class Clock:

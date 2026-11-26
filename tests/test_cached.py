@@ -24,6 +24,7 @@ from pashe.hooks import CacheStatus, LoggingHook, Operation
 from pashe.options import Fallback, IfError, IfSlow, Negative, Stale, Stampede, Store
 from pashe.ratelimit import per_second
 from tests.harness.helpers import (
+    LOOP_BLOCK_SECONDS,
     FailingMemoryBackend,
     RecordingHook,
     Source,
@@ -481,7 +482,7 @@ async def test_stale_while_revalidate_answers_at_once_and_reloads(
     assert results(outcomes) == [CacheStatus.MISS, CacheStatus.STALE_WHILE_REVALIDATE, CacheStatus.HIT]
 
 
-@pytest.mark.no_leaks(threads=False)
+@pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
 @pytest.mark.parametrize("side", ["async"])
 async def test_a_reload_in_the_background_slower_than_its_window_still_stores(
     new_process_cache: NewCache, clock: Clock
@@ -614,7 +615,7 @@ async def test_revalidate_before_reloads_a_fresh_result_in_its_last_seconds(
     assert results(outcomes) == [CacheStatus.MISS, CacheStatus.HIT, CacheStatus.HIT, CacheStatus.HIT]
 
 
-@pytest.mark.no_leaks(threads=False)
+@pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
 @pytest.mark.parametrize("side", ["async"])
 async def test_single_flight_shares_one_load_between_tasks(new_process_cache: NewCache) -> None:
     cache: AsyncCache = new_process_cache()
@@ -698,7 +699,7 @@ def test_threads_that_share_a_failing_load_each_get_its_error(new_process_cache:
     assert started == 1
 
 
-@pytest.mark.no_leaks(threads=False)
+@pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
 @pytest.mark.parametrize("side", ["async"])
 async def test_a_waiter_loads_when_the_caller_it_waited_for_is_cancelled(new_process_cache: NewCache) -> None:
     cache: AsyncCache = new_process_cache()
@@ -747,7 +748,7 @@ async def test_lock_for_loads_once_for_all_processes() -> None:
     assert loads == 1
 
 
-@pytest.mark.no_leaks(threads=False)
+@pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
 @pytest.mark.parametrize("side", ["async"])
 async def test_a_call_after_an_invalidation_shares_no_load_started_before_it(new_process_cache: NewCache) -> None:
     cache: AsyncCache = new_process_cache()
@@ -770,7 +771,7 @@ async def test_a_call_after_an_invalidation_shares_no_load_started_before_it(new
     assert (await before, after) == (1, 2)
 
 
-@pytest.mark.no_leaks(threads=False)
+@pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
 @pytest.mark.parametrize("side", ["async"])
 async def test_a_load_that_started_before_invalidate_is_neither_shared_nor_stored(new_process_cache: NewCache) -> None:
     cache: AsyncCache = new_process_cache()

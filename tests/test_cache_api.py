@@ -14,7 +14,7 @@ from pashe.backends import AsyncMemoryBackend, MemoryBackend, NearCacheBackend
 from pashe.errors import BackendError, InvalidOptionsError, LockLostError, LockTimeoutError, RateLimitedError
 from pashe.options import Fallback
 from pashe.ratelimit import FixedWindow, SlidingWindow, per_second
-from tests.harness.helpers import RecordingHook, call
+from tests.harness.helpers import LOOP_BLOCK_SECONDS, RecordingHook, call
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -132,7 +132,7 @@ def test_a_lock_is_held_while_its_block_runs(new_process_cache: NewCache) -> Non
     assert cache.try_lock("job", ttl=1) is not None
 
 
-@pytest.mark.no_leaks(threads=False)
+@pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
 @pytest.mark.parametrize("side", ["async"])
 async def test_async_locks_of_one_key_run_one_at_a_time(new_process_cache: NewCache) -> None:
     cache: AsyncCache = new_process_cache()
@@ -149,7 +149,7 @@ async def test_async_locks_of_one_key_run_one_at_a_time(new_process_cache: NewCa
     assert order in (["a", "a", "b", "b"], ["b", "b", "a", "a"])
 
 
-@pytest.mark.no_leaks(threads=False)
+@pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
 @pytest.mark.parametrize("side", ["async"])
 async def test_a_task_cancelled_as_its_lock_block_ends_still_releases_the_lock(new_process_cache: NewCache) -> None:
     cache: AsyncCache = new_process_cache()
