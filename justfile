@@ -108,6 +108,11 @@ test-highest python='' *args='':
 test-servers server='' *args='':
     uv run nox -s servers{{ if server == '' { '' } else { '(' + server + ')' } }} -- {{ args }}
 
+[doc('Run the tests on Python without the GIL, 3.14t or 3.15t or both, with the locked versions, in .nox')]
+[group('testing')]
+test-free-threaded python='' *args='':
+    uv run nox -s free_threaded{{ if python == '' { '' } else { '-' + python } }} -- {{ args }}
+
 [doc('Validate the lock file and the installed dependencies, and look for known vulnerabilities in them')]
 [group('testing')]
 deps:
