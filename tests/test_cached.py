@@ -17,10 +17,8 @@ import pytest
 import pashe
 from pashe import AsyncCache, Cache
 from pashe.backends import AsyncMemoryBackend, MemoryBackend
-from pashe.codecs import JsonCodec
 from pashe.compressors import Compressor, GzipCompressor
 from pashe.contrib.msgspec import MsgspecJsonCodec
-from pashe.contrib.orjson import OrjsonCodec
 from pashe.errors import BackendError, InvalidOptionsError, NotFoundError
 from pashe.hooks import CacheStatus, LoggingHook, Operation
 from pashe.options import Fallback, IfError, IfSlow, Negative, Stale, Stampede, Store
@@ -34,6 +32,7 @@ from tests.harness.helpers import (
     call,
     close,
     failing_memory,
+    json_codecs,
     memory,
     new_cache,
 )
@@ -1272,7 +1271,7 @@ class _Plan:
     id: int
 
 
-@pytest.mark.parametrize("codec", [JsonCodec(), OrjsonCodec()], ids=["JsonCodec", "OrjsonCodec"])
+@pytest.mark.parametrize("codec", json_codecs(), ids=lambda codec: type(codec).__name__)
 def test_a_return_type_json_reads_back_as_another_is_refused_at_the_decorator(
     side: str, new_process_cache: NewCache, codec: Any
 ) -> None:

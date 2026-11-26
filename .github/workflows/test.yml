@@ -121,10 +121,12 @@ jobs:
             redis-image: 'redis:8-alpine'
             free-threaded: true
             experimental: true
+            install-args: '--no-install-package orjson'  # orjson has no build for a Python without the GIL
           - python-version: '3.15t'
             redis-image: 'redis:8-alpine'
             free-threaded: true
             experimental: true
+            install-args: '--no-install-package orjson'  # orjson has no build for a Python without the GIL
           - python-version: '3.16'
             redis-image: 'redis:8-alpine'
             experimental: true
@@ -140,7 +142,7 @@ jobs:
       - name: Install just
         run: uv tool install rust-just
       - name: Install dependencies
-        run: just install --locked --python ${{ matrix.python-version }}
+        run: just install --locked --python ${{ matrix.python-version }} ${{ matrix.install-args }}
       - name: Prefetch the server image
         run: docker pull "${{ matrix.redis-image }}"
       - name: Run the tests

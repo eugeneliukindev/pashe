@@ -14,10 +14,10 @@ import pytest
 from pashe.codecs import JsonCodec, PickleCodec
 from pashe.compressors import GzipCompressor
 from pashe.contrib.msgspec import MsgspecJsonCodec, MsgspecMsgpackCodec
-from pashe.contrib.orjson import OrjsonCodec
 from pashe.contrib.pydantic import PydanticCodec
 from pashe.contrib.zstd import ZstdCompressor
 from pashe.errors import CodecError, InvalidOptionsError, MissingExtraError
+from tests.harness.helpers import json_codecs
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -40,8 +40,8 @@ class UserDict(TypedDict):
 
 _SECRET = "a secret of 16+ bytes"
 _TYPED = [MsgspecJsonCodec(), MsgspecMsgpackCodec(), PydanticCodec(), PickleCodec(secret=_SECRET)]
-_DATA = [JsonCodec(), OrjsonCodec(), *_TYPED[:3]]  # codecs that store data, not objects
-_ALL = [JsonCodec(), OrjsonCodec(), *_TYPED]
+_DATA = [*json_codecs(), *_TYPED[:3]]  # codecs that store data, not objects
+_ALL = [*json_codecs(), *_TYPED]
 
 
 @pytest.mark.parametrize("codec", _ALL, ids=lambda codec: type(codec).__name__)

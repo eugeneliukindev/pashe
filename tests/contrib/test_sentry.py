@@ -35,10 +35,18 @@ class _Sent(Transport):
 @pytest.fixture
 def sent() -> Iterator[_Sent]:
     transport = _Sent()
-    sentry_sdk.init(dsn="https://key@example.invalid/1", transport=transport, default_integrations=False)
+    # no integration patches Starlette or httpx for every later test of the process: the hook needs none
+    sentry_sdk.init(
+        dsn="https://key@example.invalid/1",
+        transport=transport,
+        default_integrations=False,
+        auto_enabling_integrations=False,
+    )
     with sentry_sdk.isolation_scope():
         yield transport
-    sentry_sdk.init()  # no client: the next test sends nothing
+    sentry_sdk.init(
+        default_integrations=False, auto_enabling_integrations=False
+    )  # no client: the next test sends nothing
 
 
 def _call_while_the_backend_is_down(hook: SentryHook) -> None:

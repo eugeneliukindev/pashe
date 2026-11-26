@@ -5,11 +5,13 @@ Tests import it as tests.harness.helpers, with the stores of tests.harness.store
 
 from __future__ import annotations
 
+import importlib.util
 import inspect
 from typing import TYPE_CHECKING, Any, override
 
 from pashe import AsyncCache, Cache
 from pashe.backends import AsyncMemoryBackend, MemoryBackend
+from pashe.codecs import JsonCodec
 from pashe.errors import BackendError
 from pashe.hooks import Hook
 from pashe.invalidation import InvalidationBus
@@ -17,6 +19,7 @@ from pashe.invalidation import InvalidationBus
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
+    from pashe.codecs import Codec
     from pashe.hooks import Failure, Outcome
     from pashe.invalidation import InvalidationHandler
 
@@ -247,3 +250,16 @@ def recording_calls(function: Any, calls: list[tuple[object, ...]]) -> Any:
         return function(*args)
 
     return counted
+
+
+def json_codecs() -> list[Codec]:
+    """Return the codecs of plain JSON: JsonCodec, and OrjsonCodec where orjson is installed.
+
+    orjson has no build for a Python without the GIL, so the tests run there without it.
+    """
+    codecs: list[Codec] = [JsonCodec()]
+    if importlib.util.find_spec("orjson") is not None:
+        from pashe.contrib.orjson import OrjsonCodec  # noqa: PLC0415 - imported only where orjson is installed
+
+        codecs.append(OrjsonCodec())
+    return codecs
