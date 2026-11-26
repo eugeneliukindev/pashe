@@ -24,6 +24,7 @@ codespell and tombi.
 | `just test-flaky` | the tests of races and timing, 100 times each over xdist: after a change to them |
 | `just test-lowest [python]` | the tests with the lowest versions the floors of `pyproject.toml` allow, on one Python or each of 3.12 to 3.15, in `.nox` |
 | `just test-highest [python]` | the tests with the newest versions the upper bounds allow, past `uv.lock`, on one Python or each, in `.nox` |
+| `just test-servers [server]` | the tests over Redis 6.2 to 8, Valkey 8 and 9, and Dragonfly, each with a cluster, or over one, such as `valkey-9`, in `.nox` |
 | `just all` | everything CI runs: the checks, the tests and the examples of the docstrings and the docs |
 | `just docs-serve` | the documentation with live reload |
 
@@ -90,7 +91,8 @@ store with a server, is marked `redis`, which `just test-fast` leaves out.
 
 | Variable | What it changes |
 | --- | --- |
-| `PASHE_TEST_REDIS_IMAGE` | the server the tests run against, such as `valkey/valkey:9-alpine`, as the matrix of CI does |
+| `PASHE_TEST_REDIS_IMAGE` | the server the tests run against, such as `valkey/valkey:9-alpine`, as `just test-servers` sets it |
+| `PASHE_TEST_REDIS_CLUSTER_IMAGE` | the server of the cluster, Redis or Valkey, as the same |
 | `PASHE_TEST_REDIS_URL` | a Redis of your own instead of the container |
 | `PASHE_TEST_REDIS_CLUSTER_URL` | a cluster of your own instead of the container |
 

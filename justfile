@@ -103,6 +103,11 @@ test-lowest python='' *args='':
 test-highest python='' *args='':
     uv run nox -s highest{{ if python == '' { '' } else { '-' + python } }} -- {{ args }}
 
+[doc('Run the tests over every server and its cluster, or one, such as valkey-9, with the locked versions, in .nox')]
+[group('testing')]
+test-servers server='' *args='':
+    uv run nox -s servers{{ if server == '' { '' } else { '(' + server + ')' } }} -- {{ args }}
+
 [doc('Validate the lock file and the installed dependencies, and look for known vulnerabilities in them')]
 [group('testing')]
 deps:

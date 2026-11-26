@@ -97,36 +97,12 @@ jobs:
         run: just docs-check
 
   test:
-    name: Tests, Python ${{ matrix.python-version }}, ${{ matrix.redis-image }}
+    name: Tests, Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
-    # the free-threaded builds are new: their failures are reported, not blocking
-    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
         python-version: ['3.12', '3.13', '3.14', '3.15']
-        redis-image: ['redis:8-alpine']
-        include:
-          - python-version: '3.15'
-            redis-image: 'redis:6.2-alpine'  # the oldest with CLIENT TRACKING, still offered by clouds
-          - python-version: '3.15'
-            redis-image: 'redis:7.4-alpine'
-          - python-version: '3.15'
-            redis-image: 'valkey/valkey:8-alpine'
-          - python-version: '3.15'
-            redis-image: 'valkey/valkey:9-alpine'
-          - python-version: '3.15'
-            redis-image: 'docker.dragonflydb.io/dragonflydb/dragonfly:latest'
-          - python-version: '3.14t'
-            redis-image: 'redis:8-alpine'
-            free-threaded: true
-            experimental: true
-            install-args: '--no-install-package orjson'  # orjson has no build for a Python without the GIL
-          - python-version: '3.15t'
-            redis-image: 'redis:8-alpine'
-            free-threaded: true
-            experimental: true
-            install-args: '--no-install-package orjson'  # orjson has no build for a Python without the GIL
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -139,46 +115,57 @@ jobs:
       - name: Install just
         run: uv tool install rust-just
       - name: Install dependencies
-        run: just install --locked --python ${{ matrix.python-version }} ${{ matrix.install-args }}
-      - name: Prefetch the server image
-        run: docker pull "${{ matrix.redis-image }}"
+        run: just install --locked --python ${{ matrix.python-version }}
       - name: Run the tests
         run: just test
-        env:
-          PASHE_TEST_REDIS_IMAGE: ${{ matrix.redis-image }}
-          PYTHON_GIL: ${{ matrix.free-threaded && '0' || '1' }}
 
-  bounds:
-    # the two ends of what pyproject.toml allows on every Python: the floors, and the newest releases
-    # past the lock, which a release of a dependency breaks with no commit here
-    name: ${{ matrix.session == 'lowest' && 'Lowest' || 'Highest' }} dependency versions, Python ${{ matrix.python-version }}
+  sessions:
+    # the sessions of noxfile.py, each a job of nox below: the lowest and the highest versions of the
+    # dependencies on every Python, every server, and the Pythons without the GIL
+    name: Sessions of nox
     runs-on: ubuntu-latest
+    outputs:
+      sessions: ${{ steps.list.outputs.sessions }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false  # nothing pushes back to the repository
+      - uses: astral-sh/setup-uv@v10.4.0
+      - name: List the sessions
+        id: list
+        run: echo "sessions=$(uv run --locked --only-group test nox -l --json -s lowest highest servers free_threaded | jq -c 'map({session, python, tags})')" >> "$GITHUB_OUTPUT"
+
+  nox:
+    name: ${{ matrix.session }}
+    needs: sessions
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ contains(matrix.tags, 'experimental') }}  # a session tagged so reports, not blocks
     strategy:
       fail-fast: false
       matrix:
-        session: [lowest, highest]
-        python-version: ['3.12', '3.13', '3.14', '3.15']
+        include: ${{ fromJSON(needs.sessions.outputs.sessions) }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false  # nothing pushes back to the repository
       - uses: actions/setup-python@v7.1.0
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python }}
+          allow-prereleases: true
       - uses: astral-sh/setup-uv@v10.4.0
-      - name: Install just
-        run: uv tool install rust-just
       - name: Install nox
         run: uv sync --locked --only-group test  # nox makes the environment of the run itself
-      - name: Run the tests
-        run: just test-${{ matrix.session }} ${{ matrix.python-version }}
+      - name: Run the session
+        run: uv run nox -s "$SESSION"
+        env:
+          SESSION: ${{ matrix.session }}  # through the environment: it is the output of another job
 
   check:
     # The one check a branch protection asks for: it passes when every job above passed, the
     # experimental cells of the tests aside.
     name: All checks passed
     if: always()
-    needs: [lint, types, deps, examples, test, bounds]
+    needs: [lint, types, deps, examples, test, sessions, nox]
     runs-on: ubuntu-latest
     steps:
       - uses: re-actors/alls-green@v1.3.0
