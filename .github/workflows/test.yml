@@ -120,8 +120,8 @@ jobs:
         run: just test
 
   sessions:
-    # the sessions of noxfile.py, each a job of nox below: the lowest and the highest versions of the
-    # dependencies on every Python, every server, and the Pythons without the GIL
+    # the sessions of noxfile.py, each a job of nox below and each one axis on one Python: the lowest
+    # and the highest versions of the dependencies, every other server, and the Pythons without the GIL
     name: Sessions of nox
     runs-on: ubuntu-latest
     outputs:

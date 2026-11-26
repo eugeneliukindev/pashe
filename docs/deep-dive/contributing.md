@@ -22,9 +22,9 @@ codespell and tombi.
 | `just test` | every test, with Redis and a Redis Cluster in Docker; reports in `coverage/` |
 | `just doctest` | the examples of the docstrings |
 | `just test-flaky` | the tests of races and timing, 100 times each over xdist: after a change to them |
-| `just test-lowest [python]` | the tests with the lowest versions the floors of `pyproject.toml` allow, on one Python or each of 3.12 to 3.15, in `.nox` |
-| `just test-highest [python]` | the tests with the newest versions the upper bounds allow, past `uv.lock`, on one Python or each, in `.nox` |
-| `just test-servers [server]` | the tests over Redis 6.2 to 8, Valkey 8 and 9, and Dragonfly, each with a cluster, or over one, such as `valkey-9`, in `.nox` |
+| `just test-lowest` | the tests with the lowest versions the floors of `pyproject.toml` allow, on Python 3.12 over Redis 6.2, in `.nox` |
+| `just test-highest` | the tests with the newest versions the upper bounds allow, past `uv.lock`, on Python 3.15, in `.nox` |
+| `just test-servers [server]` | the tests over Redis 6.2 and 7.4, Valkey 8 and 9, and Dragonfly, each with a cluster, or over one, such as `valkey-9`, in `.nox` |
 | `just test-free-threaded [python]` | the tests on Python without the GIL, 3.14t or 3.15t or both, with the locked versions, in `.nox`; orjson has no build there |
 | `just all` | everything CI runs: the checks, the tests and the examples of the docstrings and the docs |
 | `just docs-serve` | the documentation with live reload |
@@ -82,20 +82,17 @@ Arrange, Act and Assert, the three split by a blank line.
 | `tests/backends` | the contract every backend keeps, over every store of `stores.py` and both sides |
 | `tests/test_processes.py` | the core scenarios of caches that stand for processes, over every store of `stores.py` |
 | `tests/contrib`, `test_asgi.py`, `test_wsgi.py` | the web integrations, end to end |
-| `tests/harness/helpers.py` | fakes of a clock, a backend and a loader, and calls of either side |
+| `tests/harness/helpers.py` | `Side`, the classes of each side, which the fixture `side` gives a test; fakes of a clock, a backend and a loader, and calls of either side |
 | `tests/harness/stores.py` | the stores the tests run over, memory, SQLite, Redis and the cluster: a new store is one entry there |
-| `tests/harness/servers.py` | the plugin that starts Redis and the cluster in Docker for the run |
+| `tests/harness/servers.py` | the plugin that starts a Redis and a cluster in Docker for each test process, when its first test asks for one |
+| `tests/harness/servers.toml` | the servers the tests run against, by name, with the images of each and its cluster, which CI runs one by one: a new server is one table there |
+| `tests/harness/cluster.sh` | the script that starts the nodes of the cluster in their container and joins them |
 
 The tests are the package `tests`, and import their harness as `tests.harness`, which any IDE
 finds from the root of the project. A test that takes the `redis_url` or `redis_cluster_url` fixture, or runs over a
-store with a server, is marked `redis`, which `just test-fast` leaves out.
-
-| Variable | What it changes |
-| --- | --- |
-| `PASHE_TEST_REDIS_IMAGE` | the server the tests run against, such as `valkey/valkey:9-alpine`, as `just test-servers` sets it |
-| `PASHE_TEST_REDIS_CLUSTER_IMAGE` | the server of the cluster, Redis or Valkey, as the same |
-| `PASHE_TEST_REDIS_URL` | a Redis of your own instead of the container |
-| `PASHE_TEST_REDIS_CLUSTER_URL` | a cluster of your own instead of the container |
+store with a server, is marked `redis`, which `-m "not redis"` leaves out, as `just test-fast` does.
+`pytest --redis-server valkey-9` runs the tests against another server of `servers.toml` and its
+cluster, as `just test-servers` does; `redis-8` by default.
 
 ## Documentation
 

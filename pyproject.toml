@@ -373,6 +373,7 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 timeout = "20"  # a hung test fails instead of holding the run
+timeout_func_only = true  # the fixtures that start Redis in Docker take longer on a busy machine
 
 [tool.ruff]
 required-version = ">=0.17.6"

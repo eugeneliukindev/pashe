@@ -4,6 +4,9 @@ set dotenv-load := false
 # Do not update the environment when running
 export UV_NO_SYNC := '1'
 
+# each takes a database of the one Redis of the run, which has 16
+processes := '4'
+
 # lychee is a binary, not a Python package: it runs from its image
 lychee_image := 'lycheeverse/lychee:latest'
 
@@ -69,7 +72,7 @@ all *args='': check (test args) doctest docs-check
 [group('testing')]
 [no-exit-message]
 test *args='':
-    uv run pytest -n auto --cov --cov-report=term --cov-report=xml --cov-report=html \
+    uv run pytest -n {{ processes }} --cov --cov-report=term --cov-report=xml --cov-report=html \
         --junitxml=coverage/junit.xml {{ args }}
     # strict-no-cover reads the data with a config of its own, which does not know data_file
     COVERAGE_FILE=coverage/.coverage uv run strict-no-cover
@@ -91,17 +94,17 @@ doctest:
 [doc('Run the tests of races and timing many times each over xdist, to catch one that passes by luck; after a change to them')]
 [group('testing')]
 test-flaky runs='100' *args='':
-    uv run pytest -n auto --no-cov -p no:randomly --flake-finder --flake-runs={{ runs }} -k '{{ races }}' {{ args }}
+    uv run pytest -n {{ processes }} --no-cov -p no:randomly --flake-finder --flake-runs={{ runs }} -k '{{ races }}' {{ args }}
 
-[doc('Run the tests with the lowest versions the dependencies allow, on one Python or every one, in .nox: .venv and uv.lock stay')]
+[doc('Run the tests with the lowest versions the dependencies allow, on Python 3.12 over Redis 6.2, in .nox: .venv and uv.lock stay')]
 [group('testing')]
-test-lowest python='' *args='':
-    uv run nox -s lowest{{ if python == '' { '' } else { '-' + python } }} -- {{ args }}
+test-lowest *args='':
+    uv run nox -s lowest -- {{ args }}
 
-[doc('Run the tests with the newest versions the bounds allow, past the lock, on one Python or every one, in .nox')]
+[doc('Run the tests with the newest versions the bounds allow, past the lock, on Python 3.15, in .nox')]
 [group('testing')]
-test-highest python='' *args='':
-    uv run nox -s highest{{ if python == '' { '' } else { '-' + python } }} -- {{ args }}
+test-highest *args='':
+    uv run nox -s highest -- {{ args }}
 
 [doc('Run the tests over every server and its cluster, or one, such as valkey-9, with the locked versions, in .nox')]
 [group('testing')]

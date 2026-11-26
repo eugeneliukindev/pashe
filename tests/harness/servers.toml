@@ -1,0 +1,39 @@
+# The servers the tests run against: pytest --redis-server picks one by its name, and noxfile.py
+# runs each in CI. A new server is one table here.
+#
+# image: the image of the server, which starts it with no command: each test process gets a container
+# cluster_image: the image of its cluster, of Redis or Valkey: Dragonfly has no cluster of its own
+# cluster_program: what serves in cluster_image, redis or valkey, which names its commands such as redis-cli
+
+default = "redis-8"  # what a run takes without --redis-server, and every job of CI but the servers
+
+# The oldest Redis with CLIENT TRACKING, still offered by clouds, to the newest Redis and Valkey.
+[servers."redis-6.2"]
+image = "redis:6.2-alpine"
+cluster_image = "redis:6.2-alpine"
+cluster_program = "redis"
+
+[servers."redis-7.4"]
+image = "redis:7.4-alpine"
+cluster_image = "redis:7.4-alpine"
+cluster_program = "redis"
+
+[servers."redis-8"]
+image = "redis:8-alpine"
+cluster_image = "redis:8-alpine"
+cluster_program = "redis"
+
+[servers."valkey-8"]
+image = "valkey/valkey:8-alpine"
+cluster_image = "valkey/valkey:8-alpine"
+cluster_program = "valkey"
+
+[servers."valkey-9"]
+image = "valkey/valkey:9-alpine"
+cluster_image = "valkey/valkey:9-alpine"
+cluster_program = "valkey"
+
+[servers.dragonfly]
+image = "docker.dragonflydb.io/dragonflydb/dragonfly:latest"
+cluster_image = "redis:8-alpine"
+cluster_program = "redis"
