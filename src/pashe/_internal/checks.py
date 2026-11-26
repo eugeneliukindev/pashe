@@ -71,7 +71,7 @@ def expect_type(
     value: object,
     kind: type | types.UnionType,
 ) -> None:
-    # kind is a class or a union of classes as isinstance takes it, such as str | None
+    """``kind`` is a class or a union of classes as isinstance takes it, such as str | None."""
     if isinstance(value, kind):
         return
     names = " or ".join(_name(member) for member in get_args(kind) or (kind,))
@@ -111,14 +111,14 @@ def expect_positive(
 
 
 def expect_int64(name: str, value: int) -> None:
-    # the counters of every backend are signed 64-bit integers, as Redis keeps them
+    """The counters of every backend are signed 64-bit integers, as Redis keeps them."""
     if not _INT64_MIN <= value <= _INT64_MAX:
         msg = f"{name} is {value}: out of the signed 64-bit range of a counter"
         raise OverflowError(msg)
 
 
 def parse_counter(backend_name: str, data: bytes) -> int:
-    # the integer incr keeps, as ASCII decimal: any other value is not a counter
+    """The integer incr keeps, as ASCII decimal: any other value is not a counter."""
     if _DECIMAL.fullmatch(data) is None:
         msg = f"{backend_name}: value is not an integer"
         raise WrongTypeError(msg)
@@ -131,9 +131,12 @@ def parse_counter(backend_name: str, data: bytes) -> int:
 
 
 def _type_parts(form: object) -> Iterator[object]:  # noqa: WPS231 - one walk through every kind of type
-    # Every type a value of form is made of, form first, each once: what an alias or a NewType
-    # stands for, the arguments of a generic and the fields of a class. A Literal holds values and
-    # Annotated metadata, not types; a class whose annotations name what is not defined has no parts.
+    """Every type a value of form is made of, form first, each once.
+
+    What an alias or a NewType stands for, the arguments of a generic and the fields of
+    a class. A Literal holds values and Annotated metadata, not types; a class whose
+    annotations name what is not defined has no parts.
+    """
     seen: dict[int, object] = {}  # by id, as an argument such as the [int] of Callable[[int], str] has no hash
     stack = [form]
     while stack:
@@ -163,9 +166,12 @@ def _type_parts(form: object) -> Iterator[object]:  # noqa: WPS231 - one walk th
 
 
 def expect_json_type(codec_name: str, form: object) -> None:  # noqa: WPS231 - every part of the type, and the keys of its dicts
-    # A codec of JSON gives back dict, list, str, numbers, bool and None: refuse a type with a part
-    # it would read back as another one, at any depth, such as a dataclass, a tuple, or a dict of
-    # int keys, which JSON writes as str. Any and object promise no type: whatever comes back is it.
+    """Refuse a type with a part a codec of JSON would read back as another one.
+
+    JSON gives back dict, list, str, numbers, bool and None, so at any depth a dataclass,
+    a tuple, or a dict of int keys, which JSON writes as str, is refused. Any and object
+    promise no type: whatever comes back is it.
+    """
     for part in _type_parts(form):
         origin = get_origin(part)
         kind = part if origin is None else origin
@@ -190,7 +196,7 @@ def expect_json_type(codec_name: str, form: object) -> None:  # noqa: WPS231 - e
 
 
 def parse_secret(name: str, secret: object) -> bytes:
-    # a key of HMAC-SHA256, as bytes: shorter than 16 it is too easy to guess
+    """A key of HMAC-SHA256, as bytes: shorter than 16 it is too easy to guess."""
     expect_type(name, secret, str | bytes)
     key = secret.encode() if isinstance(secret, str) else secret
     if len(key) < _MIN_SECRET:  # type: ignore[arg-type]  # bytes: expect_type just checked it
@@ -206,7 +212,7 @@ def parse_seconds(
     *,
     positive: bool = False,
 ) -> float:
-    # a duration as seconds, 0 or more, or with positive more than 0; meaning says what it is for
+    """A duration as seconds, 0 or more, or with positive more than 0; meaning says what it is for."""
     expect_type(name, value, DURATION)
     seconds = duration_seconds(value)  # type: ignore[arg-type]  # a Duration: expect_type just checked it
     if seconds < 0 or (positive and not seconds):
@@ -221,7 +227,7 @@ def parse_timeout(
     value: object,
     meaning: str,
 ) -> float | None:
-    # the most to wait; None waits as long as it takes
+    """The most to wait; None waits as long as it takes."""
     return None if value is None else parse_seconds(name, value, meaning)
 
 
@@ -230,7 +236,7 @@ def parse_ttl(
     value: object,
     meaning: str,
 ) -> float | Callable[[Any], Duration]:
-    # how long a result is fresh: a duration, or a function of the result that returns one
+    """How long a result is fresh: a duration, or a function of the result that returns one."""
     expect_type(name, value, DURATION | FUNCTION)
     if callable(value):
         return value  # pyright: ignore[reportReturnType]  # its result is checked when it returns one
@@ -245,7 +251,7 @@ def parse_int(
     high: int | None = None,
     meaning: str,
 ) -> int:
-    # an int from low to high; with no high, any from low up
+    """An int from low to high; with no high, any from low up."""
     expect_type(name, value, int)
     number: int = value  # type: ignore[assignment]  # an int: expect_type just checked it
     if number < low or (high is not None and number > high):

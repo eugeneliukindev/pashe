@@ -209,7 +209,7 @@ class SQLiteBackend(Backend):
 
     @contextlib.contextmanager
     def _transaction(self) -> Generator[None]:
-        # IMMEDIATE takes the write lock at once: a read and the write after it see no other writer between
+        """IMMEDIATE takes the write lock at once: a read and the write after it see no other writer between."""
         self._connection.execute("BEGIN IMMEDIATE")
         with self._connection:  # commits, or rolls back when the block or the commit fails
             yield
@@ -314,8 +314,12 @@ def _expires_at(now: float, ttl: float | None) -> float | None:
 
 @contextlib.contextmanager
 def _translated_errors() -> Generator[None]:
-    # A file locked too long, full, unreadable or not a database is a failure of the backend: an
-    # OperationalError, or a bare DatabaseError for a corrupt file. Its other subclasses are bugs.
+    """Raise a failure of the database file as BackendError.
+
+    A file locked too long, full, unreadable or not a database is a failure of the
+    backend: an OperationalError, or a bare DatabaseError for a corrupt file. Its other
+    subclasses are bugs.
+    """
     try:
         yield
     except _BUGS:

@@ -19,32 +19,34 @@ class AsyncSharedLoads:
     __slots__ = ("_loads",)
 
     def __init__(self) -> None:
-        self._loads: dict[Hashable, asyncio.Future[Any]] = {}
+        # None: a load no caller waits for yet; the first waiter makes the future, as most loads have none
+        self._loads: dict[Hashable, asyncio.Future[Any] | None] = {}
 
     async def share[T](self, key: Hashable, run: Callable[[], Awaitable[T]]) -> T:
-        load = self._loads.get(key)
-        while load is not None:
+        while key in self._loads:
+            load = self._loads[key]
+            if load is None:
+                load = asyncio.get_running_loop().create_future()
+                self._loads[key] = load
             try:
                 shared: T = await asyncio.shield(load)  # a waiter that is cancelled leaves alone
             except _LeaderLeft:
-                load = self._loads.get(key)
-            else:
-                return shared
+                continue  # the leader was cancelled: load, or wait for the one that does
+            return shared
 
-        load = asyncio.get_running_loop().create_future()
-        self._loads[key] = load
+        self._loads[key] = None
         try:
             result = await run()
         except asyncio.CancelledError:
-            _fail(load, _LeaderLeft())
+            _fail(self._loads.pop(key), _LeaderLeft())
             raise
         except BaseException as error:
-            _fail(load, error)
+            _fail(self._loads.pop(key), error)
             raise
-        finally:
-            del self._loads[key]  # noqa: WPS420 - the waiters hold the future; pop would return one nobody awaits
 
-        load.set_result(result)
+        load = self._loads.pop(key)
+        if load is not None:
+            load.set_result(result)
         return result
 
 
@@ -58,8 +60,11 @@ class AsyncLoadLimit:
         self._held = contextvars.ContextVar(f"pashe_slot_{id(self)}", default=False)
 
     def slot(self, *, wait: bool) -> contextlib.AbstractAsyncContextManager[object]:
-        # with no limit, or inside a load of the same slots, a context that does nothing; with every
-        # slot taken, one that waits, or OverloadedError if not wait
+        """A slot of the limit to load in.
+
+        With no limit, or inside a load of the same slots, a context that does nothing; with
+        every slot taken, one that waits, or OverloadedError if not wait.
+        """
         if self._semaphore is None or self._held.get():
             return contextlib.nullcontext()
         if self._semaphore.locked() and not wait:
@@ -115,7 +120,7 @@ def aexpect_side(
     action: Literal["decorate", "cache"],
     owner: object,
 ) -> None:
-    # owner: the cache, the locks or the limiter whose decorator takes function; the error names its sync twin
+    """``owner``: the cache, the locks or the limiter whose decorator takes function; the error names its sync twin."""
     if not is_async(function):
         twin = type(owner).__name__.removeprefix("Async")
         msg = f"{getattr(function, '__qualname__', function)} is not async: {action} it with {twin}"
@@ -126,6 +131,9 @@ class _LeaderLeft(Exception):  # noqa: N818 - not an error: tells a waiter to lo
     """The caller that loaded was cancelled: a caller that waited for it loads instead."""
 
 
-def _fail(load: asyncio.Future[Any], error: BaseException) -> None:
+def _fail(load: asyncio.Future[Any] | None, error: BaseException) -> None:
+    """None: no caller waited for the load."""
+    if load is None:
+        return
     load.set_exception(error)
     load.exception()  # retrieved, so a shared load nobody waited for logs no "never retrieved"

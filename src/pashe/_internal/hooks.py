@@ -14,7 +14,7 @@ class Hooks(Hook):
     __slots__ = ("_hooks",)
 
     def __init__(self, hooks: list[Hook] | tuple[Hook, ...]) -> None:
-        # the hooks argument of a public class, checked here, where every one of them comes in
+        """The hooks argument of a public class, checked here, where every one of them comes in."""
         expect_type("hooks", hooks, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
         expect_item_types("hooks", hooks, Hook)
 

@@ -199,8 +199,11 @@ class AsyncRateLimiter:
         limit: SlidingWindow,
         cost: int,
     ) -> RateLimitState:
-        # Counters of fixed windows: the current one counts in full, the previous one by how much of it
-        # the sliding window still overlaps.
+        """Count with counters of fixed windows.
+
+        The current one counts in full, the previous one by how much of it the sliding
+        window still overlaps.
+        """
         now = self._clock()
         window = int(now // limit.per)
         previous_window = window - 1
@@ -261,9 +264,12 @@ def _retry_after(
     now: float,
     cost: int,
 ) -> float:
-    # How long until the weighted calls leave room for this one: the current window must end
-    # first if it alone is too full, else the previous one must slide out far enough. A few steps of
-    # the float of now more, so a call after the wait lands past the edge, not on it.
+    """How long until the weighted calls leave room for this one.
+
+    The current window must end first if it alone is too full, else the previous one
+    must slide out far enough. A few steps of the float of now more, so a call after
+    the wait lands past the edge, not on it.
+    """
     room = limit.calls - cost
     elapsed = now % limit.per
     past_the_edge = _PAST_THE_EDGE * math.ulp(now)

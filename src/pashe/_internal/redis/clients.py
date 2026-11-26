@@ -46,7 +46,7 @@ return redis.call("INCRBY", KEYS[1], ARGV[1])
 
 @contextlib.contextmanager
 def translated_errors() -> Generator[None]:
-    # the errors of redis-py raised as those of pashe; an async call awaits in it as a sync one does
+    """The errors of redis-py raised as those of pashe; an async call awaits in it as a sync one does."""
     try:
         yield
     except RedisError as error:

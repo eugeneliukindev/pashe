@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import random
-from dataclasses import replace
 from typing import TYPE_CHECKING, Final, final
 
 from pashe._internal.cache.entry import Lookup, pack, unpack
@@ -39,7 +38,7 @@ class AsyncStorage:
         fallback: Fallback[AsyncBackend] | None,
         hooks: Hook,
     ) -> None:
-        # fallback: under the prefix of the cache, as its backend is; the cache closes it
+        """``fallback``: under the prefix of the cache, as its backend is; the cache closes it."""
         self._backend = backend
         self._fallback = fallback
         self._hooks = hooks
@@ -61,9 +60,13 @@ class AsyncStorage:
         return self._lookup(key, raw, tag_generations)
 
     async def lookup_many(self, keys_and_tags: Sequence[KeyAndTags]) -> list[Lookup]:
-        # the entries of a batch and the generations of their tags, in one call to the backend
+        """The entries of a batch and the generations of their tags, in one call to the backend."""
+        counters = list(dict.fromkeys(counter for _, tags in keys_and_tags for counter in _counters(tags)))
         try:
-            found = await self._read_many(keys_and_tags)
+            raws = await self._backend.get_many([*(key for key, _ in keys_and_tags), *counters])
+            by_counter = dict(
+                zip(counters, await self._tag_generations(counters, raws[len(keys_and_tags) :]), strict=True)
+            )
         except BackendError as error:
             self._hooks.on_error(Failure(Operation.GET_MANY, "", error))
             return [
@@ -71,13 +74,15 @@ class AsyncStorage:
                 for key, _ in keys_and_tags
             ]
         return [
-            self._lookup(key, raw, tag_generations)
-            for (key, _), (raw, tag_generations) in zip(keys_and_tags, found, strict=True)
+            self._lookup(key, raw, tuple(by_counter[counter] for counter in _counters(tags)))
+            for (key, tags), raw in zip(keys_and_tags, raws, strict=False)  # raws: the entries, then the counters
         ]
 
     async def keep(self, lookup: Lookup, stored: Stored | None) -> bool:
-        # Whether stored is kept, in the backend or in the fallback; None, what the policy does not
-        # store, keeps nothing.
+        """Whether stored is kept, in the backend or in the fallback.
+
+        None, what the policy does not store, keeps nothing.
+        """
         if stored is None:
             return False
         if lookup.from_fallback:
@@ -104,9 +109,12 @@ class AsyncStorage:
             await self._keep_in_fallback(key, stored)  # noqa: WPS476 - memory, nothing to win at once
 
     async def replace(self, lookup: Lookup, stored: Stored | None) -> None:
-        # What refresh loaded in place of what lookup found: None, what the policy does not store,
-        # deletes it, as the old result must not answer after a refresh. A failing backend raises,
-        # unless the lookup already went to the fallback, which keeps nothing to delete.
+        """Keep what refresh loaded in place of what lookup found.
+
+        None, what the policy does not store, deletes it, as the old result must not answer
+        after a refresh. A failing backend raises, unless the lookup already went to the
+        fallback, which keeps nothing to delete.
+        """
         if stored is not None:
             await self.keep(lookup, stored)
         elif not lookup.from_fallback:
@@ -124,18 +132,21 @@ class AsyncStorage:
         tags: tuple[str, ...],
         stored: Stored | None,
     ) -> None:
-        # None, what the policy does not store, deletes what is stored
+        """None, what the policy does not store, deletes what is stored."""
         if stored is None:
             await self._backend.delete(key)
             return
-        tag_generations = await self._read_tag_generations(tags)
+        tag_generations: Generations = ()
+        if tags:
+            counters = _counters(tags)
+            tag_generations = await self._tag_generations(counters, await self._backend.get_many(counters))
         await self._backend.set(key, _packed(stored, tag_generations), ttl=stored.storage_seconds)
 
     async def delete(self, key: str) -> bool:
         return await self._backend.delete(key)
 
     async def invalidate_tags(self, tags: Sequence[str]) -> None:
-        # An invalidation is rare: one write after another is fine.
+        # an invalidation is rare: one write after another is fine
         try:
             for counter in _counters(tags):
                 await self._backend.set_if_absent(counter, _random_start())  # noqa: WPS476 - INCRBY alone would start at 1
@@ -151,7 +162,7 @@ class AsyncStorage:
         *,
         from_fallback: bool = False,
     ) -> Lookup:
-        # an entry cut short, of another format, or of a tag invalidated after it was stored, is no entry
+        """An entry cut short, of another format, or of a tag invalidated after it was stored, is no entry."""
         if raw is None:
             return Lookup(key, None, tag_generations, from_fallback)
         try:
@@ -162,7 +173,7 @@ class AsyncStorage:
         return Lookup(key, entry if entry.tag_generations == tag_generations else None, tag_generations, from_fallback)
 
     async def _fallback_get(self, key: str) -> bytes | None:
-        # None with no fallback, or one that fails too
+        """None with no fallback, or one that fails too."""
         if self._fallback is None:
             return None
         try:
@@ -172,8 +183,10 @@ class AsyncStorage:
             return None
 
     async def _keep_in_fallback(self, key: str, stored: Stored) -> bool:
-        # Untagged, as no invalidation reaches the fallback while the backend is down; kept while
-        # fresh, or for the ttl of the fallback if that is shorter.
+        """Keep stored in the fallback, untagged, as no invalidation reaches it while the backend is down.
+
+        Kept while fresh, or for the ttl of the fallback if that is shorter.
+        """
         if self._fallback is None:
             return False
         fresh_seconds, ttl = stored.fresh_seconds, self._fallback.ttl
@@ -192,21 +205,6 @@ class AsyncStorage:
         counters = _counters(tags)
         raws = await self._backend.get_many([key, *counters])
         return raws[0], await self._tag_generations(counters, raws[1:])
-
-    async def _read_many(self, keys_and_tags: Sequence[KeyAndTags]) -> list[_Read]:
-        counters = list(dict.fromkeys(counter for _, tags in keys_and_tags for counter in _counters(tags)))
-        raws = await self._backend.get_many([*(key for key, _ in keys_and_tags), *counters])
-        by_counter = dict(zip(counters, await self._tag_generations(counters, raws[len(keys_and_tags) :]), strict=True))
-        return [
-            (raw, tuple(by_counter[counter] for counter in _counters(tags)))
-            for (_, tags), raw in zip(keys_and_tags, raws, strict=False)  # raws: the entries, then the counters
-        ]
-
-    async def _read_tag_generations(self, tags: Sequence[str]) -> Generations:
-        if not tags:
-            return ()
-        counters = _counters(tags)
-        return await self._tag_generations(counters, await self._backend.get_many(counters))
 
     async def _tag_generations(self, counters: Sequence[str], raws: Sequence[bytes | None]) -> Generations:
         parsed = [_parse(raw) for raw in raws if raw is not None]
@@ -242,4 +240,4 @@ def _parse(raw: bytes) -> int:
 
 
 def _packed(stored: Stored, tag_generations: Generations) -> bytes:
-    return pack(replace(stored.entry, tag_generations=tag_generations))
+    return pack(stored.entry._replace(tag_generations=tag_generations))

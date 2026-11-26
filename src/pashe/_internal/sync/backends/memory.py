@@ -320,7 +320,10 @@ class MemoryBackend(Backend):
         self._evict()
 
     def _evict(self) -> None:
-        # The least recently used entry goes first; a live lock or counter only once nothing else is left.
+        """Evict the least recently used entries until the limits hold.
+
+        A live lock or counter goes only once nothing else is left.
+        """
         # shortcut: scans past the live locks and counters at the old end, fine while they are few; keep them apart if not
         now = self._clock()
         while len(self._entries) > self._max_entries or (self._max_bytes is not None and self._used > self._max_bytes):

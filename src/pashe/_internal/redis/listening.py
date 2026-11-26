@@ -41,7 +41,7 @@ class ReconnectBackoff:
 
 
 def listen_failure(error: Exception) -> Failure:
-    # an error of a listener other than a lost connection, such as of the near cache it calls: told, not dropped
+    """An error of a listener other than a lost connection, such as of the near cache it calls: told, not dropped."""
     return Failure(Operation.LISTEN, "", error)
 
 
@@ -51,7 +51,7 @@ def listening_connection[C](connection_class: type[C], settings: Mapping[str, ob
 
 
 def tracking_command(client_id: object, prefix: str) -> list[str | int]:
-    # CLIENT TRACKING that redirects to the connection whose CLIENT ID answered client_id
+    """CLIENT TRACKING that redirects to the connection whose CLIENT ID answered client_id."""
     if not isinstance(client_id, int):
         msg = f"CLIENT ID answered {client_id!r}, not the id of a connection"
         raise ResponseError(msg)  # a RedisError: the listener reconnects

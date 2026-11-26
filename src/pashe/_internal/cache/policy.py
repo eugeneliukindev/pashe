@@ -43,7 +43,7 @@ class Policy:
         store: Store,
         clock: Callable[[], float],
     ) -> Self:
-        # the options a user gave a cached function, with the names of its arguments
+        """The options a user gave a cached function, with the names of its arguments."""
         ttl = parse_ttl("ttl", ttl, _TTL_MEANING)
         expect_type("stale", stale, Stale)
         expect_type("stampede", stampede, Stampede)
@@ -81,7 +81,10 @@ class Policy:
         store: Store,
         clock: Callable[[], float],
     ) -> Self:
-        # the options of a batch function: it keeps no "not found", shares no loads and reloads nothing in the background
+        """The options of a batch function.
+
+        It keeps no "not found", shares no loads and reloads nothing in the background.
+        """
         policy = cls.of(ttl=ttl, stale=stale, stampede=stampede, negative=Negative(), store=store, clock=clock)
         refused = [
             name
@@ -101,7 +104,7 @@ class Policy:
 
     @property
     def stale_seconds(self) -> float:
-        # how long past fresh a result may still answer: the longest window of Stale
+        """How long past fresh a result may still answer: the longest window of Stale."""
         return max(self.stale.while_revalidate, self.stale.if_error, self.stale.if_slow)
 
     def add_jitter(self, seconds: float) -> float:
@@ -114,15 +117,15 @@ class Policy:
         return isinstance(error, self.negative.on)  # an empty tuple of Negative() matches no error
 
     def should_store_loaded(self, result: object, load_seconds: float) -> bool:
-        # a loaded result: only if its load took Store.slower_than at least
+        """A loaded result: only if its load took Store.slower_than at least."""
         return load_seconds >= self.store.slower_than and self.should_store(result)
 
     def should_store(self, result: object) -> bool:
-        # a result set by hand: how long a load takes does not count
+        """A result set by hand: how long a load takes does not count."""
         return self.store.when is None or self.store.when(result)
 
     def freshness_lifetime(self, result: object) -> float | None:
-        # None when no window would ever answer with the result; a negative ttl of the user raises
+        """None when no window would ever answer with the result; a negative ttl of the user raises."""
         fresh = duration_seconds(self.ttl(result))
         if fresh < 0:
             msg = f"ttl returned {fresh}; leave a result out with Store(when=...)"
@@ -132,11 +135,11 @@ class Policy:
         return self.add_jitter(fresh)
 
     def negative_lifetime(self) -> float | None:
-        # None when Negative keeps no "not found"
+        """None when Negative keeps no "not found"."""
         return self.add_jitter(self.negative.ttl) if self.negative.on else None
 
     def storage_seconds(self, fresh_seconds: float) -> float:
-        # how long the backend keeps a result: fresh, then its stale windows
+        """How long the backend keeps a result: fresh, then its stale windows."""
         return fresh_seconds + self.stale_seconds
 
     def answer_for(
@@ -145,7 +148,7 @@ class Policy:
         *,
         hit: CacheStatus = CacheStatus.HIT,
     ) -> Answer | None:
-        # hit: the status of a fresh answer, FALLBACK for an entry of the fallback
+        """``hit``: the status of a fresh answer, FALLBACK for an entry of the fallback."""
         if stored is None:
             return None
         entry = stored.entry
@@ -159,8 +162,10 @@ class Policy:
         return None
 
     def should_revalidate(self, answer: Answer) -> bool:
-        # whether the answer is reloaded in the background: stale while revalidate, or fresh in
-        # the last seconds of Stampede.revalidate_before
+        """Whether the answer is reloaded in the background.
+
+        Stale while revalidate, or fresh in the last seconds of Stampede.revalidate_before.
+        """
         if answer.status is CacheStatus.STALE_WHILE_REVALIDATE:
             return True
         ahead = self.stampede.revalidate_before
@@ -179,8 +184,10 @@ class Policy:
         load_seconds: float,
         has_stale_answer: bool,
     ) -> Answer | None:
-        # The stale result that answers instead of error, if a window of Stale lets it now;
-        # has_stale_answer: the load skipped a full limit of loads, as this result could answer.
+        """The stale result that answers instead of error, if a window of Stale lets it now.
+
+        ``has_stale_answer``: the load skipped a full limit of loads, as this result could answer.
+        """
         within_if_error, within_if_slow = self.stale_windows(stored)
         if isinstance(error, OverloadedError) and has_stale_answer:
             status = CacheStatus.STALE_IF_SLOW if within_if_slow else CacheStatus.STALE_IF_ERROR

@@ -32,6 +32,9 @@ _LOCALS: Final = "<locals>"  # what a qualified name has for a function defined 
 _LAMBDA: Final = "<lambda>"  # the qualified name of every lambda
 
 type _Parsed = tuple[str, str | None, str | None, str | None]  # what Formatter.parse gives a part
+type _Part = tuple[
+    str, int | str | None, str, str | None
+]  # a part read once: its field as a position, or a name or a path
 
 
 @final
@@ -130,13 +133,13 @@ class KeyAndTags(NamedTuple):
 
 
 def parse_key(key: str | None, *, key_secret: bytes | None) -> KeyTemplate | None:
-    # the key= of a decorator: a template, or None for the name of the function and its arguments
+    """The key= of a decorator: a template, or None for the name of the function and its arguments."""
     expect_type("key", key, str | None)
     return None if key is None else KeyTemplate(key, key_secret=key_secret)
 
 
 def parse_tags(tags: list[str] | tuple[str, ...], *, key_secret: bytes | None) -> tuple[KeyTemplate, ...]:
-    # the tags= of a decorator: not a str, which would split into one tag per letter
+    """The tags= of a decorator: not a str, which would split into one tag per letter."""
     expect_type("tags", tags, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
     expect_item_types("tags", tags, str)
     return tuple(KeyTemplate(tag, key_secret=key_secret) for tag in tags)
@@ -148,7 +151,7 @@ class KeyTemplate:
     __slots__ = ("_formatter", "_parts", "_text", "names")
 
     def __init__(self, text: str, *, key_secret: bytes | None) -> None:
-        # key_secret: of the cache, for {name:hmac}
+        """``key_secret``: of the cache, for {name:hmac}."""
         formatter = _KeyFormatter(key_secret)
         names: set[str] = set()
         parsed = list(formatter.parse(text))
@@ -164,37 +167,50 @@ class KeyTemplate:
         self._parts = self._precompile(parsed)
         self.names: frozenset[str] = frozenset(names)
 
-    def render(self, args: Sequence[object], kwargs: Mapping[str, object]) -> str:
+    def render(self, args: Sequence[object], kwargs: Mapping[str, object]) -> str:  # noqa: WPS231 - a field by position, by name or by path, read without parsing it
         if self._parts is None:
             return self._formatter.vformat(self._text, args, kwargs)
         rendered: list[str] = []
         for literal, field, spec, conversion in self._parts:
             rendered.append(literal)
-            if field is not None:
+            if field is None:
+                continue
+            if isinstance(field, int):
+                value = args[field]
+            elif field.isidentifier():  # a plain name, as most fields are
+                value = kwargs[field]
+            else:  # a path, such as user.id or user[id]
                 value = self._formatter.get_field(field, args, kwargs)[0]
-                rendered.append(
-                    self._formatter.format_field(self._formatter.convert_field(value, conversion), spec or "")
-                )
+            if conversion is not None:
+                value = self._formatter.convert_field(value, conversion)
+            rendered.append(self._formatter.format_field(value, spec))
         return "".join(rendered)
 
     @override
     def __str__(self) -> str:
         return repr(self._text)
 
-    def _precompile(self, parsed: list[_Parsed]) -> list[_Parsed] | None:
-        # The template as Formatter.vformat reads it on every call, read once: a field {} numbered as
-        # vformat numbers it. None leaves the rare template to vformat: a field inside a spec, or {}
-        # mixed with numbered fields, which vformat refuses.
+    def _precompile(self, parsed: list[_Parsed]) -> list[_Part] | None:  # noqa: WPS231 - the template read once, each field as a position or a name
+        """The template as Formatter.vformat reads it on every call, read once.
+
+        A field {} is numbered as vformat numbers it. None leaves the rare template to
+        vformat: a field inside a spec, or {} mixed with numbered fields, which vformat refuses.
+        """
         if any(spec and "{" in spec for _, _, spec, _ in parsed):
             return None
         fields = [field for _, field, _, _ in parsed if field is not None]
         if "" in fields and any(field[:1].isdigit() for field in fields):
             return None
         numbers = itertools.count()
-        return [
-            (literal, str(next(numbers)) if field == "" else field, spec, conversion)
-            for literal, field, spec, conversion in parsed
-        ]
+        parts: list[_Part] = []
+        for literal, field, spec, conversion in parsed:
+            position: int | str | None = field
+            if field == "":
+                position = next(numbers)
+            elif field is not None and field.isdigit():
+                position = int(field)
+            parts.append((literal, position, spec or "", conversion))
+        return parts
 
 
 @final
@@ -219,7 +235,7 @@ def qualified_name(function: Callable[..., object]) -> str:
 
 
 def key_name(function: Callable[..., object]) -> str:
-    # the qualified name a key starts with when no template names it: a lambda has none of its own
+    """The qualified name a key starts with when no template names it: a lambda has none of its own."""
     name = qualified_name(function)
     if name.endswith(_LAMBDA):
         msg = f"{name} is a lambda, and every lambda of its module would share its keys: pass key="

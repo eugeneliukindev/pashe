@@ -3,13 +3,13 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import time
-from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Final, Self, final
+from typing import TYPE_CHECKING, Final, NamedTuple, Self, final
 
 from pashe.hooks import CacheStatus, Hook, Outcome
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
+    from types import TracebackType
 
     from pashe._internal.cache.entry import Stored
 
@@ -50,48 +50,51 @@ def no_cache() -> Generator[None]:
 
 
 def in_no_cache() -> bool:
-    # whether the context runs inside no_cache
+    """Whether the context runs inside no_cache."""
     return _NO_CACHE.get()
 
 
 @final
 class Stopwatch:
-    # the seconds the function ran for one call, a failed load included: what its Outcome reports
-    __slots__ = ("seconds",)
+    # The seconds the function ran for one call, a failed load included, as its Outcome reports:
+    # each with block around a load adds its time.
+    __slots__ = ("_start", "seconds")
 
     def __init__(self) -> None:
         self.seconds: float = 0
+        self._start: float = 0
 
-    @contextlib.contextmanager
-    def running(self) -> Generator[None]:
-        start = time.perf_counter()
-        try:
-            yield
-        finally:
-            self.seconds += time.perf_counter() - start
+    def __enter__(self) -> None:
+        self._start = time.perf_counter()
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.seconds += time.perf_counter() - self._start
 
 
 @final
-@dataclass(frozen=True, slots=True)
-class Call:
+class Call(NamedTuple):
     # one call of a cached function, as it goes from the read to the store
     key: str
-    tags: tuple[str, ...] = ()
-    changes_at_start: int = 0  # the sets and deletes by hand of its function cache when it started
-    stopwatch: Stopwatch = field(default_factory=Stopwatch)
+    tags: tuple[str, ...]
+    changes_at_start: int  # the sets and deletes by hand of its function cache when it started
+    stopwatch: Stopwatch
 
-    def restarted(self) -> Call:
-        # the same call for a load apart from it, which times itself
-        return replace(self, stopwatch=Stopwatch())
+    def restarted(self) -> Self:
+        """The same call for a load apart from it, which times itself."""
+        return self._replace(stopwatch=Stopwatch())
 
 
 @final
-@dataclass(frozen=True, slots=True)
-class Answer:
+class Answer(NamedTuple):
     result: object  # decoded as the return type
     status: CacheStatus
     load_seconds: float = 0
-    stale_at: float | None = None  # when the result stops being fresh; None if it was not stored
+    stale_at: float | None = None  # when the result stops being fresh; None if it was not kept
 
     @classmethod
     def of(

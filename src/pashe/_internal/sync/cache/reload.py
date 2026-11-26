@@ -46,7 +46,7 @@ class Reload:
         self._hooks = hooks
 
     def start(self, call: Call, load_and_store: LoadAndStore) -> None:
-        # Revalidate in the background, unless another call does already; the call answers at once.
+        """Revalidate in the background, unless another call does already; the call answers at once."""
         try:  # held as long as a load in the background may take, not the window: a slow load still stores
             lease = self._load_locks.try_take_reload(call.key, _LOCK_SECONDS)
         except BackendError as error:
@@ -62,8 +62,11 @@ class Reload:
             lease.release()  # the cache is closing
 
     def wait_at_most_slow_after(self, call: Call, load_and_store: LoadAndStore) -> Answer | None:
-        # The load, if it ends within Stale.slow_after; None when it is slower or another call
-        # revalidates already, and the stale result answers. A slower load goes on in the background.
+        """The load, if it ends within Stale.slow_after.
+
+        None when it is slower or another call revalidates already, and the stale result
+        answers. A slower load goes on in the background.
+        """
         lease: Lease | None
         try:
             lease = self._load_locks.try_take_reload(call.key, _LOCK_SECONDS)

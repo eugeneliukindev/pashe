@@ -90,14 +90,16 @@ class BatchCache[K: Hashable, V]:
         missing: list[_Pending[K]],
         load: BatchFunction[K, V],
     ) -> list[tuple[Lookup, Stored]]:
-        # Loads the missing items in one call and answers them with what it returned, which every
-        # item took whole; what is to be kept.
+        """Load the missing items in one call and answer them with what it returned.
+
+        Every item takes the result whole; what it returns is to be kept.
+        """
         if not missing:
             return []
 
         stopwatch = Stopwatch()
         try:
-            with self._load_limit.slot(wait=True), stopwatch.running():
+            with self._load_limit.slot(wait=True), stopwatch:
                 loaded = load([pending.item for pending in missing])
         except Exception as error:
             if not self._answer_stale(missing, error):
@@ -112,17 +114,23 @@ class BatchCache[K: Hashable, V]:
                 continue
             result = loaded[pending.item]
             stored = self._entry_format.encode_loaded(result, load_seconds=stopwatch.seconds, key=key)
-            pending.answer(result if stored is None else stored.result)
+            pending.answer(result)
             self._reporter.report(
-                key, CacheStatus.MISS, load_seconds=stopwatch.seconds, stale_at=stored and stored.entry.stale_at
+                key,
+                CacheStatus.MISS,
+                load_seconds=stopwatch.seconds,
+                stale_at=None if stored is None else stored.entry.stale_at,
             )
             if stored is not None:
                 to_keep.append((pending.lookup, stored))
         return to_keep
 
     def _answer_stale(self, missing: list[_Pending[K]], error: Exception) -> bool:
-        # The load failed: stale results answer, if each item it was for has one in Stale.if_error;
-        # the items are one call, so with one of them missing the error goes to the caller.
+        """Answer with stale results after the load failed; whether they all answered.
+
+        Each item it was for needs one in Stale.if_error: the items are one call, so with
+        one of them missing the error goes to the caller.
+        """
         answers: list[Answer] = []
         for pending in missing:
             answer = (

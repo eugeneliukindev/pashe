@@ -2,11 +2,10 @@
 # src/pashe/_internal/async_/cache/function_cache.py
 from __future__ import annotations
 
-import dataclasses
 import functools
 from typing import TYPE_CHECKING, final
 
-from pashe._internal.cache.call import Answer, Call, in_no_cache
+from pashe._internal.cache.call import Answer, Call, Stopwatch, in_no_cache
 from pashe._internal.sync.cache.reload import Reload
 from pashe._internal.sync.threads import LoadLimit, SharedLoads
 from pashe.errors import BackendError, NotFoundError
@@ -76,7 +75,7 @@ class FunctionCache[V]:
         tags: tuple[str, ...],
         load: Load[V],
     ) -> V:
-        call = Call(key, tags, changes_at_start=self._changes)
+        call = Call(key, tags, self._changes, Stopwatch())
         try:
             if in_no_cache():  # it shares no answer: another call may answer from the backend
                 answer = self._load_and_store(call, self._storage.lookup(key, tags), load)
@@ -100,7 +99,7 @@ class FunctionCache[V]:
         tags: tuple[str, ...],
         load: Load[V],
     ) -> V:
-        call = Call(key, tags, changes_at_start=self._changes)
+        call = Call(key, tags, self._changes, Stopwatch())
         lookup = self._storage.lookup(key, tags)
         result = self._run(call, load, has_stale_answer=False)
         stored = self._entry_format.encode_loaded(result, load_seconds=call.stopwatch.seconds, key=key)
@@ -109,7 +108,7 @@ class FunctionCache[V]:
         return result
 
     def get(self, key: str, tags: tuple[str, ...]) -> V | None:
-        # The fresh result alone, loading nothing: a failing backend raises, as there is no load to answer with.
+        """The fresh result alone, loading nothing: a failing backend raises, as there is no load to answer with."""
         if in_no_cache():
             self._reporter.report(key, CacheStatus.MISS)
             return None
@@ -163,8 +162,8 @@ class FunctionCache[V]:
         *,
         has_stale_answer: bool,
     ) -> V:
-        # a stale result that can answer skips a full limit of loads
-        with self._load_limit.slot(wait=not has_stale_answer), call.stopwatch.running():
+        """A stale result that can answer skips a full limit of loads."""
+        with self._load_limit.slot(wait=not has_stale_answer), call.stopwatch:
             return load()
 
     def _load_and_store(
@@ -196,7 +195,7 @@ class FunctionCache[V]:
         lookup: Lookup,
         stored: Stored | None,
     ) -> bool:
-        # whether it kept stored
+        """Whether it kept stored."""
         if call.changes_at_start != self._changes:  # set or deleted by hand while it loaded: what it loaded is old
             return False
         return self._storage.keep(lookup, stored)
@@ -223,7 +222,7 @@ class FunctionCache[V]:
                 answer = self._policy.answer_for(self._entry_format.decode(lookup))
                 if answer is not None:  # a "not found" the load before this one kept answers as it is
                     hit = answer.status is not CacheStatus.NOT_FOUND
-                    return dataclasses.replace(answer, status=CacheStatus.HIT) if hit else answer
+                    return answer._replace(status=CacheStatus.HIT) if hit else answer
             return self._load_and_store(call, lookup, load)
         finally:
             if lease is not None:  # with no timeout it waits until it takes the lock
@@ -237,7 +236,7 @@ class FunctionCache[V]:
         *,
         stored: Stored,
     ) -> Answer:
-        # a result past its TTL that a window of Stale keeps: it answers if the load fails or is slow
+        """A result past its TTL that a window of Stale keeps: it answers if the load fails or is slow."""
         if_error, if_slow = self._policy.stale_windows(stored)
         has_stale_answer = if_error or if_slow
         load_and_store = functools.partial(

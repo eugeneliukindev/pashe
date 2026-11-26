@@ -72,7 +72,7 @@ def add_cache_headers(
     cache_control: Directive,
     no_cache: bool,
 ) -> Response:
-    # status is one cacheable took: the transports check it before they hold the body back
+    """``status`` is one cacheable took: the transports check it before they hold the body back."""
     present = {name.lower(): value for name, value in headers}
     etag = present.get(Header.ETAG) or _etag(body)  # hashed only when the endpoint set none
     # .value: a WSGI server, such as wsgiref, takes a name of type str only, not a StrEnum
@@ -95,8 +95,11 @@ def honors_no_cache[R](
     cache_control: str | None,
     pragma: str | None,
 ) -> bool:
-    # whether a request asks past every stored result, with Cache-Control: no-cache or the Pragma of
-    # HTTP/1.0, and allow lets it; max-age=0, which a browser sends on a plain reload, does not
+    """Whether a request asks past every stored result, and allow lets it.
+
+    Cache-Control: no-cache or the Pragma of HTTP/1.0 asks; max-age=0, which a browser
+    sends on a plain reload, does not.
+    """
     if allow is None:
         return False
     asked = _directives(cache_control) | _directives(pragma)
@@ -104,7 +107,7 @@ def honors_no_cache[R](
 
 
 def is_cacheable(status: int) -> bool:
-    # only a 200 gets an ETag and the freshness of its results: another status says nothing they describe
+    """Only a 200 gets an ETag and the freshness of its results: another status says nothing they describe."""
     return status == HTTPStatus.OK
 
 
@@ -130,7 +133,7 @@ def _freshness(
     has_cache_control: bool,
     no_cache: bool,
 ) -> Headers:
-    # A response is as fresh as its shortest-lived result; one that was not stored is not fresh.
+    """A response is as fresh as its shortest-lived result; one that was not stored is not fresh."""
     shortest = min(call.fresh_seconds or 0 for call in calls)
     added: Headers = []
     if not has_cache_control:  # the endpoint decided itself
@@ -153,5 +156,5 @@ def _etag(body: bytes) -> str:
 
 
 def _directives(value: str | None) -> set[str]:
-    # the names of the directives of a header such as Cache-Control, in lower case
+    """The names of the directives of a header such as Cache-Control, in lower case."""
     return {part.partition("=")[0].strip().lower() for part in (value or "").split(",")}

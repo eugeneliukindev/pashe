@@ -306,7 +306,7 @@ class AsyncNearCacheBackend(AsyncBackend):
         value: bytes | None,
         version: int,
     ) -> None:
-        # a copy of what the shared backend answered, unless key was dropped since version was read
+        """A copy of what the shared backend answered, unless key was dropped since version was read."""
         if value is None or self._drops.version(key) != version:
             return
         try:

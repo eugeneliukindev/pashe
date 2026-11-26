@@ -14,7 +14,7 @@ LIMIT: Final = SlidingWindow | FixedWindow  # what isinstance checks a Limit as
 
 
 def parse_cost(limit: Limit, cost: object) -> int:
-    # how many calls of limit a call counts as: more than the limit allows would refuse it every time
+    """How many calls of limit a call counts as: more than the limit allows would refuse it every time."""
     return parse_int(
         "cost",
         cost,

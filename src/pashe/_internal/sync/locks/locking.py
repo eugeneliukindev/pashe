@@ -46,11 +46,11 @@ class Lease:
         self._hooks = hooks
 
     def extend(self, ttl: float) -> bool:
-        # False if the lock expired and may be someone else's now; a failing backend raises
+        """False if the lock expired and may be someone else's now; a failing backend raises."""
         return self._backend.expire_if_equals(self._slot, self._owner, ttl)
 
     def release(self) -> None:
-        # no caller waits for an error of a release: it goes to on_error
+        """No caller waits for an error of a release: it goes to on_error."""
         try:
             shield(self._backend.delete_if_equals(self._slot, self._owner))  # a cancelled caller still releases it
         except BackendError as error:
@@ -69,12 +69,12 @@ class LoadLocks:
         self._hooks = hooks
 
     def take_load(self, key: str, ttl: float) -> Lease | None:
-        # waits while another load of key holds it: None only for a timeout, which it has none of
+        """Waits while another load of key holds it: None only for a timeout, which it has none of."""
         lock_key = KeyPrefix.STAMPEDE_LOCK + key
         return take(self._backend, (lock_key,), ttl, name=lock_key, hooks=self._hooks)
 
     def try_take_reload(self, key: str, ttl: float) -> Lease | None:
-        # None while another reload of key holds it
+        """None while another reload of key holds it."""
         lock_key = KeyPrefix.REVALIDATION_LOCK + key
         return try_take(self._backend, (lock_key,), ttl, name=lock_key, hooks=self._hooks)
 
@@ -88,7 +88,7 @@ def take(
     name: str,
     hooks: Hook,
 ) -> Lease | None:
-    # a place of the lock, waiting while each is taken; None after timeout
+    """A place of the lock, waiting while each is taken; None after timeout."""
     backoff = _Backoff(ttl, timeout)
     lease = try_take(backend, slots, ttl, name=name, hooks=hooks)
     while lease is None:
@@ -108,7 +108,7 @@ def try_take(
     name: str,
     hooks: Hook,
 ) -> Lease | None:
-    # a place of the lock if one is free now
+    """A place of the lock if one is free now."""
     first = random.randrange(len(slots))  # noqa: S311 - spreads the holders over the slots, not a secret
     for slot in (*slots[first:], *slots[:first]):
         owner = secrets.token_hex(_OWNER_BYTES).encode()

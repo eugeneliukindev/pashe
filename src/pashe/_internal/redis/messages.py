@@ -23,8 +23,11 @@ def encode_message(keys: Sequence[str] | None) -> str:
 
 
 def decode_message(data: object) -> list[str] | None:
-    # The keys of a message; None for every key, and for a message pashe cannot read, which drops
-    # every copy. A message of an older pashe also names its sender: it is not read.
+    """The keys of a message.
+
+    None for every key, and for a message pashe cannot read, which drops every copy. A
+    message of an older pashe also names its sender: it is not read.
+    """
     try:
         decoded: object = json.loads(data)  # type: ignore[arg-type]  # a message of another type raises TypeError
     except (TypeError, ValueError):
@@ -42,8 +45,11 @@ def decode_message(data: object) -> list[str] | None:
 
 
 def read_invalidation(received: object) -> Invalidation:
-    # Whether a reply on the tracking connection is a message of tracking, and its keys: None for
-    # every key, as after FLUSHALL, and for a message pashe cannot read, which drops every copy.
+    """Whether a reply on the tracking connection is a message of tracking, and its keys.
+
+    None for every key, as after FLUSHALL, and for a message pashe cannot read, which
+    drops every copy.
+    """
     if not isinstance(received, list):
         return Invalidation(tracked=False, keys=None)
 

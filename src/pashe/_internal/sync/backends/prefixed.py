@@ -20,7 +20,7 @@ class PrefixedBackend(Backend):
 
     @property
     def backend(self) -> Backend:
-        # the backend under the prefix, as the user gave it
+        """The backend under the prefix, as the user gave it."""
         return self._backend
 
     @property

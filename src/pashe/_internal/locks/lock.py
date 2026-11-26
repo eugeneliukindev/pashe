@@ -25,7 +25,7 @@ class BaseLock:
         holders: int,
         hooks: Hook,
     ) -> None:
-        # ttl and timeout in seconds, as parse_lock_ttl and parse_lock_timeout gave them
+        """``ttl`` and timeout in seconds, as parse_lock_ttl and parse_lock_timeout gave them."""
         self._key = key
         self._ttl = ttl
         self._timeout = timeout
@@ -51,7 +51,7 @@ class BaseLock:
 
 
 def lock_slots(key: str, holders: int) -> tuple[str, ...]:
-    # a key in the backend for each holder: the first is the key itself, as a lock of one holder keeps it
+    """A key in the backend for each holder: the first is the key itself, as a lock of one holder keeps it."""
     return (key, *(f"{key}#{slot}" for slot in range(1, holders)))
 
 

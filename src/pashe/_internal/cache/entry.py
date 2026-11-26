@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import struct
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Final, final
+from typing import TYPE_CHECKING, Any, Final, NamedTuple, final, override
 
 from pashe._internal.cache.value_types import fingerprint
 from pashe.errors import CodecError, InvalidOptionsError
@@ -19,6 +18,7 @@ _HEADER: Final = struct.Struct("!dBQH")  # stale_at, flags, type_fingerprint, ho
 _NEGATIVE: Final = 1  # a flag: the entry keeps a "not found"
 _COMPRESSED: Final = 2  # a flag: the payload went through the compressor
 _HEADER_END: Final = len(_VERSION) + _HEADER.size
+_GENERATION_BYTES: Final = 8  # a generation of a tag, as !q packs it
 
 
 type Generations = tuple[int, ...]  # of the tags of a result, in the order of its tags
@@ -58,13 +58,13 @@ class EntryFormat:
         load_seconds: float,
         key: str,
     ) -> Stored | None:
-        # key names a failure for the hooks
+        """``key`` names a failure for the hooks."""
         if not self._policy.should_store_loaded(result, load_seconds):
             return None
         return self._encode(result, key=key)
 
     def encode(self, result: object, *, key: str) -> Stored | None:
-        # a result set by hand: how long a load takes does not count
+        """A result set by hand: how long a load takes does not count."""
         if not self._policy.should_store(result):
             return None
         return self._encode(result, key=key)
@@ -84,7 +84,7 @@ class EntryFormat:
         return Stored(entry, None, lifetime, storage_seconds=lifetime)  # a "not found" is kept only while fresh
 
     def decode(self, lookup: Lookup) -> Stored | None:
-        # None for no entry, or one stored as another type, such as before a deploy changed it
+        """None for no entry, or one stored as another type, such as before a deploy changed it."""
         entry = lookup.entry
         if entry is None or entry.type_fingerprint != self._type_fingerprint:
             return None
@@ -129,8 +129,7 @@ class EntryFormat:
 
 
 @final
-@dataclass(frozen=True, slots=True)
-class Stored:
+class Stored(NamedTuple):
     # an entry with its result; its generations of tags are set where it is stored
     entry: Entry
     result: object  # decoded as the return type
@@ -139,8 +138,7 @@ class Stored:
 
 
 @final
-@dataclass(frozen=True, slots=True)
-class Lookup:
+class Lookup(NamedTuple):
     # What a call found under its key: an entry the generations of its tags still match, or none.
     # A load after it stores with these generations, so a tag invalidated meanwhile makes it a miss.
     key: str
@@ -150,43 +148,40 @@ class Lookup:
 
 
 @final
-@dataclass(frozen=True, slots=True)
-class Entry:
+class Entry(NamedTuple):
     stale_at: float
     negative: bool
     compressed: bool
     type_fingerprint: int
     tag_generations: Generations
-    payload: bytes = field(repr=False)  # the bytes of the result, too long to read in a repr
+    payload: bytes
+
+    @override
+    def __repr__(self) -> str:
+        """The payload by its length: its bytes are too long to read in a repr."""
+        fields = f"stale_at={self.stale_at}, negative={self.negative}, compressed={self.compressed}"
+        tags = f"type_fingerprint={self.type_fingerprint}, tag_generations={self.tag_generations}"
+        return f"Entry({fields}, {tags}, payload=<{len(self.payload)} bytes>)"
 
 
 def pack(entry: Entry) -> bytes:
     count = len(entry.tag_generations)
     flags = _NEGATIVE * entry.negative | _COMPRESSED * entry.compressed  # a bool counts as 0 or 1
     header = _HEADER.pack(entry.stale_at, flags, entry.type_fingerprint, count)
-    return _VERSION + header + struct.pack(f"!{count}q", *entry.tag_generations) + entry.payload
+    generations = struct.pack(f"!{count}q", *entry.tag_generations) if count else b""  # most results have no tags
+    return _VERSION + header + generations + entry.payload
 
 
 def unpack(raw: bytes) -> Entry:
     if not raw.startswith(_VERSION):
         msg = "not a cached result of this format"
         raise CodecError(msg)
-
-    stale_at, flags, type_fingerprint, tag_count = _read(_HEADER.format, raw, len(_VERSION))
-    layout = f"!{tag_count}q"  # each generation a signed 64-bit integer
-    generations = _read(layout, raw, _HEADER_END) if tag_count else ()  # most results have no tags
-    payload = raw[_HEADER_END + struct.calcsize(layout) :]
-    return Entry(stale_at, bool(flags & _NEGATIVE), bool(flags & _COMPRESSED), type_fingerprint, generations, payload)
-
-
-def _read(
-    layout: str,
-    raw: bytes,
-    offset: int,
-) -> tuple[Any, ...]:
-    # struct caches the formats it was given as str, so a layout is compiled once
     try:
-        return struct.unpack_from(layout, raw, offset)
+        stale_at, flags, type_fingerprint, tag_count = _HEADER.unpack_from(raw, len(_VERSION))
+        # each generation a signed 64-bit integer; struct caches the formats it was given as str
+        generations = struct.unpack_from(f"!{tag_count}q", raw, _HEADER_END) if tag_count else ()
     except struct.error as error:
         msg = "not a cached result: it is cut short"
         raise CodecError(msg) from error
+    payload = raw[_HEADER_END + _GENERATION_BYTES * tag_count :]
+    return Entry(stale_at, bool(flags & _NEGATIVE), bool(flags & _COMPRESSED), type_fingerprint, generations, payload)

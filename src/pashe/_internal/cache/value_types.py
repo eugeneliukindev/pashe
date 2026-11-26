@@ -17,7 +17,7 @@ _MAPPING_ARGUMENTS: Final = 2  # dict[K, V]
 
 
 def return_type(function: Callable[..., object]) -> object:
-    # Read once, when the function is decorated: every name its annotations use must be defined by then.
+    """Read once, when the function is decorated: every name its annotations use must be defined by then."""
     try:
         hints = get_type_hints(function)
     except NameError as error:
@@ -31,7 +31,7 @@ def return_type(function: Callable[..., object]) -> object:
 
 
 def item_type(function: Callable[..., object]) -> object:
-    # A batch stores every value of the dict it returns on its own, so the codec rebuilds V of dict[K, V].
+    """A batch stores every value of the dict it returns on its own, so the codec rebuilds V of dict[K, V]."""
     form = return_type(function)
     if form is Any:
         return Any
@@ -52,12 +52,12 @@ def fingerprint(form: object) -> int:
 
 
 def _name(form: object) -> str:
-    # a function or a class by its name; a generic, such as list[int], as it is written
+    """A function or a class by its name; a generic, such as list[int], as it is written."""
     return getattr(form, "__qualname__", repr(form)) if get_origin(form) is None else repr(form)
 
 
 def _describe(form: object, seen: frozenset[object]) -> str:  # noqa: PLR0911, WPS212 - one return for each kind of type
-    # what a type alias or a NewType stands for counts: a value of the alias changed is another shape
+    """What a type alias or a NewType stands for counts: a value of the alias changed is another shape."""
     if isinstance(form, TypeAliasType):
         return form.__name__ if form in seen else _describe(form.__value__, seen | {form})
     if isinstance(form, NewType):

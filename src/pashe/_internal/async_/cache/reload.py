@@ -42,7 +42,7 @@ class AsyncReload:
         self._hooks = hooks
 
     async def start(self, call: Call, load_and_store: AsyncLoadAndStore) -> None:
-        # Revalidate in the background, unless another call does already; the call answers at once.
+        """Revalidate in the background, unless another call does already; the call answers at once."""
         try:  # held as long as a load in the background may take, not the window: a slow load still stores
             lease = await self._load_locks.try_take_reload(call.key, _LOCK_SECONDS)
         except BackendError as error:
@@ -58,8 +58,11 @@ class AsyncReload:
             await lease.release()  # the cache is closing
 
     async def wait_at_most_slow_after(self, call: Call, load_and_store: AsyncLoadAndStore) -> Answer | None:
-        # The load, if it ends within Stale.slow_after; None when it is slower or another call
-        # revalidates already, and the stale result answers. A slower load goes on in the background.
+        """The load, if it ends within Stale.slow_after.
+
+        None when it is slower or another call revalidates already, and the stale result
+        answers. A slower load goes on in the background.
+        """
         lease: AsyncLease | None
         try:
             lease = await self._load_locks.try_take_reload(call.key, _LOCK_SECONDS)

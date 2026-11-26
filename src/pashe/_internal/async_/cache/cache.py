@@ -524,7 +524,7 @@ class AsyncCache:
         key_template: KeyTemplate | None,
         tag_templates: tuple[KeyTemplate, ...],
     ) -> tuple[CallKeys, AsyncFunctionCache[R]]:
-        # what a cached function or a value of function finds and keeps its results with
+        """What a cached function or a value of function finds and keeps its results with."""
         aexpect_side(function, "cache", self)
         if key_template is None:
             key_name(function)  # refuses a lambda, whose name is no key of its own
@@ -545,7 +545,7 @@ class AsyncCache:
         return keys, function_cache
 
     async def _invalidate_after_write(self, tags: tuple[str, ...]) -> None:
-        # a failing backend goes to on_error: the write returns or raises as it would without it
+        """A failing backend goes to on_error: the write returns or raises as it would without it."""
         try:
             await self._storage.invalidate_tags(tags)
         except BackendError as error:

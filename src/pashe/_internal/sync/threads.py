@@ -76,8 +76,11 @@ class LoadLimit:
 
     @contextlib.contextmanager
     def slot(self, *, wait: bool) -> Generator[None]:
-        # with no limit, or inside a load of the same slots, it does nothing; with every slot
-        # taken, it waits, or raises OverloadedError if not wait
+        """A slot of the limit to load in.
+
+        With no limit, or inside a load of the same slots, it does nothing; with every slot
+        taken, it waits, or raises OverloadedError if not wait.
+        """
         if self._semaphore is None or self._held.get():
             yield
             return
@@ -134,7 +137,7 @@ def expect_side(
     action: Literal["decorate", "cache"],
     owner: object,
 ) -> None:
-    # owner: the cache, the locks or the limiter whose decorator takes function; the error names its async twin
+    """``owner``: the cache, the locks or the limiter whose decorator takes function; the error names its async twin."""
     if is_async(function):
         twin = f"Async{type(owner).__name__}"
         msg = f"{getattr(function, '__qualname__', function)} is async: {action} it with {twin}"
