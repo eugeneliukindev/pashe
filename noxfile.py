@@ -14,15 +14,15 @@ import nox
 nox.needs_version = "==2026.10.20"  # the version pyproject.toml pins: another one is refused at once
 nox.options.default_venv_backend = "uv"
 nox.options.sessions = []  # each runs when named: every one takes Docker for Redis
-nox.options.error_on_missing_interpreters = True  # a Python it cannot find fails, instead of being skipped
-nox.options.error_on_external_run = True  # a program outside the environment runs only when a session says so
+nox.options.error_on_missing_interpreters = True
+nox.options.error_on_external_run = True
 
 type Resolution = Literal["lowest-direct", "highest"]  # the strategies of uv: the floors of the direct ones, the newest
 
 _PYPROJECT: Final = nox.project.load_toml("pyproject.toml")
 _PYTHONS: Final = nox.project.python_versions(_PYPROJECT)  # the classifiers: every Python pashe supports
 _TESTS: Final = ("tests", "docs/examples")
-_PROCESSES: Final = "4"  # as in the justfile: each takes a database of the one Redis of the run, which has 16
+_PROCESSES: Final = "4"  # as processes in the justfile
 
 _TEST_SERVERS: Final = nox.project.load_toml("tests/harness/servers.toml")  # what --redis-server of pytest takes
 _OTHER_SERVERS: Final = [

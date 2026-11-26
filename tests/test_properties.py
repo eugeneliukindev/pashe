@@ -141,6 +141,6 @@ def test_a_bus_waits_longer_while_redis_keeps_failing_and_starts_over_after_a_ca
 
     assert all(earlier <= later * 2 for earlier, later in itertools.pairwise(waits))
     assert 0.5 <= waits[0] <= 1  # the first wait, jitter applied
-    assert max(waits) <= 30  # never longer than the longest
+    assert max(waits) <= 30
     assert waits[-1] >= 15  # it grew to the longest, jitter applied
     assert after_calm <= 1

@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          persist-credentials: false  # nothing pushes back to the repository
+          persist-credentials: false
       - uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -46,7 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          persist-credentials: false  # nothing pushes back to the repository
+          persist-credentials: false
       - uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -64,7 +64,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          persist-credentials: false  # nothing pushes back to the repository
+          persist-credentials: false
       - uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -82,7 +82,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          persist-credentials: false  # nothing pushes back to the repository
+          persist-credentials: false
       - uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -106,7 +106,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          persist-credentials: false  # nothing pushes back to the repository
+          persist-credentials: false
       - uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
@@ -129,7 +129,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          persist-credentials: false  # nothing pushes back to the repository
+          persist-credentials: false
       - uses: astral-sh/setup-uv@v10.4.0
       - name: List the sessions
         id: list
@@ -147,7 +147,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          persist-credentials: false  # nothing pushes back to the repository
+          persist-credentials: false
       - uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ matrix.python }}

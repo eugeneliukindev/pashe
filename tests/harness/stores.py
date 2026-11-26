@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from tests.harness.helpers import EitherBackend, Side
 
     type Connect = Callable[[], EitherBackend]  # makes a backend of the side over the store, with a client of its own
-    type Store = Callable[[pytest.FixtureRequest, Side], Connect]  # how a test of the side reaches the store
+    type Store = Callable[[pytest.FixtureRequest, Side], Connect]
 
 
 def _memory(_request: pytest.FixtureRequest, side: Side) -> Connect:
@@ -40,7 +40,7 @@ def _cluster(request: pytest.FixtureRequest, side: Side) -> Connect:
     return lambda: side.redis_cluster(url)
 
 
-IN_PROCESS: Final[dict[str, Store]] = {"memory": _memory, "sqlite": _sqlite}  # sqlite: a file, no server
+IN_PROCESS: Final[dict[str, Store]] = {"memory": _memory, "sqlite": _sqlite}
 SERVED: Final[dict[str, Store]] = {
     "redis": _redis,
     "cluster": _cluster,

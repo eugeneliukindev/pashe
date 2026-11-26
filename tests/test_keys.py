@@ -49,7 +49,7 @@ async def test_equal_values_give_equal_digests(side: Side, new_process_cache: Ne
 
     cached = cache(ttl=60, key="search:{filters:blake2b}")(side.function(search))
     assert await call(cached, {"color": "red", "size": 3}) == 1
-    assert await call(cached, {"size": 3, "color": "red"}) == 1  # the same dict in another order
+    assert await call(cached, {"size": 3, "color": "red"}) == 1
     assert await call(cached, {"size": 4, "color": "red"}) == 2
     prefix, digest = outcomes[0].key.split(":")
     assert prefix == "search"

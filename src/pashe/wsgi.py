@@ -134,7 +134,7 @@ class CacheHeadersMiddleware:
                 if_none_match=environ.get(_IF_NONE_MATCH),
                 calls=calls,
                 cache_control=self._cache_control,
-                no_cache=in_no_cache(),  # the request went past the stored results
+                no_cache=in_no_cache(),
             )
         start_response(f"{code} {HTTPStatus(code).phrase}", headers, started.exc_info)
         return [body]

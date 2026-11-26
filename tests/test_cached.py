@@ -161,7 +161,7 @@ async def test_a_refresh_the_policy_does_not_store_drops_the_old_result(new_proc
 
     await call(get_user.refresh, 1)
 
-    assert await call(get_user, 1) == {"id": 1, "version": 2}  # not the old version 1
+    assert await call(get_user, 1) == {"id": 1, "version": 2}
     assert source.calls == 3
 
 
@@ -457,7 +457,7 @@ async def test_stale_while_revalidate_answers_at_once_and_reloads(new_process_ca
     source.version = 2
 
     stale = await call(get_user, 1)
-    await close(cache)  # waits for the reload in the background
+    await close(cache)
     later = new_process_cache(clock=clock, hooks=[RecordingHook(outcomes=outcomes)])  # a closed backend takes no calls
     fresh = await call(cached_function(later, source, **options), 1)
 
@@ -487,7 +487,7 @@ async def test_a_reload_in_the_background_slower_than_its_window_still_stores(
     version = 2
 
     stale = await get_version()
-    await cache.aclose()  # waits for the reload in the background
+    await cache.aclose()
     later = new_process_cache(clock=clock)  # a closed backend takes no calls
     assert isinstance(later, AsyncCache)
     fresh = await later(ttl=60, stale=Stale(while_revalidate=0.05))(load_version)()
@@ -568,7 +568,7 @@ async def test_stale_if_slow_answers_while_the_load_goes_on(side: Side, clock: C
     slow = True
 
     stale = await call(get_user, 1)
-    await close(cache)  # waits for the load that went on
+    await close(cache)
     fresh = await call(get_user, 1)
 
     assert (stale, fresh) == (10, 11)
@@ -593,7 +593,7 @@ async def test_revalidate_before_reloads_a_fresh_result_in_its_last_seconds(
     early = await call(get_user, 1)
     clock.now += 15
     due = await call(get_user, 1)
-    await close(cache)  # waits for the reload in the background
+    await close(cache)
     later = new_process_cache(clock=clock, hooks=[RecordingHook(outcomes=outcomes)])  # a closed backend takes no calls
     reloaded = await call(cached_function(later, source, **options), 1)
 
@@ -714,7 +714,7 @@ async def test_a_waiter_loads_when_the_caller_it_waited_for_is_cancelled(new_pro
     loaded = await waiter
 
     assert loaded == 2
-    assert await get_user(1) == 2  # what the waiter loaded is cached
+    assert await get_user(1) == 2
 
 
 async def test_lock_for_loads_once_for_all_processes() -> None:
@@ -1094,7 +1094,7 @@ async def test_methods_are_cached_without_self_in_the_key() -> None:
             return user_id
 
     await Users().get(1)
-    await Users().get(1)  # another instance, the same key
+    await Users().get(1)
 
     assert loads == 1
     assert await Users().get.invalidate(1)
@@ -1186,7 +1186,7 @@ async def test_a_batch_loads_only_the_missing_items(new_process_cache: NewCache)
 
     items = await call(get_items, [1, 2, 3])
 
-    assert items == {1: 10, 2: 20}  # the loader left 3 out
+    assert items == {1: 10, 2: 20}
     assert asked == [[1, 2], [3]]
 
 
@@ -1224,7 +1224,7 @@ def test_a_batch_keeps_in_the_fallback_what_it_could_not_write() -> None:
     get_items = batch_function(Cache(backend, fallback=Fallback(MemoryBackend())), asked)
     backend.writes_broken = True
 
-    get_items([1])  # loads, and keeps the result in the fallback
+    get_items([1])
     backend.down = True
     items = get_items([1])
 

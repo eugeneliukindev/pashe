@@ -33,7 +33,7 @@ def test_clear_removes_every_entry() -> None:
     backend.set_many({"a": b"1", "b": b"2"})
     backend.clear()
     assert backend.get_many(["a", "b"]) == [None, None]
-    backend.set("c", b"3")  # what clear freed counts again
+    backend.set("c", b"3")
     assert backend.get("c") == b"3"
 
 
@@ -53,7 +53,7 @@ def test_max_bytes() -> None:
     assert backend.get_many(["a", "b"]) == [None, b"22"]
     with pytest.raises(ValueTooLargeError):
         backend.set("b", b"4444")
-    assert backend.get("b") is None  # the old value must not answer after a failed write
+    assert backend.get("b") is None
 
 
 @pytest.mark.parametrize(("max_entries", "max_bytes"), [(0, None), (1000, 0)])
@@ -70,7 +70,7 @@ def test_a_live_lock_or_counter_is_evicted_last() -> None:
         backend.set(key, b"1")
     assert backend.get_many(["lock", "rate", "a", "b", "c"]) == [b"owner", b"1", None, None, b"1"]
     backend.set_if_absent("other", b"owner", ttl=10)
-    backend.set_if_absent("third", b"owner", ttl=10)  # nothing else is left to evict: the oldest lock goes
+    backend.set_if_absent("third", b"owner", ttl=10)
     assert backend.get_many(["lock", "rate", "other", "third"]) == [None, b"1", b"owner", b"owner"]
 
 

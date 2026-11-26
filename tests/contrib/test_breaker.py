@@ -87,7 +87,7 @@ def test_a_call_after_open_for_tries_redis_and_closes_it_if_redis_answers(
     backend.get("k")
 
     assert told.circuits == [Circuit(open=True, failures=1), Circuit(open=False, failures=0)]
-    backend.get("k")  # closed: every call reaches Redis
+    backend.get("k")
 
 
 def test_a_try_that_fails_opens_it_again(client: Redis, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -98,7 +98,7 @@ def test_a_try_that_fails_opens_it_again(client: Redis, monkeypatch: pytest.Monk
         backend.get("k")
     clock.now += 10
     with pytest.raises(BackendError):
-        backend.get("k")  # the try
+        backend.get("k")
 
     with pytest.raises(CircuitOpenError):
         backend.get("k")
@@ -114,7 +114,7 @@ def test_an_error_redis_answers_tells_it_is_up(client: Redis, monkeypatch: pytes
         with pytest.raises(WrongTypeError):
             backend.get("k")
 
-    assert len(reached) == 3  # never skipped
+    assert len(reached) == 3
 
 
 def test_a_cached_call_answers_from_the_source_while_it_is_open(client: Redis, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -184,7 +184,7 @@ def test_a_breaker_knows_no_backend_only_how_calls_ended() -> None:
         breaker.before_call()
 
     clock.now += 10
-    breaker.before_call()  # the one try
+    breaker.before_call()
     with pytest.raises(CircuitOpenError):
         breaker.before_call()  # a second call waits for the try
     assert told.circuits == [Circuit(open=True, failures=2)]
@@ -207,7 +207,7 @@ def test_a_probe_answered_with_an_error_of_the_server_closes_it(clock: Clock) ->
     with pytest.raises(WrongTypeError), breaker.guarding():
         raise answered
 
-    breaker.before_call()  # closed: no CircuitOpenError
+    breaker.before_call()
 
 
 def test_a_cancelled_probe_lets_the_next_call_try_the_backend(clock: Clock) -> None:
@@ -217,5 +217,5 @@ def test_a_cancelled_probe_lets_the_next_call_try_the_backend(clock: Clock) -> N
         raise KeyboardInterrupt
 
     with breaker.guarding():
-        pass  # the next probe, which closes it
+        pass
     breaker.before_call()

@@ -59,9 +59,8 @@ async def backend(request: pytest.FixtureRequest, side: Side, key_prefix: str) -
     else:
         created = STORES[request.param](request, side)()
     if request.param in SERVED:
-        # The tests of a process share its server, and every process shares the cluster, which has one
-        # database: each test keeps its keys under a prefix of its own, so its keys still spread over
-        # the slots, and so over the nodes.
+        # The tests of a process share its servers, and a cluster has one database: each test keeps its
+        # keys under a prefix of its own, which still spreads them over the slots, and so over the nodes.
         created = side.prefixed(created, key_prefix)
     driven = _awaited(created) if isinstance(created, Backend) else created
 

@@ -124,7 +124,7 @@ def test_otel_span_events_tell_the_span_of_calls_and_errors(clock: Clock) -> Non
     with provider.get_tracer("test").start_as_current_span("request"):
         get_rate()
         backend.down = True
-        get_rate()  # the read fails: the loader answers, and nothing is stored
+        get_rate()
 
     (span,) = exporter.get_finished_spans()
     events = [(event.name, dict(event.attributes or {})) for event in span.events]

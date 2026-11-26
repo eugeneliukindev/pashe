@@ -48,7 +48,7 @@ def test_a_copy_answers_until_a_write_drops_it() -> None:
     near = NearCacheBackend(MemoryBackend(), shared)
     shared.set("k", b"1")
     assert near.get("k") == b"1"
-    shared.set("k", b"2")  # behind the near cache's back: its copy still answers
+    shared.set("k", b"2")
     assert near.get("k") == b"1"
     near.set("k", b"3")
     assert near.get("k") == b"3"
@@ -67,7 +67,7 @@ def test_a_bus_drops_the_copies_of_other_processes() -> None:
     first.delete("k")
     assert second.get("k") is None
     second.get("other")
-    wire.publish(None)  # messages may have been lost: every copy goes
+    wire.publish(None)
     shared.set("other", b"3")
     assert second.get("other") == b"3"
     first.close()
@@ -226,7 +226,7 @@ def test_redis_tracking_bus_drops_copies_of_any_write(redis_url: str, tracking_p
     first.set(key, b"2")
     _wait_for(lambda: second.get(key) == b"2")
     with Redis.from_url(redis_url) as outsider:
-        outsider.set(key, b"3")  # a write past pashe: Redis itself tells
+        outsider.set(key, b"3")
     _wait_for(lambda: second.get(key) == b"3")
     first.close()
     second.close()
@@ -245,7 +245,7 @@ async def test_async_redis_tracking_bus_drops_copies_of_any_write(redis_url: str
     assert await second.get(key) == b"1"
     await asyncio.sleep(0.2)  # the listener of second turns tracking on in a task
     async with AsyncRedis.from_url(redis_url) as outsider:
-        await outsider.set(key, b"3")  # a write past pashe
+        await outsider.set(key, b"3")
     async with asyncio.timeout(_WAIT):
         while await second.get(key) != b"3":  # noqa: ASYNC110 - polls what a message from Redis changes
             await asyncio.sleep(0.01)
@@ -270,7 +270,7 @@ def test_a_write_that_changes_nothing_is_not_published() -> None:
 
     near = NearCacheBackend(MemoryBackend(), MemoryBackend(), bus=Counting())
     assert near.set_if_absent("lock", b"me", ttl=10)
-    assert not near.set_if_absent("lock", b"other", ttl=10)  # a waiter finds the lock busy
+    assert not near.set_if_absent("lock", b"other", ttl=10)
     assert not near.delete_if_equals("lock", b"other")
     assert not near.delete("missing")
     assert near.delete_if_equals("lock", b"me")
@@ -334,7 +334,7 @@ def test_a_drop_the_bus_missed_drops_every_copy_of_the_others_once_it_works() ->
     bus = _Flaky()
     near = NearCacheBackend(MemoryBackend(), MemoryBackend(), bus=bus)
     bus.down = True
-    near.set("a", b"1")  # the others did not hear of it
+    near.set("a", b"1")
 
     bus.down = False
     near.set("b", b"1")

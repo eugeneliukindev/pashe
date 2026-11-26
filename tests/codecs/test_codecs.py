@@ -67,7 +67,7 @@ def test_typed_codecs_rebuild_the_type(codec: Codec) -> None:
 def test_json_returns_what_the_parser_gives() -> None:
     codec = JsonCodec()
     decoded: object = codec.decode(codec.encode({"id": 1}), User)
-    assert decoded == {"id": 1}  # type_ is not used
+    assert decoded == {"id": 1}
 
 
 @pytest.mark.parametrize("codec", _ALL, ids=lambda codec: type(codec).__name__)

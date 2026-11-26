@@ -45,8 +45,8 @@ if TYPE_CHECKING:
     from pashe.invalidation import InvalidationHandler
 
 
-type EitherCache = Cache | AsyncCache  # a cache of either side, as a test of both sides holds it
-type EitherBackend = Backend | AsyncBackend  # a backend of either side, as the same
+type EitherCache = Cache | AsyncCache
+type EitherBackend = Backend | AsyncBackend
 type NewCache = Callable[..., EitherCache]  # makes a cache of the side that stands for a process of its own
 
 # A sync call that waits in the loop, as for a busy file, blocks it for seconds; a busy machine of CI
@@ -262,7 +262,7 @@ SYNC: Final = Side(memory=MemoryBackend, failing_memory=FailingMemoryBackend, sq
 ASYNC: Final = Side(
     memory=AsyncMemoryBackend, failing_memory=AsyncFailingMemoryBackend, sqlite=AsyncSQLiteBackend, is_async=True
 )
-SIDES: Final = {"sync": SYNC, "async": ASYNC}  # the name of each in the ids of the tests
+SIDES: Final = {"sync": SYNC, "async": ASYNC}
 
 
 @overload

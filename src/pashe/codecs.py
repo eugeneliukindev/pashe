@@ -22,9 +22,7 @@ from pashe.errors import CodecError
 __all__ = ["Codec", "JsonCodec", "PickleCodec"]
 
 
-_JSON_ENCODER: Final = json.JSONEncoder(
-    separators=(",", ":"), ensure_ascii=False, allow_nan=False
-)  # built once, not per value
+_JSON_ENCODER: Final = json.JSONEncoder(separators=(",", ":"), ensure_ascii=False, allow_nan=False)
 _JSON_DECODER: Final = json.JSONDecoder()  # json.loads of bytes would guess their encoding: pashe writes UTF-8
 _SIGNATURE_SIZE: Final = hashlib.sha256().digest_size
 _UNPICKLE_ERRORS: Final = (pickle.UnpicklingError, AttributeError, ImportError, EOFError, TypeError, ValueError)

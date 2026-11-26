@@ -94,7 +94,7 @@ def test_a_file_that_is_not_a_database_is_a_backend_error(tmp_path: Path) -> Non
         SQLiteBackend(path)
 
 
-@pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)  # fails the test if the loop is blocked
+@pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
 async def test_an_async_call_waits_for_a_busy_file_in_a_thread_not_in_the_loop(tmp_path: Path) -> None:
     path = tmp_path / "cache.db"
     backend = AsyncSQLiteBackend(path)

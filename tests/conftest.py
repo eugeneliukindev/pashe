@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
     from tests.harness.helpers import EitherCache, NewCache, Side
 
-pytest_plugins = ["tests.harness.servers"]  # the Redis and the Redis Cluster of the run, in Docker
+pytest_plugins = ["tests.harness.servers"]
 
 
 @pytest.fixture(params=list(SIDES))

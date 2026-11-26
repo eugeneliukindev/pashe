@@ -89,7 +89,7 @@ async def test_stale_while_revalidate_reloads_in_the_background(new_process_cach
     source.version = 2
 
     stale = await call(get_user, 1)
-    await close(cache)  # waits for the reload in the background
+    await close(cache)
 
     assert stale == {"id": 1, "version": 1}
     assert source.calls == 2

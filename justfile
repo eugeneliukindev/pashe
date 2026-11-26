@@ -1,10 +1,9 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 set dotenv-load := false
 
-# Do not update the environment when running
 export UV_NO_SYNC := '1'
 
-# each takes a database of the one Redis of the run, which has 16
+# each starts a Redis and a cluster in Docker: more of them wait on Docker instead of running tests
 processes := '4'
 
 # lychee is a binary, not a Python package: it runs from its image

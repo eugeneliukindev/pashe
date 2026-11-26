@@ -62,7 +62,7 @@ def test_rate_limited_counts_calls_per_key() -> None:
     assert [call_api(1), call_api(1)] == [1, 1]
     with pytest.raises(RateLimitedError):
         call_api(1)
-    assert call_api(2) == 2  # another user, another limit
+    assert call_api(2) == 2
 
 
 async def test_async_rate_limited() -> None:

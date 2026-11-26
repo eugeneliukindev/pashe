@@ -178,7 +178,7 @@ class CircuitBreaker(Breaker):
                 return
             if self._clock() - self._opened_at < self._open_for or self._half_open:
                 raise CircuitOpenError(self._consecutive_failures)
-            self._half_open = True  # this call tries it
+            self._half_open = True
 
     @override
     def on_success(self) -> None:
