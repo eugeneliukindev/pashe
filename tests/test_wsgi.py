@@ -125,7 +125,11 @@ def test_a_request_with_no_cache_it_is_allowed_reloads_its_results(clock: Clock)
     assert response.headers["cache-status"] == "pashe; fwd=request; ttl=60"
 
 
-def _get(application: WSGIApplication, path: str = "/", **headers: str) -> tuple[list[tuple[str, str]], bytes]:
+def _get(
+    application: WSGIApplication,
+    path: str = "/",
+    **headers: str,
+) -> tuple[list[tuple[str, str]], bytes]:
     """Run application on a GET of path as a WSGI server does; return the headers it started and the body."""
     environ: WSGIEnvironment = {
         "PATH_INFO": path,
@@ -138,7 +142,10 @@ def _get(application: WSGIApplication, path: str = "/", **headers: str) -> tuple
     chunks: list[bytes] = []
 
     def start_response(
-        _status: str, sent: list[tuple[str, str]], _exc_info: object = None, /
+        _status: str,
+        sent: list[tuple[str, str]],
+        _exc_info: object = None,
+        /,
     ) -> Callable[[bytes], object]:
         started.append(sent)
         return chunks.append  # the write of WSGI: its bytes go out in the order of the body

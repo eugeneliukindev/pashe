@@ -33,7 +33,12 @@ class AsyncRevalidation:
     __slots__ = ("_backend", "_background", "_hooks", "_slow_after")
 
     def __init__(
-        self, *, backend: AsyncPrefixedBackend, background: AsyncBackgroundTasks, hooks: Hook, slow_after: float
+        self,
+        *,
+        backend: AsyncPrefixedBackend,
+        background: AsyncBackgroundTasks,
+        hooks: Hook,
+        slow_after: float,
     ) -> None:
         self._backend = backend
         self._background = background

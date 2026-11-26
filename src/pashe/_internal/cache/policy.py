@@ -127,7 +127,13 @@ class Policy:
         return StaleWindows(within_if_error=since < self.stale.if_error, within_if_slow=since < self.stale.if_slow)
 
     def stale_answer(
-        self, state: CallState, stored: Stored, error: Exception, *, within_if_error: bool, within_if_slow: bool
+        self,
+        state: CallState,
+        stored: Stored,
+        error: Exception,
+        *,
+        within_if_error: bool,
+        within_if_slow: bool,
     ) -> Answer | None:
         # the stale result that answers instead of error, if a window of Stale lets it
         if isinstance(error, OverloadedError) and state.has_stale_answer:

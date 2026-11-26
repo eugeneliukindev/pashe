@@ -257,7 +257,13 @@ class MissingExtraError(PasheError, ModuleNotFoundError):
     module: str
     extra: str
 
-    def __init__(self, module: str, extra: str, *, name: str | None = None) -> None:
+    def __init__(
+        self,
+        module: str,
+        extra: str,
+        *,
+        name: str | None = None,
+    ) -> None:
         """Create the error.
 
         Args:

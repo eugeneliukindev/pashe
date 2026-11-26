@@ -50,7 +50,11 @@ _JSON_TYPES: Final = frozenset((dict, list, str, int, float, bool, types.NoneTyp
 _JSON_VALUES: Final = (dict, list, str, int, float, bool, types.NoneType)  # what json reads back
 
 
-def expect_type(name: str, value: object, kind: type | types.UnionType) -> None:
+def expect_type(
+    name: str,
+    value: object,
+    kind: type | types.UnionType,
+) -> None:
     # kind is a class or a union of classes as isinstance takes it, such as str | None
     if isinstance(value, kind):
         return
@@ -59,7 +63,11 @@ def expect_type(name: str, value: object, kind: type | types.UnionType) -> None:
     raise TypeError(msg)
 
 
-def expect_item_types(name: str, values: Iterable[object], kind: type | types.UnionType) -> None:
+def expect_item_types(
+    name: str,
+    values: Iterable[object],
+    kind: type | types.UnionType,
+) -> None:
     for index, value in enumerate(values):
         expect_type(f"{name}[{index}]", value, kind)
 
@@ -73,7 +81,13 @@ def expect_error_classes(name: str, values: object) -> None:
             raise TypeError(msg)
 
 
-def expect_positive(name: str, value: object, meaning: str, *, kind: type | types.UnionType = _NUMBER) -> None:
+def expect_positive(
+    name: str,
+    value: object,
+    meaning: str,
+    *,
+    kind: type | types.UnionType = _NUMBER,
+) -> None:
     expect_type(name, value, kind)
     if not value > 0:  # type: ignore[operator]  # a number: expect_type just checked it
         msg = f"{name} is {value}: {meaning}"
@@ -131,7 +145,13 @@ def parse_secret(name: str, secret: object) -> bytes:
     return key  # type: ignore[return-value]  # as above
 
 
-def parse_seconds(name: str, value: object, meaning: str, *, positive: bool = False) -> float:
+def parse_seconds(
+    name: str,
+    value: object,
+    meaning: str,
+    *,
+    positive: bool = False,
+) -> float:
     # a duration as seconds, 0 or more, or with positive more than 0; meaning says what it is for
     expect_type(name, value, DURATION)
     seconds = duration_seconds(value)  # type: ignore[arg-type]  # a Duration: expect_type just checked it
@@ -142,12 +162,20 @@ def parse_seconds(name: str, value: object, meaning: str, *, positive: bool = Fa
     return seconds
 
 
-def parse_timeout(name: str, value: object, meaning: str) -> float | None:
+def parse_timeout(
+    name: str,
+    value: object,
+    meaning: str,
+) -> float | None:
     # the most to wait; None waits as long as it takes
     return None if value is None else parse_seconds(name, value, meaning)
 
 
-def parse_ttl(name: str, value: object, meaning: str) -> float | Callable[[Any], Duration]:
+def parse_ttl(
+    name: str,
+    value: object,
+    meaning: str,
+) -> float | Callable[[Any], Duration]:
     # how long a result is fresh: a duration, or a function of the result that returns one
     expect_type(name, value, DURATION | FUNCTION)
     if callable(value):
@@ -155,7 +183,14 @@ def parse_ttl(name: str, value: object, meaning: str) -> float | Callable[[Any],
     return parse_seconds(name, value, meaning)
 
 
-def parse_int(name: str, value: object, *, low: int, high: int | None = None, meaning: str) -> int:
+def parse_int(
+    name: str,
+    value: object,
+    *,
+    low: int,
+    high: int | None = None,
+    meaning: str,
+) -> int:
     # an int from low to high; with no high, any from low up
     expect_type(name, value, int)
     number: int = value  # type: ignore[assignment]  # an int: expect_type just checked it

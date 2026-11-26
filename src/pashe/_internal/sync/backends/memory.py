@@ -62,9 +62,11 @@ class MemoryBackend(Backend):
         if max_bytes is not None and max_bytes <= 0:
             msg = f"max_bytes is {max_bytes}: the most bytes the backend keeps, 1 or more, or None for no limit"
             raise InvalidOptionsError(msg)
+
         self._max_entries = max_entries
         self._max_bytes = max_bytes
         self._clock = clock
+
         self._lock = threading.Lock()
         self._entries: OrderedDict[str, _Entry] = OrderedDict()  # the last is the most recently used
         self._used = 0  # bytes of all keys and values
@@ -80,7 +82,14 @@ class MemoryBackend(Backend):
             return [self._data(key) for key in keys]
 
     @override
-    def set(self, key: str, value: bytes, /, *, ttl: float | None = None) -> None:
+    def set(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> None:
         """Store value under key, replacing the entry and its TTL.
 
         Args:
@@ -127,7 +136,14 @@ class MemoryBackend(Backend):
             raise too_large
 
     @override
-    def set_if_absent(self, key: str, value: bytes, /, *, ttl: float | None = None) -> bool:
+    def set_if_absent(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> bool:
         with self._lock:
             if self._live(key) is not None:
                 return False
@@ -166,7 +182,14 @@ class MemoryBackend(Backend):
             return len(live)
 
     @override
-    def incr(self, key: str, by: int, /, *, ttl: float | None = None) -> int:
+    def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
         """Add by to the integer under key, creating it from 0 if absent.
 
         Args:
@@ -226,7 +249,13 @@ class MemoryBackend(Backend):
             return True
 
     @override
-    def expire_if_equals(self, key: str, value: bytes, ttl: float, /) -> bool:
+    def expire_if_equals(
+        self,
+        key: str,
+        value: bytes,
+        ttl: float,
+        /,
+    ) -> bool:
         with self._lock:
             entry = self._live(key)
             if entry is None or entry.data != value:
@@ -271,12 +300,21 @@ class MemoryBackend(Backend):
         self._entries.move_to_end(key)
         return entry
 
-    def _put(self, key: str, data: bytes, expires_at: float | None, *, pinned: bool = False) -> None:
+    def _put(
+        self,
+        key: str,
+        data: bytes,
+        expires_at: float | None,
+        *,
+        pinned: bool = False,
+    ) -> None:
         if key in self._entries:
             self._remove(key)
+
         size = _size(key, data)
         if self._max_bytes is not None and size > self._max_bytes:
             raise ValueTooLargeError(size, self._max_bytes)
+
         self._entries[key] = _Entry(data, expires_at, pinned)
         self._used += size
         self._evict()

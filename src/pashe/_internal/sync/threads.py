@@ -98,7 +98,12 @@ class BackgroundTasks:
         self._executor: futures.ThreadPoolExecutor | None = None
         self._stopped = False
 
-    def add_task[**P, T](self, work: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> futures.Future[T] | None:
+    def add_task[**P, T](
+        self,
+        work: Callable[P, T],
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> futures.Future[T] | None:
         with self._lock:
             if self._stopped:
                 return None

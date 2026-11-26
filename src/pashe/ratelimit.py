@@ -63,8 +63,8 @@ class FixedWindow:
 
     Examples:
         >>> from pashe.ratelimit import FixedWindow
-        >>> FixedWindow(calls=5, per=60, ban_for=300).ban_seconds
-        300
+        >>> FixedWindow(calls=5, per=60, ban_for=300)
+        FixedWindow(calls=5, per=60, ban_for=300)
     """
 
     calls: int

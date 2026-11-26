@@ -26,7 +26,10 @@ class AsyncPubSubListener:
     __slots__ = ("_channel", "_client", "_on_invalidate", "_retries", "_task")
 
     def __init__(
-        self, client: Redis | AsyncRedisCluster, channel: str, on_invalidate: AsyncInvalidationHandler
+        self,
+        client: Redis | AsyncRedisCluster,
+        channel: str,
+        on_invalidate: AsyncInvalidationHandler,
     ) -> None:
         self._client = client
         self._channel = channel
@@ -62,7 +65,12 @@ class AsyncPubSubListener:
 class AsyncTrackingListener:
     __slots__ = ("_on_invalidate", "_pool", "_prefix", "_retries", "_task")
 
-    def __init__(self, client: Redis, prefix: str, on_invalidate: AsyncInvalidationHandler) -> None:
+    def __init__(
+        self,
+        client: Redis,
+        prefix: str,
+        on_invalidate: AsyncInvalidationHandler,
+    ) -> None:
         self._pool = client.connection_pool
         self._prefix = prefix
         self._on_invalidate = on_invalidate

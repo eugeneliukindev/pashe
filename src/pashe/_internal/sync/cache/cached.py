@@ -96,7 +96,13 @@ class CachedValue[**P, R]:
         key, tags, _ = self._bind(args, kwargs)
         return self._function_cache.get(key, tags)
 
-    def set(self, value: R, /, *args: P.args, **kwargs: P.kwargs) -> None:
+    def set(
+        self,
+        value: R,
+        /,
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> None:
         """Store value as the value of the call, with the TTL and the tags of the decorator.
 
         A value Store.when of a cached function rejects deletes the stored one instead.

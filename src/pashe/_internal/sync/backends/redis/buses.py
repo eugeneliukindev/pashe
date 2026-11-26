@@ -68,6 +68,7 @@ class RedisPubSubBus(InvalidationBus):
             raise InvalidOptionsError(msg)
         expect_type("channel", channel, str)
         expect_type("breaker", breaker, Breaker)
+
         self._client = client
         self._channel = channel
         self._breaker = breaker
@@ -109,6 +110,7 @@ class RedisTrackingBus(InvalidationBus):
         """
         expect_type("client", client, redis.Redis)
         expect_type("prefix", prefix, str)
+
         self._client = client
         self._prefix = prefix
 

@@ -46,7 +46,12 @@ def test_bytes_from_the_backend_are_an_entry_or_a_codec_error(raw: bytes) -> Non
 
 
 @given(st.integers(1, 20), _SECONDS, _NOW, st.integers(1, 40))
-def test_what_is_left_of_a_sliding_limit_stays_within_it(calls: int, per: float, now: float, made: int) -> None:
+def test_what_is_left_of_a_sliding_limit_stays_within_it(
+    calls: int,
+    per: float,
+    now: float,
+    made: int,
+) -> None:
     clock = Clock()
     clock.now = now
     cache = Cache(MemoryBackend(), clock=clock)
@@ -64,7 +69,11 @@ def test_what_is_left_of_a_sliding_limit_stays_within_it(calls: int, per: float,
 
 @given(st.integers(1, 20), _SECONDS, _NOW, st.integers(0, 40), st.lists(st.integers(1, 20), min_size=1, max_size=40))
 def test_a_refused_call_waits_a_finite_time_that_is_not_negative(
-    calls: int, per: float, now: float, before: int, costs: list[int]
+    calls: int,
+    per: float,
+    now: float,
+    before: int,
+    costs: list[int],
 ) -> None:
     assume(all(cost <= calls for cost in costs))
     clock = Clock()
@@ -88,7 +97,12 @@ def test_a_refused_call_waits_a_finite_time_that_is_not_negative(
 
 
 @given(st.integers(1, 20), _SECONDS, _NOW, st.lists(st.integers(1, 20), min_size=1, max_size=40))
-def test_a_call_made_after_its_retry_after_passes(calls: int, per: float, now: float, costs: list[int]) -> None:
+def test_a_call_made_after_its_retry_after_passes(
+    calls: int,
+    per: float,
+    now: float,
+    costs: list[int],
+) -> None:
     assume(all(cost <= calls for cost in costs))
     clock = Clock()
     clock.now = now

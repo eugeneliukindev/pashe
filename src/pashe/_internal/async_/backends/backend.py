@@ -62,7 +62,14 @@ class AsyncBackend(ABC):
         """
         raise NotImplementedError
 
-    async def set(self, key: str, value: bytes, /, *, ttl: float | None = None) -> None:
+    async def set(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> None:
         """Store value under key, replacing the entry and its TTL.
 
         Args:
@@ -93,7 +100,14 @@ class AsyncBackend(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def set_if_absent(self, key: str, value: bytes, /, *, ttl: float | None = None) -> bool:
+    async def set_if_absent(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> bool:
         """Store value only if key has no live entry.
 
         Args:
@@ -132,7 +146,14 @@ class AsyncBackend(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def incr(self, key: str, by: int, /, *, ttl: float | None = None) -> int:
+    async def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
         """Add by to the integer under key, creating it from 0 if absent.
 
         The integer is stored as ASCII decimal, so ``get`` reads it back.
@@ -219,7 +240,13 @@ class AsyncBackend(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def expire_if_equals(self, key: str, value: bytes, ttl: float, /) -> bool:
+    async def expire_if_equals(
+        self,
+        key: str,
+        value: bytes,
+        ttl: float,
+        /,
+    ) -> bool:
         """Give key a new TTL from now only if its value equals value, at once: locks extend with it.
 
         Args:

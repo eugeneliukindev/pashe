@@ -30,7 +30,11 @@ _OTHER_SERVERS: Final = [
 ]  # the default runs in every other job
 
 
-def _test(session: nox.Session, resolution: Resolution, *options: str) -> None:
+def _test(
+    session: nox.Session,
+    resolution: Resolution,
+    *options: str,
+) -> None:
     # the extras and the tests, resolved afresh from pyproject.toml; the lock is not read
     session.log(f"Python {session.python}, the versions of --resolution={resolution}")
     session.install(f"--resolution={resolution}", "-e", ".[all]", "--group", "test")

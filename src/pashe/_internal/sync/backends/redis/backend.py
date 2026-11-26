@@ -67,8 +67,10 @@ class RedisBackend(Backend):
         expect_type("client", client, redis.Redis | redis.cluster.RedisCluster)
         check_client(client)
         expect_type("breaker", breaker, Breaker)
+
         self._client = client
         self._breaker = breaker
+
         # a cluster refuses MGET across slots; mget_nonatomic sends one MGET per node instead
         self._get_many = client.mget_nonatomic if isinstance(client, redis.cluster.RedisCluster) else client.mget
 
@@ -89,7 +91,14 @@ class RedisBackend(Backend):
             return self._get_many(keys)  # type: ignore[return-value]  # bytes, as above
 
     @override
-    def set(self, key: str, value: bytes, /, *, ttl: float | None = None) -> None:
+    def set(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> None:
         with self._breaker.guarding(), translated_errors():
             self._client.set(key, value, px=px(ttl))
 
@@ -104,7 +113,14 @@ class RedisBackend(Backend):
             pipeline.execute()
 
     @override
-    def set_if_absent(self, key: str, value: bytes, /, *, ttl: float | None = None) -> bool:
+    def set_if_absent(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> bool:
         with self._breaker.guarding(), translated_errors():
             return bool(self._client.set(key, value, px=px(ttl), nx=True))
 
@@ -114,7 +130,14 @@ class RedisBackend(Backend):
             return bool(self._client.delete(key))
 
     @override
-    def incr(self, key: str, by: int, /, *, ttl: float | None = None) -> int:
+    def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
         expect_int64("redis.by", by)
         with self._breaker.guarding(), translated_errors():
             if ttl is None:
@@ -137,7 +160,13 @@ class RedisBackend(Backend):
             return bool(self._delete_if_equals(keys=[key], args=[value]))
 
     @override
-    def expire_if_equals(self, key: str, value: bytes, ttl: float, /) -> bool:
+    def expire_if_equals(
+        self,
+        key: str,
+        value: bytes,
+        ttl: float,
+        /,
+    ) -> bool:
         with self._breaker.guarding(), translated_errors():
             return bool(self._expire_if_equals(keys=[key], args=[value, milliseconds(ttl)]))
 

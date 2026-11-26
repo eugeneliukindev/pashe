@@ -209,7 +209,9 @@ def test_the_default_key_takes_dates_and_ids() -> None:
     ],
 )
 def test_a_template_fills_as_str_format_does(
-    template: str, args: tuple[object, ...], kwargs: dict[str, object]
+    template: str,
+    args: tuple[object, ...],
+    kwargs: dict[str, object],
 ) -> None:
     cache = Cache(MemoryBackend())
 

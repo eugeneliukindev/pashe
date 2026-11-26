@@ -84,7 +84,10 @@ class AsyncBackgroundTasks:
         self._stopped = False
 
     def add_task[**P, T](
-        self, work: Callable[P, Coroutine[Any, Any, T]], *args: P.args, **kwargs: P.kwargs
+        self,
+        work: Callable[P, Coroutine[Any, Any, T]],
+        *args: P.args,
+        **kwargs: P.kwargs,
     ) -> asyncio.Task[T] | None:
         if self._stopped:
             return None

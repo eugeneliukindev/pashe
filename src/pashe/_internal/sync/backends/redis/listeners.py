@@ -32,7 +32,12 @@ if TYPE_CHECKING:
 class PubSubListener:
     __slots__ = ("_on_invalidate", "_pubsub", "_retries", "_stopped", "_thread")
 
-    def __init__(self, client: Redis | RedisCluster, channel: str, on_invalidate: InvalidationHandler) -> None:
+    def __init__(
+        self,
+        client: Redis | RedisCluster,
+        channel: str,
+        on_invalidate: InvalidationHandler,
+    ) -> None:
         self._on_invalidate = on_invalidate
 
         self._retries = ReconnectBackoff()
@@ -51,7 +56,12 @@ class PubSubListener:
     def _message(self, received: dict[str, object]) -> None:
         self._on_invalidate(decode_message(received["data"]))  # its own too: a copy goes, read again
 
-    def _handle_lost(self, _error: Exception, _pubsub: PubSub, _thread: PubSubWorkerThread) -> None:
+    def _handle_lost(
+        self,
+        _error: Exception,
+        _pubsub: PubSub,
+        _thread: PubSubWorkerThread,
+    ) -> None:
         self._on_invalidate(None)  # messages may have been lost meanwhile
         self._stopped.wait(self._retries.next_delay())
 
@@ -60,7 +70,12 @@ class PubSubListener:
 class TrackingListener:
     __slots__ = ("_connection", "_on_invalidate", "_pool", "_prefix", "_retries", "_stopped", "_thread")
 
-    def __init__(self, client: Redis, prefix: str, on_invalidate: InvalidationHandler) -> None:
+    def __init__(
+        self,
+        client: Redis,
+        prefix: str,
+        on_invalidate: InvalidationHandler,
+    ) -> None:
         self._pool = client.connection_pool
         self._prefix = prefix
         self._on_invalidate = on_invalidate

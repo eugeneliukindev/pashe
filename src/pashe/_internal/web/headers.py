@@ -89,7 +89,11 @@ def add_cache_headers(
 
 
 def allows_no_cache[R](
-    allow: Callable[[R], bool] | None, request: R, *, cache_control: str | None, pragma: str | None
+    allow: Callable[[R], bool] | None,
+    request: R,
+    *,
+    cache_control: str | None,
+    pragma: str | None,
 ) -> bool:
     # whether a request asks past every stored result, with Cache-Control: no-cache or the Pragma of
     # HTTP/1.0, and allow lets it; max-age=0, which a browser sends on a plain reload, does not
@@ -120,7 +124,11 @@ def has_matching_etag(if_none_match: str | None, tag: str) -> bool:
 
 
 def _freshness(
-    calls: Sequence[Outcome], cache_control: Directive, *, has_cache_control: bool, no_cache: bool
+    calls: Sequence[Outcome],
+    cache_control: Directive,
+    *,
+    has_cache_control: bool,
+    no_cache: bool,
 ) -> Headers:
     # A response is as fresh as its shortest-lived result; one that was not stored is not fresh.
     shortest = min(call.fresh_for or 0 for call in calls)

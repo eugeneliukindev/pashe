@@ -16,7 +16,11 @@ _SCOPE = {"type": "http", "method": "GET", "headers": []}
 async def _sent(*messages: Message, request_headers: list[tuple[bytes, bytes]] | None = None) -> list[Message]:
     """Return what the middleware sends of an application that sends messages."""
 
-    async def application(scope: Scope, receive: Receive, send: Send) -> None:  # noqa: ARG001
+    async def application(
+        scope: Scope,  # noqa: ARG001 - an ASGI application takes it
+        receive: Receive,  # noqa: ARG001 - as above
+        send: Send,
+    ) -> None:
         for message in messages:
             await send(message)
 

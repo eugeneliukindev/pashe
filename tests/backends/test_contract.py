@@ -52,7 +52,11 @@ def _awaited(backend: Backend) -> AsyncBackend:
 
 
 @pytest.fixture(params=[*STORE_PARAMS, "near"])
-async def backend(request: pytest.FixtureRequest, side: Side, key_prefix: str) -> AsyncIterator[AsyncBackend]:
+async def backend(
+    request: pytest.FixtureRequest,
+    side: Side,
+    key_prefix: str,
+) -> AsyncIterator[AsyncBackend]:
     """An empty backend of every store and side, and a near cache over memory."""
     if request.param == "near":
         created: EitherBackend = side.near()

@@ -77,7 +77,12 @@ class FunctionCache[V]:
         )
         self._concurrency = ConcurrencyLimit(policy.stampede.max_concurrent_loads)
 
-    def get_or_load(self, key: str, tags: tuple[str, ...], load: Load[V]) -> V:
+    def get_or_load(
+        self,
+        key: str,
+        tags: tuple[str, ...],
+        load: Load[V],
+    ) -> V:
         state = CallState(key, tags, changes_at_start=self._changes)
         try:
             if in_no_cache():  # it shares no answer: another call may answer from the backend
@@ -96,7 +101,12 @@ class FunctionCache[V]:
             raise
         return self._result(key, answer)
 
-    def refresh(self, key: str, tags: tuple[str, ...], load: Load[V]) -> V:
+    def refresh(
+        self,
+        key: str,
+        tags: tuple[str, ...],
+        load: Load[V],
+    ) -> V:
         state = CallState(key, tags)
         try:
             state.tag_generations = self._tags.generations(tags)
@@ -125,7 +135,12 @@ class FunctionCache[V]:
             return None
         return self._result(key, answer)
 
-    def set(self, key: str, tags: tuple[str, ...], value: V) -> None:
+    def set(
+        self,
+        key: str,
+        tags: tuple[str, ...],
+        value: V,
+    ) -> None:
         self._changes += 1  # before the write: a load that ends after it must not overwrite it
         state = CallState(key, tags, self._tags.generations(tags))
         stored = self._codec.encode(state, value)
@@ -229,7 +244,12 @@ class FunctionCache[V]:
             return answer  # the load before this one kept a "not found"
         return Answer(answer.value, CacheStatus.HIT, stale_at=answer.stale_at)
 
-    def _serve_stale_or_load(self, state: CallState, stored: Stored, load: Load[V]) -> Answer:
+    def _serve_stale_or_load(
+        self,
+        state: CallState,
+        stored: Stored,
+        load: Load[V],
+    ) -> Answer:
         if_error, if_slow = self._policy.stale_windows(stored)
         state.has_stale_answer = if_error or if_slow
         try:

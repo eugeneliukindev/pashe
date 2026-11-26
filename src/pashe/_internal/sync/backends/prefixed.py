@@ -30,7 +30,14 @@ class PrefixedBackend(Backend):
         return self._backend.get_many([self.full_key(key) for key in keys])
 
     @override
-    def set(self, key: str, value: bytes, /, *, ttl: float | None = None) -> None:
+    def set(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> None:
         self._backend.set(self.full_key(key), value, ttl=ttl)
 
     @override
@@ -38,7 +45,14 @@ class PrefixedBackend(Backend):
         self._backend.set_many({self.full_key(key): value for key, value in values.items()}, ttl=ttl)
 
     @override
-    def set_if_absent(self, key: str, value: bytes, /, *, ttl: float | None = None) -> bool:
+    def set_if_absent(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> bool:
         return self._backend.set_if_absent(self.full_key(key), value, ttl=ttl)
 
     @override
@@ -46,7 +60,14 @@ class PrefixedBackend(Backend):
         return self._backend.delete(self.full_key(key))
 
     @override
-    def incr(self, key: str, by: int, /, *, ttl: float | None = None) -> int:
+    def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
         return self._backend.incr(self.full_key(key), by, ttl=ttl)
 
     @override
@@ -62,7 +83,13 @@ class PrefixedBackend(Backend):
         return self._backend.delete_if_equals(self.full_key(key), value)
 
     @override
-    def expire_if_equals(self, key: str, value: bytes, ttl: float, /) -> bool:
+    def expire_if_equals(
+        self,
+        key: str,
+        value: bytes,
+        ttl: float,
+        /,
+    ) -> bool:
         return self._backend.expire_if_equals(self.full_key(key), value, ttl)
 
     @override

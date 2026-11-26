@@ -81,7 +81,12 @@ class CallReporter:
     __slots__ = ("_clock", "_full_key", "_function", "_has_hooks", "_hooks")
 
     def __init__(
-        self, function: str, full_key: Callable[[str], str], *, hooks: Hook, clock: Callable[[], float]
+        self,
+        function: str,
+        full_key: Callable[[str], str],
+        *,
+        hooks: Hook,
+        clock: Callable[[], float],
     ) -> None:
         self._function = function  # the qualified name of the function
         self._full_key = full_key  # the key with the prefix of the cache
@@ -90,7 +95,14 @@ class CallReporter:
 
         self._has_hooks = bool(hooks)  # False for the hooks of a cache given none: an outcome would go nowhere
 
-    def report(self, key: str, status: CacheStatus, *, load_seconds: float = 0, stale_at: float | None = None) -> None:
+    def report(
+        self,
+        key: str,
+        status: CacheStatus,
+        *,
+        load_seconds: float = 0,
+        stale_at: float | None = None,
+    ) -> None:
         if not self._has_hooks:
             return
         left = None if stale_at is None else stale_at - self._clock()

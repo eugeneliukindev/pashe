@@ -18,7 +18,12 @@ class EntryCodec:
     # format encodes, and what fails on the way goes to the hooks, as a miss, not an error.
     __slots__ = ("_format", "_hooks", "_policy")
 
-    def __init__(self, policy: Policy, entry_format: EntryFormat, hooks: Hook) -> None:
+    def __init__(
+        self,
+        policy: Policy,
+        entry_format: EntryFormat,
+        hooks: Hook,
+    ) -> None:
         self._policy = policy
         self._format = entry_format
         self._hooks = hooks
@@ -42,7 +47,12 @@ class EntryCodec:
             stale_at=stale_at, fresh_for=lifetime, tag_generations=state.tag_generations
         )
 
-    def decode(self, key: str, raw: bytes | None, tag_generations: Generations) -> Stored | None:
+    def decode(
+        self,
+        key: str,
+        raw: bytes | None,
+        tag_generations: Generations,
+    ) -> Stored | None:
         # None for no entry, one stored as another type, or one a tag invalidated after it was stored
         if raw is None:
             return None

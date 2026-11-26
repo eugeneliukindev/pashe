@@ -28,7 +28,14 @@ class AsyncPrefixedBackend(AsyncBackend):
         return await self._backend.get_many([self.full_key(key) for key in keys])
 
     @override
-    async def set(self, key: str, value: bytes, /, *, ttl: float | None = None) -> None:
+    async def set(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> None:
         await self._backend.set(self.full_key(key), value, ttl=ttl)
 
     @override
@@ -36,7 +43,14 @@ class AsyncPrefixedBackend(AsyncBackend):
         await self._backend.set_many({self.full_key(key): value for key, value in values.items()}, ttl=ttl)
 
     @override
-    async def set_if_absent(self, key: str, value: bytes, /, *, ttl: float | None = None) -> bool:
+    async def set_if_absent(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> bool:
         return await self._backend.set_if_absent(self.full_key(key), value, ttl=ttl)
 
     @override
@@ -44,7 +58,14 @@ class AsyncPrefixedBackend(AsyncBackend):
         return await self._backend.delete(self.full_key(key))
 
     @override
-    async def incr(self, key: str, by: int, /, *, ttl: float | None = None) -> int:
+    async def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
         return await self._backend.incr(self.full_key(key), by, ttl=ttl)
 
     @override
@@ -60,7 +81,13 @@ class AsyncPrefixedBackend(AsyncBackend):
         return await self._backend.delete_if_equals(self.full_key(key), value)
 
     @override
-    async def expire_if_equals(self, key: str, value: bytes, ttl: float, /) -> bool:
+    async def expire_if_equals(
+        self,
+        key: str,
+        value: bytes,
+        ttl: float,
+        /,
+    ) -> bool:
         return await self._backend.expire_if_equals(self.full_key(key), value, ttl)
 
     @override

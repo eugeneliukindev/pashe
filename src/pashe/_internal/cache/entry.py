@@ -31,7 +31,14 @@ class EntryFormat:
 
         self._type_fingerprint = fingerprint(type_)
 
-    def encode(self, value: object, *, stale_at: float, fresh_for: float, tag_generations: Generations) -> Stored:
+    def encode(
+        self,
+        value: object,
+        *,
+        stale_at: float,
+        fresh_for: float,
+        tag_generations: Generations,
+    ) -> Stored:
         payload, compressed = self._serializer.encode(value)
         entry = Entry(
             stale_at,
@@ -43,7 +50,13 @@ class EntryFormat:
         )
         return Stored(entry, self._value_of(entry), fresh_for)
 
-    def encode_negative(self, *, stale_at: float, fresh_for: float, tag_generations: Generations) -> Stored:
+    def encode_negative(
+        self,
+        *,
+        stale_at: float,
+        fresh_for: float,
+        tag_generations: Generations,
+    ) -> Stored:
         entry = Entry(
             stale_at,
             negative=True,
@@ -108,7 +121,13 @@ class Serializer:
         packed = self._compressor.compress(data)
         return Payload(packed, compressed=True) if len(packed) < len(data) else Payload(data, compressed=False)
 
-    def decode[T](self, data: bytes, type_: type[T], *, compressed: bool) -> T:
+    def decode[T](
+        self,
+        data: bytes,
+        type_: type[T],
+        *,
+        compressed: bool,
+    ) -> T:
         return self._codec.decode(self._compressor.decompress(data) if compressed else data, type_)
 
 
@@ -138,7 +157,11 @@ def unpack(raw: bytes) -> Entry:
     return Entry(stale_at, bool(flags & _NEGATIVE), bool(flags & _COMPRESSED), type_fingerprint, generations, payload)
 
 
-def _read(layout: str, raw: bytes, offset: int) -> tuple[Any, ...]:
+def _read(
+    layout: str,
+    raw: bytes,
+    offset: int,
+) -> tuple[Any, ...]:
     # struct caches the formats it was given as str, so a layout is compiled once
     try:
         return struct.unpack_from(layout, raw, offset)

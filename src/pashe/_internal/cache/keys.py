@@ -38,7 +38,10 @@ class KeyBuilder:
     __slots__ = ("_bound", "_name", "_positional", "_signature", "_tags", "_template")
 
     def __init__(
-        self, function: Callable[..., object], template: KeyTemplate | None, tags: Sequence[KeyTemplate]
+        self,
+        function: Callable[..., object],
+        template: KeyTemplate | None,
+        tags: Sequence[KeyTemplate],
     ) -> None:
         self._signature = inspect.signature(function)
 
@@ -164,7 +167,11 @@ class KeyPrefix(enum.StrEnum):
     FIXED_WINDOW = "__rate:fixed:"  # the counter of a FixedWindow
 
 
-def item_key(name: str, template: KeyTemplate | None, item: object) -> str:
+def item_key(
+    name: str,
+    template: KeyTemplate | None,
+    item: object,
+) -> str:
     if template is not None:
         return template.render((item,), {})
     return f"{name}:{_part('item', item)}"

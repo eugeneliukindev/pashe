@@ -129,7 +129,14 @@ class SQLiteBackend(Backend):
             self._connection.execute(_PURGE, (now,))
 
     @override
-    def set_if_absent(self, key: str, value: bytes, /, *, ttl: float | None = None) -> bool:
+    def set_if_absent(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> bool:
         with self._lock, _translated_errors():
             now = self._clock()
             return self._connection.execute(_SET_IF_ABSENT, (key, value, _expires_at(now, ttl), now)).rowcount > 0
@@ -140,7 +147,14 @@ class SQLiteBackend(Backend):
             return self._connection.execute(_DELETE, (key, self._clock())).rowcount > 0
 
     @override
-    def incr(self, key: str, by: int, /, *, ttl: float | None = None) -> int:
+    def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
         expect_int64("sqlite.by", by)
         with self._lock, _translated_errors(), self._transaction():
             now = self._clock()
@@ -172,7 +186,13 @@ class SQLiteBackend(Backend):
             return self._connection.execute(_DELETE_IF_EQUALS, (key, self._clock(), value)).rowcount > 0
 
     @override
-    def expire_if_equals(self, key: str, value: bytes, ttl: float, /) -> bool:
+    def expire_if_equals(
+        self,
+        key: str,
+        value: bytes,
+        ttl: float,
+        /,
+    ) -> bool:
         with self._lock, _translated_errors():
             now = self._clock()
             return self._connection.execute(_EXPIRE_IF_EQUALS, (now + ttl, key, now, value)).rowcount > 0
@@ -232,7 +252,14 @@ class AsyncSQLiteBackend(AsyncBackend):
         await asyncio.to_thread(self._sync.set_many, values, ttl=ttl)
 
     @override
-    async def set_if_absent(self, key: str, value: bytes, /, *, ttl: float | None = None) -> bool:
+    async def set_if_absent(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> bool:
         return await asyncio.to_thread(self._sync.set_if_absent, key, value, ttl=ttl)
 
     @override
@@ -240,7 +267,14 @@ class AsyncSQLiteBackend(AsyncBackend):
         return await asyncio.to_thread(self._sync.delete, key)
 
     @override
-    async def incr(self, key: str, by: int, /, *, ttl: float | None = None) -> int:
+    async def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
         return await asyncio.to_thread(self._sync.incr, key, by, ttl=ttl)
 
     @override
@@ -256,7 +290,13 @@ class AsyncSQLiteBackend(AsyncBackend):
         return await asyncio.to_thread(self._sync.delete_if_equals, key, value)
 
     @override
-    async def expire_if_equals(self, key: str, value: bytes, ttl: float, /) -> bool:
+    async def expire_if_equals(
+        self,
+        key: str,
+        value: bytes,
+        ttl: float,
+        /,
+    ) -> bool:
         return await asyncio.to_thread(self._sync.expire_if_equals, key, value, ttl)
 
     @override

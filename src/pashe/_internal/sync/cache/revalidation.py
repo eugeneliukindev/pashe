@@ -37,7 +37,12 @@ class Revalidation:
     __slots__ = ("_backend", "_background", "_hooks", "_slow_after")
 
     def __init__(
-        self, *, backend: PrefixedBackend, background: BackgroundTasks, hooks: Hook, slow_after: float
+        self,
+        *,
+        backend: PrefixedBackend,
+        background: BackgroundTasks,
+        hooks: Hook,
+        slow_after: float,
     ) -> None:
         self._backend = backend
         self._background = background
@@ -54,6 +59,7 @@ class Revalidation:
             return
         if owner is None:
             return
+
         # the old result answered, so a full limit of loads skips this one
         background = replace(state, load_seconds=0, has_stale_answer=True)
         task = self._background.add_task(
@@ -76,6 +82,7 @@ class Revalidation:
             if owner is None:
                 return None
             lock = (lock_key, owner)
+
         answered = threading.Event()  # the caller stopped waiting: a failure of the load goes to on_error
         task = self._background.add_task(
             self._load,
@@ -85,13 +92,16 @@ class Revalidation:
             within=_LOCK_SECONDS,
             answered=answered,
         )
+
         if task is None:  # the cache is closing: no background work, wait for the load
             return self._load(state, load_and_store, lock=lock, within=None, answered=answered)
+
         try:  # the load goes on either way; the call waits for it at most Stale.slow_after
             concurrent.futures.wait({task}, timeout=self._slow_after)
         finally:
             if not task.done():
                 answered.set()
+
         if answered.is_set():
             # a load that fails as the caller stops waiting may raise into the task: nobody reads it there
             task.add_done_callback(functools.partial(self._report_unread, state.key))

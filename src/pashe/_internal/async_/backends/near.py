@@ -205,7 +205,14 @@ class AsyncNearCacheBackend(AsyncBackend):
         return found
 
     @override
-    async def set(self, key: str, value: bytes, /, *, ttl: float | None = None) -> None:
+    async def set(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> None:
         try:
             await self._shared.set(key, value, ttl=ttl)
         finally:
@@ -219,7 +226,14 @@ class AsyncNearCacheBackend(AsyncBackend):
             await self._drop(*values)
 
     @override
-    async def set_if_absent(self, key: str, value: bytes, /, *, ttl: float | None = None) -> bool:
+    async def set_if_absent(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> bool:
         return await self._write_and_drop(key, functools.partial(self._shared.set_if_absent, key, value, ttl=ttl))
 
     @override
@@ -227,7 +241,14 @@ class AsyncNearCacheBackend(AsyncBackend):
         return await self._write_and_drop(key, functools.partial(self._shared.delete, key))
 
     @override
-    async def incr(self, key: str, by: int, /, *, ttl: float | None = None) -> int:
+    async def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
         try:
             return await self._shared.incr(key, by, ttl=ttl)
         finally:
@@ -246,7 +267,13 @@ class AsyncNearCacheBackend(AsyncBackend):
         return await self._write_and_drop(key, functools.partial(self._shared.delete_if_equals, key, value))
 
     @override
-    async def expire_if_equals(self, key: str, value: bytes, ttl: float, /) -> bool:
+    async def expire_if_equals(
+        self,
+        key: str,
+        value: bytes,
+        ttl: float,
+        /,
+    ) -> bool:
         return await self._shared.expire_if_equals(key, value, ttl)
 
     @override
@@ -270,7 +297,12 @@ class AsyncNearCacheBackend(AsyncBackend):
             if self._stop is None:
                 self._stop = self._bus.listen(self._on_invalidation)
 
-    async def _keep_copy(self, key: str, value: bytes | None, version: int) -> None:
+    async def _keep_copy(
+        self,
+        key: str,
+        value: bytes | None,
+        version: int,
+    ) -> None:
         # a copy of what the shared backend answered, unless key was dropped since version was read
         if value is None or self._drops.version(key) != version:
             return

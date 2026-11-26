@@ -48,6 +48,7 @@ class BatchFunctionCache[K: Hashable, V]:
         self._hooks = hooks
         self._backend = backend
         self._fallback = fallback
+
         self._concurrency = ConcurrencyLimit(policy.stampede.max_concurrent_loads)
 
     def get_or_load_many(self, keys: Mapping[K, str], load: BatchFunction[K, V]) -> dict[K, V]:
@@ -79,7 +80,10 @@ class BatchFunctionCache[K: Hashable, V]:
         return self._backend.delete(key)
 
     def _sort(
-        self, states: _States[K], stored: Sequence[Stored | None], status: CacheStatus
+        self,
+        states: _States[K],
+        stored: Sequence[Stored | None],
+        status: CacheStatus,
     ) -> tuple[_Found[K], list[K]]:
         found: _Found[K] = {}
         for (item, state), entry in zip(states.items(), stored, strict=True):
@@ -90,13 +94,20 @@ class BatchFunctionCache[K: Hashable, V]:
         return found, [pending for pending in states if pending not in found]
 
     def _load(
-        self, states: _States[K], found: _Found[K], *, missing: list[K], load: BatchFunction[K, V]
+        self,
+        states: _States[K],
+        found: _Found[K],
+        *,
+        missing: list[K],
+        load: BatchFunction[K, V],
     ) -> _ToStore[K]:
         if not missing:
             return {}
+
         batch = CallState("")
         with self._concurrency.slot(has_stale_answer=False), timed(batch):
             loaded = load(missing)
+
         to_store: _ToStore[K] = {}
         for item in missing:
             state = replace(states[item], load_seconds=batch.load_seconds)  # every item took the whole batch
@@ -113,6 +124,7 @@ class BatchFunctionCache[K: Hashable, V]:
             )
             if stored is not None:
                 to_store[item] = stored
+
         return to_store
 
     def _store_all(self, states: _States[K], to_store: _ToStore[K]) -> None:

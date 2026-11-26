@@ -54,7 +54,11 @@ _ALL = [*json_codecs(), *_TYPED]
         (42, int),
     ],
 )
-def test_plain_values_read_back(codec: Codec, value: object, type_: type) -> None:
+def test_plain_values_read_back(
+    codec: Codec,
+    value: object,
+    type_: type,
+) -> None:
     assert codec.decode(codec.encode(value), type_) == value
 
 

@@ -32,7 +32,13 @@ class _ExtensionsFail(MemoryBackend):
         self.down = False
 
     @override
-    def expire_if_equals(self, key: str, value: bytes, ttl: float, /) -> bool:
+    def expire_if_equals(
+        self,
+        key: str,
+        value: bytes,
+        ttl: float,
+        /,
+    ) -> bool:
         if self.down:
             msg = "the backend is down"
             raise BackendError(msg)
@@ -48,7 +54,13 @@ class _AsyncExtensionsFail(AsyncMemoryBackend):
         self.down = False
 
     @override
-    async def expire_if_equals(self, key: str, value: bytes, ttl: float, /) -> bool:
+    async def expire_if_equals(
+        self,
+        key: str,
+        value: bytes,
+        ttl: float,
+        /,
+    ) -> bool:
         if self.down:
             msg = "the backend is down"
             raise BackendError(msg)
@@ -239,6 +251,68 @@ async def test_an_async_lock_lost_cancels_the_block() -> None:
         await hold()
 
     assert not finished
+
+
+async def test_a_lock_of_two_holders_takes_two_and_refuses_a_third(new_process_cache: NewCache) -> None:
+    cache = new_process_cache()
+    first = await call(cache.try_lock, "export", ttl=10, holders=2)
+    second = await call(cache.try_lock, "export", ttl=10, holders=2)
+
+    third = await call(cache.try_lock, "export", ttl=10, holders=2)
+
+    assert first is not None
+    assert second is not None
+    assert third is None
+
+
+async def test_a_holder_that_leaves_frees_its_place(new_process_cache: NewCache) -> None:
+    cache = new_process_cache()
+    leaving = await call(cache.try_lock, "export", ttl=10, holders=2)
+    await call(cache.try_lock, "export", ttl=10, holders=2)
+    assert leaving is not None
+
+    await run_block(leaving)
+
+    assert await call(cache.try_lock, "export", ttl=10, holders=2) is not None
+
+
+@pytest.mark.no_leaks(threads=False, blocking_threshold=LOOP_BLOCK_SECONDS)
+@pytest.mark.parametrize("side", ["async"], indirect=True)
+async def test_locked_runs_as_many_calls_at_once_as_it_has_holders(new_process_cache: NewCache) -> None:
+    cache = new_process_cache()
+    assert isinstance(cache, AsyncCache)
+    running = peak = 0
+
+    @cache.locked(ttl=10, holders=2)
+    async def export(report_id: int) -> int:
+        nonlocal running, peak
+        running += 1
+        peak = max(peak, running)
+        await asyncio.sleep(0.05)
+        running -= 1
+        return report_id
+
+    exported = await asyncio.gather(*(export(report_id) for report_id in range(5)))
+
+    assert exported == [0, 1, 2, 3, 4]
+    assert peak == 2
+
+
+def test_every_holder_of_a_lock_is_extended() -> None:
+    cache = Cache(MemoryBackend())
+
+    with cache.lock("export", ttl=0.15, holders=2), cache.lock("export", ttl=0.15, holders=2):
+        time.sleep(0.3)  # twice the ttl: only extensions keep both places
+        held = cache.try_lock("export", ttl=1, holders=2)
+
+    assert held is None
+
+
+def test_a_lock_of_no_holders_is_refused() -> None:
+    cache = Cache(MemoryBackend())
+
+    with pytest.raises(InvalidOptionsError, match="holders is 0"):
+        cache.lock("export", ttl=10, holders=0)
 
 
 def test_a_lock_entered_again_is_extended_again() -> None:

@@ -23,7 +23,12 @@ class AsyncKeyedDecorator(ABC):
 
     __slots__ = ("_cache", "_key", "_key_secret")
 
-    def __init__(self, cache: AsyncCache, key: KeyTemplate | None, key_secret: bytes | None) -> None:
+    def __init__(
+        self,
+        cache: AsyncCache,
+        key: KeyTemplate | None,
+        key_secret: bytes | None,
+    ) -> None:
         self._cache = cache
         self._key = key
         self._key_secret = key_secret  # for the default key: the name of the function
@@ -55,19 +60,27 @@ class AsyncKeyedDecorator(ABC):
 class AsyncLockedDecorator(AsyncKeyedDecorator):
     """What ``@cache.locked(...)`` returns: a decorator that runs every call under the lock of its key."""
 
-    __slots__ = ("_timeout", "_ttl")
+    __slots__ = ("_holders", "_timeout", "_ttl")
 
     def __init__(
-        self, cache: AsyncCache, key: KeyTemplate | None, key_secret: bytes | None, *, ttl: float, timeout: float | None
+        self,
+        cache: AsyncCache,
+        key: KeyTemplate | None,
+        key_secret: bytes | None,
+        *,
+        ttl: float,
+        timeout: float | None,
+        holders: int,
     ) -> None:
         super().__init__(cache, key, key_secret)
 
         self._ttl = ttl
         self._timeout = timeout
+        self._holders = holders
 
     @override
     async def _run[R](self, key: str, call: Callable[[], Awaitable[R]]) -> R:
-        async with self._cache.lock(key, ttl=self._ttl, timeout=self._timeout):
+        async with self._cache.lock(key, ttl=self._ttl, timeout=self._timeout, holders=self._holders):
             return await call()
 
 
@@ -77,7 +90,14 @@ class AsyncRateLimitedDecorator(AsyncKeyedDecorator):
 
     __slots__ = ("_limit",)
 
-    def __init__(self, cache: AsyncCache, key: KeyTemplate | None, key_secret: bytes | None, *, limit: Limit) -> None:
+    def __init__(
+        self,
+        cache: AsyncCache,
+        key: KeyTemplate | None,
+        key_secret: bytes | None,
+        *,
+        limit: Limit,
+    ) -> None:
         super().__init__(cache, key, key_secret)
 
         self._limit = limit
@@ -94,7 +114,13 @@ class AsyncInvalidatingDecorator:
 
     __slots__ = ("_hooks", "_tags", "_templates")
 
-    def __init__(self, templates: tuple[KeyTemplate, ...], tags: AsyncTags, *, hooks: Hook) -> None:
+    def __init__(
+        self,
+        templates: tuple[KeyTemplate, ...],
+        tags: AsyncTags,
+        *,
+        hooks: Hook,
+    ) -> None:
         self._templates = templates
         self._tags = tags
         self._hooks = hooks

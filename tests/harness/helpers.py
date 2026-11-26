@@ -127,7 +127,14 @@ class FailingMemoryBackend(MemoryBackend):
         return super().get_many(keys)
 
     @override
-    def set(self, key: str, value: bytes, /, *, ttl: float | None = None) -> None:
+    def set(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> None:
         self._check()
         super().set(key, value, ttl=ttl)
 
@@ -137,7 +144,14 @@ class FailingMemoryBackend(MemoryBackend):
         super().set_many(values, ttl=ttl)
 
     @override
-    def incr(self, key: str, by: int, /, *, ttl: float | None = None) -> int:
+    def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
         self._check()
         return super().incr(key, by, ttl=ttl)
 
@@ -168,7 +182,14 @@ class AsyncFailingMemoryBackend(AsyncMemoryBackend):
         return await super().get_many(keys)
 
     @override
-    async def set(self, key: str, value: bytes, /, *, ttl: float | None = None) -> None:
+    async def set(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> None:
         self._check()
         await super().set(key, value, ttl=ttl)
 
@@ -178,7 +199,14 @@ class AsyncFailingMemoryBackend(AsyncMemoryBackend):
         await super().set_many(values, ttl=ttl)
 
     @override
-    async def incr(self, key: str, by: int, /, *, ttl: float | None = None) -> int:
+    async def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
         self._check()
         return await super().incr(key, by, ttl=ttl)
 
@@ -266,12 +294,25 @@ SIDES: Final = {"sync": SYNC, "async": ASYNC}
 
 
 @overload
-async def call[**P, R](function: Callable[P, Awaitable[R]], /, *args: P.args, **kwargs: P.kwargs) -> R: ...
+async def call[**P, R](
+    function: Callable[P, Awaitable[R]],
+    /,
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> R: ...
 @overload  # a method of a cache of either side: the union of a def and an async def of one result
 async def call[**P, R](
-    function: Callable[P, Awaitable[R]] | Callable[P, R], /, *args: P.args, **kwargs: P.kwargs
+    function: Callable[P, Awaitable[R]] | Callable[P, R],
+    /,
+    *args: P.args,
+    **kwargs: P.kwargs,
 ) -> R: ...
-async def call(function: Callable[..., object], /, *args: object, **kwargs: object) -> object:
+async def call(
+    function: Callable[..., object],
+    /,
+    *args: object,
+    **kwargs: object,
+) -> object:
     """Call a function of either side and return its result."""
     result = function(*args, **kwargs)
     return await result if inspect.isawaitable(result) else result
@@ -311,14 +352,20 @@ class Source:
 
 @overload
 def cached_function(
-    cache: Cache, source: Callable[[int], dict[str, int]], **options: Any
+    cache: Cache,
+    source: Callable[[int], dict[str, int]],
+    **options: Any,
 ) -> CachedFunction[[int], dict[str, int]]: ...
 @overload
 def cached_function(
-    cache: AsyncCache, source: Callable[[int], dict[str, int]], **options: Any
+    cache: AsyncCache,
+    source: Callable[[int], dict[str, int]],
+    **options: Any,
 ) -> AsyncCachedFunction[[int], dict[str, int]]: ...
 def cached_function(
-    cache: EitherCache, source: Callable[[int], dict[str, int]], **options: Any
+    cache: EitherCache,
+    source: Callable[[int], dict[str, int]],
+    **options: Any,
 ) -> CachedFunction[[int], dict[str, int]] | AsyncCachedFunction[[int], dict[str, int]]:
     """Return source cached as a def function of user_id by a Cache, or an async def one by an AsyncCache.
 
@@ -339,14 +386,23 @@ def cached_function(
 
 @overload
 def batch_function(
-    cache: Cache, asked: list[list[int]], *, left_out: frozenset[int] = frozenset()
+    cache: Cache,
+    asked: list[list[int]],
+    *,
+    left_out: frozenset[int] = frozenset(),
 ) -> CachedBatchFunction[int, int]: ...
 @overload
 def batch_function(
-    cache: AsyncCache, asked: list[list[int]], *, left_out: frozenset[int] = frozenset()
+    cache: AsyncCache,
+    asked: list[list[int]],
+    *,
+    left_out: frozenset[int] = frozenset(),
 ) -> AsyncCachedBatchFunction[int, int]: ...
 def batch_function(
-    cache: EitherCache, asked: list[list[int]], *, left_out: frozenset[int] = frozenset()
+    cache: EitherCache,
+    asked: list[list[int]],
+    *,
+    left_out: frozenset[int] = frozenset(),
 ) -> CachedBatchFunction[int, int] | AsyncCachedBatchFunction[int, int]:
     """Return a cached batch function of the side of cache: it counts what it is asked, and leaves left_out out."""
     if isinstance(cache, Cache):

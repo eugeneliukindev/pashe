@@ -38,7 +38,13 @@ class AsyncFallbackStore(ABC):
 class AsyncBackendFallbackStore(AsyncFallbackStore):
     __slots__ = ("_backend", "_hooks", "_ttl")
 
-    def __init__(self, backend: AsyncBackend, *, ttl: float, hooks: Hook) -> None:
+    def __init__(
+        self,
+        backend: AsyncBackend,
+        *,
+        ttl: float,
+        hooks: Hook,
+    ) -> None:
         self._backend = backend
         self._ttl = ttl  # the longest an entry stays, in seconds
         self._hooks = hooks

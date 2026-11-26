@@ -106,7 +106,12 @@ class CacheHeadersMiddleware:
         self._hook = hook
         self._allow_no_cache = allow_no_cache
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def __call__(
+        self,
+        scope: Scope,
+        receive: Receive,
+        send: Send,
+    ) -> None:
         """Run the request, and add the headers of caching to a GET response.
 
         Args:
@@ -200,7 +205,12 @@ class RateLimitMiddleware:
         self._cost = parse_cost(limit, cost)
         self._fail_open = fail_open
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def __call__(
+        self,
+        scope: Scope,
+        receive: Receive,
+        send: Send,
+    ) -> None:
         """Count the request, and run it or refuse it.
 
         Args:

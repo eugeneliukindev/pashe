@@ -75,7 +75,12 @@ class AsyncFunctionCache[V]:
         )
         self._concurrency = AsyncConcurrencyLimit(policy.stampede.max_concurrent_loads)
 
-    async def get_or_load(self, key: str, tags: tuple[str, ...], load: AsyncLoad[V]) -> V:
+    async def get_or_load(
+        self,
+        key: str,
+        tags: tuple[str, ...],
+        load: AsyncLoad[V],
+    ) -> V:
         state = CallState(key, tags, changes_at_start=self._changes)
         try:
             if in_no_cache():  # it shares no answer: another call may answer from the backend
@@ -94,7 +99,12 @@ class AsyncFunctionCache[V]:
             raise
         return self._result(key, answer)
 
-    async def refresh(self, key: str, tags: tuple[str, ...], load: AsyncLoad[V]) -> V:
+    async def refresh(
+        self,
+        key: str,
+        tags: tuple[str, ...],
+        load: AsyncLoad[V],
+    ) -> V:
         state = CallState(key, tags)
         try:
             state.tag_generations = await self._tags.generations(tags)
@@ -123,7 +133,12 @@ class AsyncFunctionCache[V]:
             return None
         return self._result(key, answer)
 
-    async def set(self, key: str, tags: tuple[str, ...], value: V) -> None:
+    async def set(
+        self,
+        key: str,
+        tags: tuple[str, ...],
+        value: V,
+    ) -> None:
         self._changes += 1  # before the write: a load that ends after it must not overwrite it
         state = CallState(key, tags, await self._tags.generations(tags))
         stored = self._codec.encode(state, value)
@@ -228,7 +243,12 @@ class AsyncFunctionCache[V]:
             return answer  # the load before this one kept a "not found"
         return Answer(answer.value, CacheStatus.HIT, stale_at=answer.stale_at)
 
-    async def _serve_stale_or_load(self, state: CallState, stored: Stored, load: AsyncLoad[V]) -> Answer:
+    async def _serve_stale_or_load(
+        self,
+        state: CallState,
+        stored: Stored,
+        load: AsyncLoad[V],
+    ) -> Answer:
         if_error, if_slow = self._policy.stale_windows(stored)
         state.has_stale_answer = if_error or if_slow
         try:

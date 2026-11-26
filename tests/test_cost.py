@@ -35,7 +35,14 @@ class _Counting(MemoryBackend):
         return super().get_many(keys)
 
     @override
-    def set(self, key: str, value: bytes, /, *, ttl: float | None = None) -> None:
+    def set(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> None:
         self.calls["set"] += 1
         super().set(key, value, ttl=ttl)
 
@@ -45,7 +52,14 @@ class _Counting(MemoryBackend):
         super().set_many(values, ttl=ttl)
 
     @override
-    def set_if_absent(self, key: str, value: bytes, /, *, ttl: float | None = None) -> bool:
+    def set_if_absent(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> bool:
         self.calls["set_if_absent"] += 1
         return super().set_if_absent(key, value, ttl=ttl)
 
@@ -55,7 +69,14 @@ class _Counting(MemoryBackend):
         return super().delete(key)
 
     @override
-    def incr(self, key: str, by: int, /, *, ttl: float | None = None) -> int:
+    def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
         self.calls["incr"] += 1
         return super().incr(key, by, ttl=ttl)
 
@@ -106,7 +127,10 @@ def _locked(cache: Cache) -> Callable[[], object]:
     ids=["miss", "hit", "miss with 2 new tags", "hit with 2 tags", "miss under lock_for"],
 )
 def test_a_cached_call_makes_the_calls_the_page_tells(
-    make: Callable[[Cache], Callable[[], object]], *, warm: bool, calls: dict[str, int]
+    make: Callable[[Cache], Callable[[], object]],
+    *,
+    warm: bool,
+    calls: dict[str, int],
 ) -> None:
     backend = _Counting()
     get_user = make(Cache(backend))

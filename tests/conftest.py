@@ -37,7 +37,11 @@ def key_prefix() -> str:
 
 
 @pytest.fixture(params=STORE_PARAMS)
-async def new_process_cache(request: pytest.FixtureRequest, side: Side, key_prefix: str) -> AsyncIterator[NewCache]:
+async def new_process_cache(
+    request: pytest.FixtureRequest,
+    side: Side,
+    key_prefix: str,
+) -> AsyncIterator[NewCache]:
     """Make caches of the side over one store of every kind, each as a process of its own."""
     connect = STORES[request.param](request, side)
     caches: list[EitherCache] = []

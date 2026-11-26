@@ -85,7 +85,11 @@ async def test_other_arguments_load_results_of_their_own(new_process_cache: NewC
 @pytest.mark.parametrize("ttl", [90, 90.0, timedelta(seconds=90)])
 @pytest.mark.parametrize(("elapsed", "loads"), [(89, 1), (91, 2)])
 async def test_a_result_answers_until_its_ttl_ends(
-    new_process_cache: NewCache, clock: Clock, ttl: object, elapsed: float, loads: int
+    new_process_cache: NewCache,
+    clock: Clock,
+    ttl: object,
+    elapsed: float,
+    loads: int,
 ) -> None:
     cache = new_process_cache(clock=clock)
     source = Source()
@@ -99,7 +103,12 @@ async def test_a_result_answers_until_its_ttl_ends(
 
 
 @pytest.mark.parametrize(("elapsed", "loads"), [(4, 1), (6, 2)])
-async def test_a_ttl_from_the_result(new_process_cache: NewCache, clock: Clock, elapsed: float, loads: int) -> None:
+async def test_a_ttl_from_the_result(
+    new_process_cache: NewCache,
+    clock: Clock,
+    elapsed: float,
+    loads: int,
+) -> None:
     cache = new_process_cache(clock=clock)
     source = Source()
     get_user = cached_function(cache, source, ttl=lambda user: timedelta(seconds=5 * user["version"]))
@@ -270,7 +279,11 @@ async def test_an_invalidation_reaches_every_process(side: Side) -> None:
     assert source.calls == 2
 
 
-def _rename(cache: EitherCache, side: Side, error: Exception | None = None) -> Callable[[int], object]:
+def _rename(
+    cache: EitherCache,
+    side: Side,
+    error: Exception | None = None,
+) -> Callable[[int], object]:
     """Return a write of user_id of the side that invalidates its tag, and raises error if one is given."""
 
     def write(user_id: int) -> None:  # noqa: ARG001 - the tag is filled from it
@@ -327,7 +340,9 @@ def test_invalidates_refuses_a_template_of_no_parameter() -> None:
 
 
 def _login_code(
-    cache: EitherCache, side: Side, **options: object
+    cache: EitherCache,
+    side: Side,
+    **options: object,
 ) -> CachedValue[[str, int], str] | AsyncCachedValue[[str, int], str]:
     """Return a value of the side: the one-time code of an email, tagged with its user."""
     declare = cache.value(ttl=600, key="otp:{email}", tags=["user:{user_id}"], **options)
@@ -348,7 +363,11 @@ async def test_a_value_is_what_was_set_and_none_before(side: Side, new_process_c
     assert await call(code.get, "ada@example.com", 1) == "482913"
 
 
-async def test_a_value_lives_for_its_ttl(side: Side, new_process_cache: NewCache, clock: Clock) -> None:
+async def test_a_value_lives_for_its_ttl(
+    side: Side,
+    new_process_cache: NewCache,
+    clock: Clock,
+) -> None:
     code = _login_code(new_process_cache(clock=clock), side)
     await call(code.set, "482913", "ada@example.com", 1)
 
@@ -902,7 +921,12 @@ async def test_the_fallback_answers_while_the_backend_fails(side: Side) -> None:
 
 
 @pytest.mark.parametrize(("elapsed", "loads"), [(9, 1), (11, 2)])
-async def test_a_result_stays_in_the_fallback_for_its_ttl(side: Side, clock: Clock, elapsed: float, loads: int) -> None:
+async def test_a_result_stays_in_the_fallback_for_its_ttl(
+    side: Side,
+    clock: Clock,
+    elapsed: float,
+    loads: int,
+) -> None:
     backend = side.failing_memory()
     kept = side.memory(clock=clock)
     cache = side.new_cache(backend, clock=clock, fallback=Fallback(kept, ttl=10))
@@ -926,7 +950,14 @@ class _WritesFail(FailingMemoryBackend):
         self.writes_broken = False
 
     @override
-    def set(self, key: str, value: bytes, /, *, ttl: float | None = None) -> None:
+    def set(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> None:
         if self.writes_broken:
             msg = "the backend refuses writes"
             raise BackendError(msg)
@@ -1258,7 +1289,9 @@ class _Plan:
 
 @pytest.mark.parametrize("codec", json_codecs(), ids=lambda codec: type(codec).__name__)
 def test_a_return_type_json_reads_back_as_another_is_refused_at_the_decorator(
-    side: Side, new_process_cache: NewCache, codec: Codec
+    side: Side,
+    new_process_cache: NewCache,
+    codec: Codec,
 ) -> None:
     cache = new_process_cache(codec=codec, compressor=GzipCompressor())  # the compressor passes the check on
 
@@ -1357,7 +1390,10 @@ class _Growing(Compressor):
     ids=["shorter than min_size", "from min_size", "one compression would grow"],
 )
 def test_a_value_is_compressed_from_min_size_and_only_if_it_shrinks(
-    compressor: Compressor, value: str, *, compressed: bool
+    compressor: Compressor,
+    value: str,
+    *,
+    compressed: bool,
 ) -> None:
     backend = MemoryBackend()
     cache = Cache(backend, compressor=compressor)

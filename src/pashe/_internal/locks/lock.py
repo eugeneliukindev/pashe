@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final
 
-from pashe._internal.checks import parse_seconds, parse_timeout
+from pashe._internal.checks import parse_int, parse_seconds, parse_timeout
 from pashe.hooks import Failure, Operation
 
 if TYPE_CHECKING:
@@ -15,7 +15,7 @@ _EXTENDS_PER_TTL: Final = 3  # a held lock is extended this many times within on
 class BaseLock:
     """What both locks share: the key, the ttl, the owner token and what a lost lock raises."""
 
-    __slots__ = ("_hooks", "_key", "_lost", "_owner", "_timeout", "_ttl")
+    __slots__ = ("_hooks", "_key", "_lost", "_owner", "_slot", "_slots", "_timeout", "_ttl")
 
     def __init__(
         self,
@@ -24,14 +24,18 @@ class BaseLock:
         key: str,
         ttl: float,
         timeout: float | None,
+        holders: int,
         owner: bytes | None,
+        slot: str | None,
     ) -> None:
         # ttl and timeout in seconds, as parse_lock_ttl and parse_lock_timeout gave them
         self._hooks = hooks
         self._key = key
         self._ttl = ttl
         self._timeout = timeout
+        self._slots = lock_slots(key, holders)
         self._owner = owner  # None until the lock is taken
+        self._slot = key if slot is None else slot  # the key in the backend of the place it holds
 
         self._lost: BackendError | LockLostError | None = None  # the cause of the LockLostError the block raises
 
@@ -46,6 +50,15 @@ class BaseLock:
 
     def _report_release_error(self, error: BackendError) -> None:
         self._hooks.on_error(Failure(Operation.RELEASE_LOCK, self._key, error))
+
+
+def lock_slots(key: str, holders: int) -> tuple[str, ...]:
+    # a key in the backend for each holder: the first is the key itself, as a lock of one holder keeps it
+    return (key, *(f"{key}#{slot}" for slot in range(1, holders)))
+
+
+def parse_lock_holders(holders: object) -> int:
+    return parse_int("holders", holders, low=1, meaning="how many may hold the lock at once, 1 or more")
 
 
 def parse_lock_ttl(ttl: object) -> float:

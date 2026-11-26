@@ -88,7 +88,14 @@ class AsyncRedisBackend(AsyncBackend):
             return await self._get_many(keys)  # type: ignore[return-value]  # bytes, as above
 
     @override
-    async def set(self, key: str, value: bytes, /, *, ttl: float | None = None) -> None:
+    async def set(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> None:
         with self._breaker.guarding(), translated_errors():
             await self._client.set(key, value, px=px(ttl))
 
@@ -103,7 +110,14 @@ class AsyncRedisBackend(AsyncBackend):
             await pipeline.execute()
 
     @override
-    async def set_if_absent(self, key: str, value: bytes, /, *, ttl: float | None = None) -> bool:
+    async def set_if_absent(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> bool:
         with self._breaker.guarding(), translated_errors():
             return bool(await self._client.set(key, value, px=px(ttl), nx=True))
 
@@ -113,7 +127,14 @@ class AsyncRedisBackend(AsyncBackend):
             return bool(await self._client.delete(key))
 
     @override
-    async def incr(self, key: str, by: int, /, *, ttl: float | None = None) -> int:
+    async def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
         expect_int64("redis.by", by)
         with self._breaker.guarding(), translated_errors():
             if ttl is None:
@@ -136,7 +157,13 @@ class AsyncRedisBackend(AsyncBackend):
             return bool(await self._delete_if_equals(keys=[key], args=[value]))
 
     @override
-    async def expire_if_equals(self, key: str, value: bytes, ttl: float, /) -> bool:
+    async def expire_if_equals(
+        self,
+        key: str,
+        value: bytes,
+        ttl: float,
+        /,
+    ) -> bool:
         with self._breaker.guarding(), translated_errors():
             return bool(await self._expire_if_equals(keys=[key], args=[value, milliseconds(ttl)]))
 

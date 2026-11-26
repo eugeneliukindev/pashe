@@ -16,7 +16,7 @@ from pashe._internal.async_.cache.fallback import AsyncBackendFallbackStore, Asy
 from pashe._internal.async_.cache.tags import AsyncTags
 from pashe._internal.async_.limiter import AsyncRateLimiter
 from pashe._internal.async_.locks.lock import AsyncLock
-from pashe._internal.async_.locks.locking import atry_acquire
+from pashe._internal.async_.locks.locking import atry_acquire_slot
 from pashe._internal.async_.tasks import AsyncBackgroundTasks
 from pashe._internal.cache.entry import Serializer
 from pashe._internal.cache.keys import KeyPrefix, KeyTemplate
@@ -24,7 +24,7 @@ from pashe._internal.cache.policy import Policy
 from pashe._internal.checks import FUNCTION, duration_seconds, expect_item_types, expect_type, parse_secret, parse_ttl
 from pashe._internal.hooks import AllHooks
 from pashe._internal.limits import LIMIT, parse_cost
-from pashe._internal.locks.lock import parse_lock_timeout, parse_lock_ttl
+from pashe._internal.locks.lock import lock_slots, parse_lock_holders, parse_lock_timeout, parse_lock_ttl
 from pashe.codecs import Codec, JsonCodec
 from pashe.compressors import Compressor, NoOpCompressor
 from pashe.errors import InvalidOptionsError
@@ -245,7 +245,11 @@ class AsyncCache:
         )
 
     def value(
-        self, *, ttl: TTL, key: str | None = None, tags: list[str] | tuple[str, ...] = ()
+        self,
+        *,
+        ttl: TTL,
+        key: str | None = None,
+        tags: list[str] | tuple[str, ...] = (),
     ) -> AsyncCachedValueDecorator:
         """Keep values of yours that no function loads, as ``@cache.value(ttl=600)``.
 
@@ -345,7 +349,13 @@ class AsyncCache:
             hooks=self._hooks,
         )
 
-    def key_for(self, template: str, /, *args: object, **kwargs: object) -> str:
+    def key_for(
+        self,
+        template: str,
+        /,
+        *args: object,
+        **kwargs: object,
+    ) -> str:
         """Return template filled as the cache fills its keys and tags, with the same digests.
 
         invalidate_tags takes tags as they are stored, so a tag with a digest, such as
@@ -435,10 +445,18 @@ class AsyncCache:
             tuple(KeyTemplate(tag, secret=self._key_secret) for tag in tags), self._tags, hooks=self._hooks
         )
 
-    def lock(self, key: str, /, *, ttl: Duration, timeout: Duration | None = None) -> AsyncLock:
+    def lock(
+        self,
+        key: str,
+        /,
+        *,
+        ttl: Duration,
+        timeout: Duration | None = None,
+        holders: int = 1,
+    ) -> AsyncLock:
         """Return the lock key for a ``with`` block, held in the backend for every cache over it.
 
-        Entering the block waits while someone else holds the lock; the lock is extended every
+        Entering the block waits while holders others hold the lock; the lock is extended every
         third of ttl while the block runs, so the block may run longer than ttl, and released
         after; ttl frees it if its holder dies. A lock lost meanwhile raises LockLostError:
         a sync block runs to its end first, an async block is cancelled.
@@ -448,6 +466,8 @@ class AsyncCache:
             ttl: how long the lock lives without an extension: seconds or a timedelta.
             timeout: the most entering the block waits: seconds or a timedelta; None waits as
                 long as it takes.
+            holders: how many may hold the lock at once, such as 3 for at most three reports
+                built together; every use of a key takes the same holders.
 
         Returns:
             The lock, for a ``with`` block.
@@ -455,7 +475,7 @@ class AsyncCache:
         Raises:
             TypeError: an argument is not of the type its annotation names.
             LockTimeoutError: on entering the block, the lock stayed busy for timeout seconds.
-            InvalidOptionsError: ttl is not positive, or timeout is negative.
+            InvalidOptionsError: ttl is not positive, timeout is negative, or holders is less than 1.
 
         Examples:
             >>> from pashe import AsyncCache
@@ -463,13 +483,27 @@ class AsyncCache:
             >>> cache = AsyncCache(AsyncMemoryBackend())
             >>> async with cache.lock("report", ttl=30):
             ...     pass
+            >>> async with cache.lock("export", ttl=30, holders=3):
+            ...     pass
         """
         expect_type("key", key, str)
         return AsyncLock(
-            self._locks, self._hooks, key=key, ttl=parse_lock_ttl(ttl), timeout=parse_lock_timeout(timeout)
+            self._locks,
+            self._hooks,
+            key=key,
+            ttl=parse_lock_ttl(ttl),
+            timeout=parse_lock_timeout(timeout),
+            holders=parse_lock_holders(holders),
         )
 
-    async def try_lock(self, key: str, /, *, ttl: Duration) -> AsyncLock | None:
+    async def try_lock(
+        self,
+        key: str,
+        /,
+        *,
+        ttl: Duration,
+        holders: int = 1,
+    ) -> AsyncLock | None:
         """Take the lock key now if it is free, for a ``with`` block.
 
         The block releases it; a lock taken and never used in a block expires after ttl.
@@ -477,13 +511,14 @@ class AsyncCache:
         Args:
             key: the name of the lock.
             ttl: how long the lock lives without an extension: seconds or a timedelta.
+            holders: as in lock.
 
         Returns:
-            The lock, taken, for a ``with`` block; None if someone else holds it.
+            The lock, taken, for a ``with`` block; None if holders others hold it.
 
         Raises:
             TypeError: an argument is not of the type its annotation names.
-            InvalidOptionsError: ttl is not positive.
+            InvalidOptionsError: ttl is not positive, or holders is less than 1.
 
         Examples:
             >>> from pashe import AsyncCache
@@ -497,11 +532,67 @@ class AsyncCache:
         """
         expect_type("key", key, str)
         ttl = parse_lock_ttl(ttl)
-        owner = await atry_acquire(self._locks, key, ttl)
-        return None if owner is None else AsyncLock(self._locks, self._hooks, key=key, ttl=ttl, owner=owner)
+        holders = parse_lock_holders(holders)
+
+        taken = await atry_acquire_slot(self._locks, lock_slots(key, holders), ttl)
+        if taken is None:
+            return None
+        slot, owner = taken
+        return AsyncLock(self._locks, self._hooks, key=key, ttl=ttl, holders=holders, owner=owner, slot=slot)
+
+    def locked(
+        self,
+        *,
+        ttl: Duration,
+        key: str | None = None,
+        timeout: Duration | None = None,
+        holders: int = 1,
+    ) -> AsyncLockedDecorator:
+        """Run every call of a function under a lock, as ``with cache.lock(...)`` around it.
+
+        Args:
+            ttl: as in lock.
+            key: a str.format template over the arguments, such as ``"report:{report_id}"``; by
+                default one lock for the function.
+            timeout: as in lock.
+            holders: as in lock: how many calls run at once.
+
+        Returns:
+            A decorator for a function of the side of the cache.
+
+        Raises:
+            TypeError: an argument is not of the type its annotation names.
+            InvalidOptionsError: ttl is not positive, timeout is negative, or holders is less than 1.
+
+        Examples:
+            >>> from pashe import AsyncCache
+            >>> from pashe.backends import AsyncMemoryBackend
+            >>> cache = AsyncCache(AsyncMemoryBackend())
+            >>> @cache.locked(ttl=30, key="report:{report_id}")
+            ... async def build(report_id: int) -> int:
+            ...     return report_id
+            >>> await build(1)
+            1
+        """
+        expect_type("key", key, str | None)
+        template = None if key is None else KeyTemplate(key, secret=self._key_secret)
+        return AsyncLockedDecorator(
+            self,
+            template,
+            self._key_secret,
+            ttl=parse_lock_ttl(ttl),
+            timeout=parse_lock_timeout(timeout),
+            holders=parse_lock_holders(holders),
+        )
 
     async def rate_limit(
-        self, key: str, limit: Limit, /, *, cost: int = 1, fail_open: bool = True
+        self,
+        key: str,
+        limit: Limit,
+        /,
+        *,
+        cost: int = 1,
+        fail_open: bool = True,
     ) -> RateLimitState | None:
         """Count a call for key in the backend, and return what is left of the limit.
 
@@ -540,38 +631,6 @@ class AsyncCache:
         cost = parse_cost(limit, cost)
         expect_type("fail_open", fail_open, bool)
         return await self._limiter.count(key, limit, cost=cost, fail_open=fail_open)
-
-    def locked(self, *, ttl: Duration, key: str | None = None, timeout: Duration | None = None) -> AsyncLockedDecorator:
-        """Run every call of a function under a lock, as ``with cache.lock(...)`` around it.
-
-        Args:
-            ttl: as in lock.
-            key: a str.format template over the arguments, such as ``"report:{report_id}"``; by
-                default one lock for the function.
-            timeout: as in lock.
-
-        Returns:
-            A decorator for a function of the side of the cache.
-
-        Raises:
-            TypeError: an argument is not of the type its annotation names.
-            InvalidOptionsError: ttl is not positive, or timeout is negative.
-
-        Examples:
-            >>> from pashe import AsyncCache
-            >>> from pashe.backends import AsyncMemoryBackend
-            >>> cache = AsyncCache(AsyncMemoryBackend())
-            >>> @cache.locked(ttl=30, key="report:{report_id}")
-            ... async def build(report_id: int) -> int:
-            ...     return report_id
-            >>> await build(1)
-            1
-        """
-        expect_type("key", key, str | None)
-        template = None if key is None else KeyTemplate(key, secret=self._key_secret)
-        return AsyncLockedDecorator(
-            self, template, self._key_secret, ttl=parse_lock_ttl(ttl), timeout=parse_lock_timeout(timeout)
-        )
 
     def rate_limited(self, limit: Limit, /, *, key: str | None = None) -> AsyncRateLimitedDecorator:
         """Count every call of a function with rate_limit before it runs.

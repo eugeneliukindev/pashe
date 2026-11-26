@@ -27,7 +27,12 @@ class _MsgspecCodec(Codec):
 
     __slots__ = ("_decode", "_encode", "_name")
 
-    def __init__(self, name: str, encode: Callable[[object], bytes], decode: Callable[..., Any]) -> None:
+    def __init__(
+        self,
+        name: str,
+        encode: Callable[[object], bytes],
+        decode: Callable[..., Any],
+    ) -> None:
         self._name = name
         self._encode = encode
         self._decode = decode

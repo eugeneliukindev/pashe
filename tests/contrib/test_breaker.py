@@ -42,7 +42,11 @@ def client(redis_url: str) -> Iterator[Redis]:
     client.close()
 
 
-def _down(monkeypatch: pytest.MonkeyPatch, client: Redis, error: Exception) -> list[str]:
+def _down(
+    monkeypatch: pytest.MonkeyPatch,
+    client: Redis,
+    error: Exception,
+) -> list[str]:
     """Make every GET of client fail with error; return the GETs that reached it."""
     reached: list[str] = []
 

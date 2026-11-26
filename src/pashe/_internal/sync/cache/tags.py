@@ -23,6 +23,7 @@ class Tags:
 
     def __init__(self, backend: Backend) -> None:
         self._backend = backend
+
         self._invalidation_count = 0  # of this process: a call after one shares no load started before it
 
     @property

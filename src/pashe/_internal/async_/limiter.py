@@ -23,12 +23,24 @@ _PAST_THE_EDGE: Final = 4  # steps of the float of the clock: what now % per may
 class AsyncRateLimiter:
     __slots__ = ("_backend", "_clock", "_hooks")
 
-    def __init__(self, backend: AsyncBackend, hooks: Hook, clock: Callable[[], float]) -> None:
+    def __init__(
+        self,
+        backend: AsyncBackend,
+        hooks: Hook,
+        clock: Callable[[], float],
+    ) -> None:
         self._backend = backend
         self._hooks = hooks
         self._clock = clock
 
-    async def count(self, key: str, limit: Limit, *, cost: int, fail_open: bool) -> RateLimitState | None:
+    async def count(
+        self,
+        key: str,
+        limit: Limit,
+        *,
+        cost: int,
+        fail_open: bool,
+    ) -> RateLimitState | None:
         try:
             match limit:
                 case SlidingWindow():
@@ -48,7 +60,12 @@ class AsyncRateLimiter:
         self._hooks.on_rate_limit(RateLimitDecision(key, allowed=True))
         return state
 
-    async def _count_sliding(self, key: str, limit: SlidingWindow, cost: int) -> RateLimitState:
+    async def _count_sliding(
+        self,
+        key: str,
+        limit: SlidingWindow,
+        cost: int,
+    ) -> RateLimitState:
         # Counters of fixed windows: the current one counts in full, the previous one by how much of it
         # the sliding window still overlaps.
         now = self._clock()
@@ -69,7 +86,12 @@ class AsyncRateLimiter:
             raise RateLimitedError(_retry_after(limit, previous=previous, before=current - cost, now=now, cost=cost))
         return RateLimitState(limit.calls, max(0, math.floor(limit.calls - used)), limit.per - elapsed)
 
-    async def _count_fixed(self, key: str, limit: FixedWindow, cost: int) -> RateLimitState:
+    async def _count_fixed(
+        self,
+        key: str,
+        limit: FixedWindow,
+        cost: int,
+    ) -> RateLimitState:
         counter = (
             f"{KeyPrefix.FIXED_WINDOW}{limit.calls}/{float(limit.per)!r}/{float(limit.ban_seconds)!r}:{key}"  # as above
         )
@@ -95,7 +117,14 @@ def _parse_count(raw: bytes | None) -> int:
         raise WrongTypeError(msg) from error
 
 
-def _retry_after(limit: SlidingWindow, *, previous: int, before: int, now: float, cost: int) -> float:
+def _retry_after(
+    limit: SlidingWindow,
+    *,
+    previous: int,
+    before: int,
+    now: float,
+    cost: int,
+) -> float:
     # How long until the weighted calls leave room for this one: the current window must end
     # first if it alone is too full, else the previous one must slide out far enough. A few steps of
     # the float of now more, so a call after the wait lands past the edge, not on it.

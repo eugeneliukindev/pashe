@@ -385,7 +385,14 @@ class _DroppedWhileCopied(MemoryBackend):
         self.wire = wire
 
     @override
-    def set(self, key: str, value: bytes, /, *, ttl: float | None = None) -> None:
+    def set(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> None:
         self.wire.publish([key])  # the listener thread drops key before this copy is stored
         super().set(key, value, ttl=ttl)
 
@@ -401,7 +408,11 @@ def test_a_drop_that_lands_during_a_copy_leaves_no_stale_copy() -> None:
     assert local.get("k") is None
 
 
-def _write_while_disconnected(redis_url: str, name: str, key: str) -> None:
+def _write_while_disconnected(
+    redis_url: str,
+    name: str,
+    key: str,
+) -> None:
     """Drop the pub/sub connection of the client named name and write key at once, so its message is lost."""
     with Redis.from_url(redis_url) as admin:
         [listener] = [client["id"] for client in admin.client_list(_type="pubsub") if client["name"] == name]

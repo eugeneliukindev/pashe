@@ -80,7 +80,14 @@ class AsyncMemoryBackend(AsyncBackend):
             return [self._data(key) for key in keys]
 
     @override
-    async def set(self, key: str, value: bytes, /, *, ttl: float | None = None) -> None:
+    async def set(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> None:
         """Store value under key, replacing the entry and its TTL.
 
         Args:
@@ -127,7 +134,14 @@ class AsyncMemoryBackend(AsyncBackend):
             raise too_large
 
     @override
-    async def set_if_absent(self, key: str, value: bytes, /, *, ttl: float | None = None) -> bool:
+    async def set_if_absent(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> bool:
         with self._lock:
             if self._live(key) is not None:
                 return False
@@ -166,7 +180,14 @@ class AsyncMemoryBackend(AsyncBackend):
             return len(live)
 
     @override
-    async def incr(self, key: str, by: int, /, *, ttl: float | None = None) -> int:
+    async def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
         """Add by to the integer under key, creating it from 0 if absent.
 
         Args:
@@ -226,7 +247,13 @@ class AsyncMemoryBackend(AsyncBackend):
             return True
 
     @override
-    async def expire_if_equals(self, key: str, value: bytes, ttl: float, /) -> bool:
+    async def expire_if_equals(
+        self,
+        key: str,
+        value: bytes,
+        ttl: float,
+        /,
+    ) -> bool:
         with self._lock:
             entry = self._live(key)
             if entry is None or entry.data != value:
@@ -271,7 +298,14 @@ class AsyncMemoryBackend(AsyncBackend):
         self._entries.move_to_end(key)
         return entry
 
-    def _put(self, key: str, data: bytes, expires_at: float | None, *, pinned: bool = False) -> None:
+    def _put(
+        self,
+        key: str,
+        data: bytes,
+        expires_at: float | None,
+        *,
+        pinned: bool = False,
+    ) -> None:
         if key in self._entries:
             self._remove(key)
 

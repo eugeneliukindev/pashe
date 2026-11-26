@@ -78,7 +78,10 @@ class AsyncBatchFunctionCache[K: Hashable, V]:
         return await self._backend.delete(key)
 
     def _sort(
-        self, states: _States[K], stored: Sequence[Stored | None], status: CacheStatus
+        self,
+        states: _States[K],
+        stored: Sequence[Stored | None],
+        status: CacheStatus,
     ) -> tuple[_Found[K], list[K]]:
         found: _Found[K] = {}
         for (item, state), entry in zip(states.items(), stored, strict=True):
@@ -89,7 +92,12 @@ class AsyncBatchFunctionCache[K: Hashable, V]:
         return found, [pending for pending in states if pending not in found]
 
     async def _load(
-        self, states: _States[K], found: _Found[K], *, missing: list[K], load: AsyncBatchFunction[K, V]
+        self,
+        states: _States[K],
+        found: _Found[K],
+        *,
+        missing: list[K],
+        load: AsyncBatchFunction[K, V],
     ) -> _ToStore[K]:
         if not missing:
             return {}

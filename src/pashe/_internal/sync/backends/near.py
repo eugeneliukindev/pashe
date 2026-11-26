@@ -182,6 +182,7 @@ class NearCacheBackend(Backend):
             self._hooks.on_near_read(NearRead(local=0, shared=1) if copy is None else NearRead(local=1, shared=0))
         if copy is not None:
             return copy
+
         version = self._drops.version(key)  # before the read: a drop that comes meanwhile changes it
         value = self._shared.get(key)
         self._keep_copy(key, value, version)
@@ -206,7 +207,14 @@ class NearCacheBackend(Backend):
         return found
 
     @override
-    def set(self, key: str, value: bytes, /, *, ttl: float | None = None) -> None:
+    def set(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> None:
         try:
             self._shared.set(key, value, ttl=ttl)
         finally:
@@ -220,7 +228,14 @@ class NearCacheBackend(Backend):
             self._drop(*values)
 
     @override
-    def set_if_absent(self, key: str, value: bytes, /, *, ttl: float | None = None) -> bool:
+    def set_if_absent(
+        self,
+        key: str,
+        value: bytes,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> bool:
         return self._write_and_drop(key, functools.partial(self._shared.set_if_absent, key, value, ttl=ttl))
 
     @override
@@ -228,7 +243,14 @@ class NearCacheBackend(Backend):
         return self._write_and_drop(key, functools.partial(self._shared.delete, key))
 
     @override
-    def incr(self, key: str, by: int, /, *, ttl: float | None = None) -> int:
+    def incr(
+        self,
+        key: str,
+        by: int,
+        /,
+        *,
+        ttl: float | None = None,
+    ) -> int:
         try:
             return self._shared.incr(key, by, ttl=ttl)
         finally:
@@ -247,7 +269,13 @@ class NearCacheBackend(Backend):
         return self._write_and_drop(key, functools.partial(self._shared.delete_if_equals, key, value))
 
     @override
-    def expire_if_equals(self, key: str, value: bytes, ttl: float, /) -> bool:
+    def expire_if_equals(
+        self,
+        key: str,
+        value: bytes,
+        ttl: float,
+        /,
+    ) -> bool:
         return self._shared.expire_if_equals(key, value, ttl)
 
     @override
@@ -271,7 +299,12 @@ class NearCacheBackend(Backend):
             if self._stop is None:
                 self._stop = self._bus.listen(self._on_invalidation)
 
-    def _keep_copy(self, key: str, value: bytes | None, version: int) -> None:
+    def _keep_copy(
+        self,
+        key: str,
+        value: bytes | None,
+        version: int,
+    ) -> None:
         # a copy of what the shared backend answered, unless key was dropped since version was read
         if value is None or self._drops.version(key) != version:
             return

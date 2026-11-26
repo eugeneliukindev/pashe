@@ -156,7 +156,11 @@ class _Started:  # what the application passed to start_response
         self.written: list[bytes] = []
 
     def start_response(
-        self, status: str, headers: Headers, exc_info: OptExcInfo | None = None, /
+        self,
+        status: str,
+        headers: Headers,
+        exc_info: OptExcInfo | None = None,
+        /,
     ) -> Callable[[bytes], object]:
         self.status = status
         self.headers = headers
@@ -170,7 +174,12 @@ class _Rest:
     __slots__ = ("_app_iter", "_chunks", "_context")
 
     def __init__(
-        self, head: list[bytes], chunks: Iterator[bytes], app_iter: Iterable[bytes], *, context: contextvars.Context
+        self,
+        head: list[bytes],
+        chunks: Iterator[bytes],
+        app_iter: Iterable[bytes],
+        *,
+        context: contextvars.Context,
     ) -> None:
         self._chunks = itertools.chain(head, chunks)
         self._app_iter = app_iter

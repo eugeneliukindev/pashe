@@ -181,7 +181,11 @@ async def test_an_overloaded_load_is_503(client: httpx.AsyncClient) -> None:
 async def test_the_response_goes_before_the_work_after_it() -> None:
     sent: list[str] = []
 
-    async def app(_scope: Scope, _receive: Receive, send: Send) -> None:
+    async def app(
+        _scope: Scope,
+        _receive: Receive,
+        send: Send,
+    ) -> None:
         await send({"type": "http.response.start", "status": 200, "headers": []})
         await send({"type": "http.response.body", "body": b"ok"})
         sent.append("background task")  # what Starlette runs after the body
@@ -205,7 +209,12 @@ def test_a_rate_limit_that_costs_more_than_its_limit_is_refused_when_it_is_made(
         rate_limit(cache, FixedWindow(calls=5, per=60), key=lambda _request: "ip", cost=10)
 
 
-def _reloading_app(source: Source, clock: Clock, *, allow: Callable[[Scope], bool] | None) -> FastAPI:
+def _reloading_app(
+    source: Source,
+    clock: Clock,
+    *,
+    allow: Callable[[Scope], bool] | None,
+) -> FastAPI:
     headers = CacheHeadersHook()
     cache = AsyncCache(AsyncMemoryBackend(), hooks=[headers], clock=clock)
 

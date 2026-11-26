@@ -4,7 +4,7 @@ import threading
 from typing import TYPE_CHECKING, Self, final
 
 from pashe._internal.locks.lock import BaseLock
-from pashe._internal.sync.locks.locking import acquire
+from pashe._internal.sync.locks.locking import acquire_slot
 from pashe.errors import BackendError, LockLostError, LockTimeoutError
 
 if TYPE_CHECKING:
@@ -43,7 +43,9 @@ class Lock(BaseLock):
         key: str,
         ttl: float,
         timeout: float | None = None,
+        holders: int = 1,
         owner: bytes | None = None,
+        slot: str | None = None,
     ) -> None:
         """Made by the lock methods of a cache, not by hand.
 
@@ -53,9 +55,11 @@ class Lock(BaseLock):
             key: the name of the lock.
             ttl: how long the lock lives without an extension, in seconds, more than 0.
             timeout: the most entering waits, in seconds, 0 or more; None waits as long as it takes.
+            holders: how many may hold the lock at once, 1 or more.
             owner: the owner token of a lock try_lock already took; None takes it on entering.
+            slot: the key in the backend of the place try_lock took, with owner.
         """
-        super().__init__(hooks, key=key, ttl=ttl, timeout=timeout, owner=owner)
+        super().__init__(hooks, key=key, ttl=ttl, timeout=timeout, holders=holders, owner=owner, slot=slot)
 
         self._backend = backend
 
@@ -77,9 +81,11 @@ class Lock(BaseLock):
             raise RuntimeError(msg)
 
         if self._owner is None:
-            owner = acquire(self._backend, self._key, self._ttl, timeout=self._timeout)
-            if owner is None:
+            taken = acquire_slot(self._backend, self._slots, self._ttl, timeout=self._timeout)
+            if taken is None:
                 raise LockTimeoutError(self._key, self._timeout)
+            slot, owner = taken
+            self._slot = slot
             self._owner = owner
 
         self._lost = None
@@ -118,7 +124,7 @@ class Lock(BaseLock):
         if self._owner is None:
             return
         try:
-            self._backend.delete_if_equals(self._key, self._owner)
+            self._backend.delete_if_equals(self._slot, self._owner)
         except BackendError as error:
             self._report_release_error(error)
         self._owner = None
@@ -128,7 +134,7 @@ class Lock(BaseLock):
             if self._owner is None:
                 return
             try:
-                extended = self._backend.expire_if_equals(self._key, self._owner, self._ttl)
+                extended = self._backend.expire_if_equals(self._slot, self._owner, self._ttl)
             except BackendError as error:
                 self._lost = error
                 return

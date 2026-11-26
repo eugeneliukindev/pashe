@@ -11,6 +11,8 @@ from pashe.errors import BackendError
 from pashe.hooks import Failure, Operation
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from pashe._internal.async_.backends.backend import AsyncBackend
     from pashe.hooks import Hook
 
@@ -21,24 +23,64 @@ _PAUSES_PER_TTL: Final = 10  # a waiter checks at least this often within the tt
 _JITTER: Final = 0.5  # a pause is cut by up to this share, so waiters do not check together
 
 
-async def aacquire(backend: AsyncBackend, key: str, ttl: float, *, timeout: float | None = None) -> bytes | None:  # noqa: ASYNC109 - bounds the wait, not the block that holds the lock
+async def aacquire(
+    backend: AsyncBackend,
+    key: str,
+    ttl: float,
+    *,
+    timeout: float | None = None,  # noqa: ASYNC109 - bounds the wait, not the block that holds the lock
+) -> bytes | None:
+    taken = await aacquire_slot(backend, (key,), ttl, timeout=timeout)
+    return None if taken is None else taken[1]
+
+
+async def aacquire_slot(
+    backend: AsyncBackend,
+    slots: Sequence[str],
+    ttl: float,
+    *,
+    timeout: float | None = None,  # noqa: ASYNC109 - bounds the wait, not the block that holds the lock
+) -> tuple[str, bytes] | None:
     pauses = _Backoff(ttl, timeout)
-    owner = await atry_acquire(backend, key, ttl)
-    while owner is None:
+    taken = await atry_acquire_slot(backend, slots, ttl)
+    while taken is None:
         pause = pauses.next_delay()
         if pause is None:
             return None
         await asyncio.sleep(pause)
-        owner = await atry_acquire(backend, key, ttl)
-    return owner
+        taken = await atry_acquire_slot(backend, slots, ttl)
+    return taken
 
 
-async def atry_acquire(backend: AsyncBackend, key: str, ttl: float) -> bytes | None:
+async def atry_acquire(
+    backend: AsyncBackend,
+    key: str,
+    ttl: float,
+) -> bytes | None:
     owner = secrets.token_hex(_OWNER_BYTES).encode()  # only its holder releases or extends the lock
     return owner if await backend.set_if_absent(key, owner, ttl=ttl) else None
 
 
-async def arelease(backend: AsyncBackend, key: str, owner: bytes | None, *, hooks: Hook) -> None:
+async def atry_acquire_slot(
+    backend: AsyncBackend,
+    slots: Sequence[str],
+    ttl: float,
+) -> tuple[str, bytes] | None:
+    first = random.randrange(len(slots))  # noqa: S311 - spreads the holders over the slots, not a secret
+    for slot in (*slots[first:], *slots[:first]):
+        owner = await atry_acquire(backend, slot, ttl)  # noqa: WPS476 - the next place only if this one is taken
+        if owner is not None:
+            return slot, owner
+    return None
+
+
+async def arelease(
+    backend: AsyncBackend,
+    key: str,
+    owner: bytes | None,
+    *,
+    hooks: Hook,
+) -> None:
     # a lock the cache took for itself, as a load does: no caller waits for an error, so it goes to on_error
     if owner is None:
         return
