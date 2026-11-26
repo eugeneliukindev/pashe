@@ -12,8 +12,8 @@ the cache works in its process only, as [Core concepts](../concepts.md#where-eac
 | --- | --- | --- | --- | --- |
 | cached results | the backend | every process of every machine | every process of one machine | one process |
 | tags and `invalidate_tags` | the backend | every process of every machine | every process of one machine | one process |
-| `lock`, `try_lock` and `@locked` | the backend | every process of every machine | every process of one machine | one process |
-| `rate_limit` and `@rate_limited` | the backend | every process of every machine | every process of one machine | one process |
+| `Locks`: `lock`, `try_lock` and `@locked` | the backend | every process of every machine | every process of one machine | one process |
+| `RateLimiter`: `count` and `@limited` | the backend | every process of every machine | every process of one machine | one process |
 | `Stampede.lock_for` | the backend | every process of every machine | every process of one machine | one process, where `share_loads` does it for less |
 | `Stampede.revalidate_before` | the backend | every process of every machine | every process of one machine | one process |
 | `Stampede.share_loads` | the cache | one process | one process | one process |
@@ -75,7 +75,7 @@ costs no round trip, and a copy may be up to `local_ttl` old.
 | --- | --- | --- |
 | a result that may be a little old, and calls that must be fast | `Stale(while_revalidate=...)`: the old result answers at once while one call reloads | [Stale results](failures/stale.md) |
 | a source that fails now and then | `Stale(if_error=...)`: the old result answers its errors | the same |
-| a source that is sometimes slow, and a deadline | `Stale(if_slow=IfSlow(...))`: the old result answers a slow load, which goes on | the same |
+| a source that is sometimes slow, and a deadline | `Stale(if_slow=..., slow_after=...)`: the old result answers a slow load, which goes on | the same |
 | a hot key that must never be seen stale | `Stampede(revalidate_before=...)`: it reloads in the last seconds of its TTL | [Reload before the TTL](failures/stampedes.md#reload-before-the-ttl) |
 | a TTL that depends on the result, such as a token | `ttl=` a function of the result | [What is stored](caching/what-is-stored.md) |
 | a write that changes what a result shows | tags, and `@cache.invalidates` or `invalidate_tags` | [Tags](invalidation/tags.md) |
@@ -97,11 +97,11 @@ feature that lives in it.
 
 | You have | Take | Reaches | See |
 | --- | --- | --- | --- |
-| a block one process at a time may run | `with cache.lock(...)` | every process | [Locks](locks/locks.md) |
-| a job that skips when another process runs it | `cache.try_lock(...)` | every process | the same |
-| a function one process at a time may run, each call doing its work | `@cache.locked(...)` | every process | the same |
-| a function a few at a time may run, such as three exports at once | `@cache.locked(..., holders=3)` | every process | [Several holders](locks/locks.md#several-holders) |
-| a cached function whose load one process at a time may run, the others taking its result | `Stampede(lock_for=...)`, not `@cache.locked` | every process | [Locking a load across processes](failures/stampedes.md#locking-a-load-across-processes) |
+| a block one process at a time may run | `with locks.lock(...)` | every process | [Locks](locks/locks.md) |
+| a job that skips when another process runs it | `locks.try_lock(...)` | every process | the same |
+| a function one process at a time may run, each call doing its work | `@locks.locked(...)` | every process | the same |
+| a function a few at a time may run, such as three exports at once | `@locks.locked(..., holders=3)` | every process | [Several holders](locks/locks.md#several-holders) |
+| a cached function whose load one process at a time may run, the others taking its result | `Stampede(lock_for=...)`, not `@locks.locked` | every process | [Locking a load across processes](failures/stampedes.md#locking-a-load-across-processes) |
 | a limit such as "100 a minute", even across its windows | `SlidingWindow`, such as `SlidingWindow.per_minute(100)` | every process | [Rate limits](locks/rate-limits.md) |
 | a limit that bans for a while once it is passed, such as logins | `FixedWindow(..., ban_for=...)` | every process | the same |
 | a limit of a whole ASGI application | `RateLimitMiddleware` of `pashe.asgi` | every process | [Rate limits for HTTP](web/rate-limits.md) |

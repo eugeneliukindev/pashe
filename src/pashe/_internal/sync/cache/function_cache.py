@@ -7,9 +7,7 @@ import functools
 from typing import TYPE_CHECKING, final
 
 from pashe._internal.cache.call import Answer, Call, in_no_cache
-from pashe._internal.cache.keys import KeyPrefix
 from pashe._internal.sync.cache.reload import Reload
-from pashe._internal.sync.locks.locking import take
 from pashe._internal.sync.threads import LoadLimit, SharedLoads
 from pashe.errors import BackendError, NotFoundError
 from pashe.hooks import CacheStatus, Failure, Operation
@@ -20,9 +18,8 @@ if TYPE_CHECKING:
     from pashe._internal.cache.call import CallReporter
     from pashe._internal.cache.entry import EntryFormat, Lookup, Stored
     from pashe._internal.cache.policy import Policy
-    from pashe._internal.sync.backends.prefixed import PrefixedBackend
     from pashe._internal.sync.cache.storage import Storage
-    from pashe._internal.sync.cache.tags import Tags
+    from pashe._internal.sync.locks.locking import LoadLocks
     from pashe._internal.sync.threads import BackgroundTasks
     from pashe.hooks import Hook
 
@@ -34,17 +31,16 @@ class FunctionCache[V]:
     # The cache of one function: answers from what its storage finds, or loads and keeps. Its
     # policy decides, its format encodes, and it tells the hooks of what it works around.
     __slots__ = (
-        "_backend",
         "_changes",
-        "_format",
+        "_entry_format",
         "_hooks",
         "_load_limit",
+        "_load_locks",
         "_policy",
         "_reload",
         "_reporter",
         "_shared_loads",
         "_storage",
-        "_tags",
     )
 
     def __init__(
@@ -53,17 +49,15 @@ class FunctionCache[V]:
         *,
         storage: Storage,
         entry_format: EntryFormat,
-        tags: Tags,
-        backend: PrefixedBackend,
+        load_locks: LoadLocks,
         background: BackgroundTasks,
         reporter: CallReporter,
         hooks: Hook,
     ) -> None:
         self._policy = policy
         self._storage = storage
-        self._format = entry_format
-        self._tags = tags  # its invalidations in this process end the sharing of a load
-        self._backend = backend  # for the Stampede.lock_for lock
+        self._entry_format = entry_format
+        self._load_locks = load_locks
         self._reporter = reporter
         self._hooks = hooks
 
@@ -71,7 +65,9 @@ class FunctionCache[V]:
         # nothing, and is shared with no call after it
         self._changes = 0
         self._shared_loads = SharedLoads()
-        self._reload = Reload(backend=backend, background=background, slow_after=policy.stale.slow_after, hooks=hooks)
+        self._reload = Reload(
+            load_locks=load_locks, background=background, slow_after=policy.stale.slow_after, hooks=hooks
+        )
         self._load_limit = LoadLimit(policy.stampede.max_loads)
 
     def get_or_load(
@@ -83,11 +79,11 @@ class FunctionCache[V]:
         call = Call(key, tags, changes_at_start=self._changes)
         try:
             if in_no_cache():  # it shares no answer: another call may answer from the backend
-                answer = self._load_and_store(call, self._storage.open(key, tags), load)
+                answer = self._load_and_store(call, self._storage.lookup(key, tags), load)
             elif self._policy.stampede.share_loads:
                 share_key = (
                     key,
-                    self._tags.invalidation_count,
+                    self._storage.invalidations,
                     self._changes,
                 )  # no load started before a change is shared
                 answer = self._shared_loads.share(share_key, functools.partial(self._serve, call, load))
@@ -105,21 +101,19 @@ class FunctionCache[V]:
         load: Load[V],
     ) -> V:
         call = Call(key, tags, changes_at_start=self._changes)
-        lookup = self._storage.open(key, tags)
+        lookup = self._storage.lookup(key, tags)
         result = self._run(call, load, has_stale_answer=False)
-        stored = self._format.encode_loaded(result, load_seconds=call.stopwatch.seconds, key=key)
-        if stored is None and not lookup.from_fallback:
-            self._storage.delete(key)  # the old result must not answer after a refresh
-            return result
-        self._keep_unless_changed(call, lookup, stored)
-        return result if stored is None or lookup.from_fallback else stored.result  # type: ignore[return-value]  # decoded as the return type
+        stored = self._entry_format.encode_loaded(result, load_seconds=call.stopwatch.seconds, key=key)
+        if call.changes_at_start == self._changes:  # set or deleted by hand while it loaded: what it loaded is old
+            self._storage.replace(lookup, stored)
+        return result
 
     def get(self, key: str, tags: tuple[str, ...]) -> V | None:
         # The fresh result alone, loading nothing: a failing backend raises, as there is no load to answer with.
         if in_no_cache():
             self._reporter.report(key, CacheStatus.MISS)
             return None
-        answer = self._policy.answer_for(self._format.decode(self._storage.get(key, tags)))
+        answer = self._policy.answer_for(self._entry_format.decode(self._storage.get(key, tags)))
         if answer is None or answer.status is CacheStatus.STALE_WHILE_REVALIDATE:
             self._reporter.report(key, CacheStatus.MISS)
             return None
@@ -132,7 +126,7 @@ class FunctionCache[V]:
         result: V,
     ) -> None:
         self._changes += 1  # before the write: a load that ends after it must not overwrite it
-        self._storage.set(key, tags, self._format.encode(result, key=key))
+        self._storage.set(key, tags, self._entry_format.encode(result, key=key))
 
     def delete(self, key: str) -> bool:
         self._changes += 1  # before the delete, as in set
@@ -144,21 +138,10 @@ class FunctionCache[V]:
             raise NotFoundError(key)  # kept by an earlier call, as Negative says
         return answer.result  # type: ignore[return-value]  # decoded as the return type
 
-    def _serve(self, call: Call, load: Load[V]) -> Answer:  # noqa: WPS212 - one return for each way a call is answered
-        lookup = self._storage.find(call.key, call.tags)
-        stored = self._format.decode(lookup)
-        if (
-            lookup.from_fallback
-        ):  # the backend fails: what the fallback kept answers, untagged, or the load is kept there
-            if stored is None:
-                return self._load_and_store(call, lookup, load)
-            return (
-                Answer(None, CacheStatus.NOT_FOUND)
-                if stored.entry.negative
-                else Answer.of(stored, CacheStatus.FALLBACK)
-            )
-
-        answer = self._policy.answer_for(stored)
+    def _serve(self, call: Call, load: Load[V]) -> Answer:
+        lookup = self._storage.lookup(call.key, call.tags)
+        stored = self._entry_format.decode(lookup)
+        answer = self._policy.answer_for(stored, hit=CacheStatus.FALLBACK if lookup.from_fallback else CacheStatus.HIT)
         if answer is not None:
             if self._policy.should_revalidate(answer):
                 load_and_store = functools.partial(
@@ -197,24 +180,26 @@ class FunctionCache[V]:
         except Exception as error:
             if not self._policy.is_negative(error):
                 raise
-            self._keep_unless_changed(call, lookup, self._format.encode_not_found())  # the answer of the calls after it
+            self._keep_unless_changed(
+                call, lookup, self._entry_format.encode_not_found()
+            )  # the answer of the calls after it
             raise NotFoundError(call.key) from error
 
-        stored = self._format.encode_loaded(result, load_seconds=call.stopwatch.seconds, key=call.key)
-        self._keep_unless_changed(call, lookup, stored)
-        if stored is None or lookup.from_fallback:
-            return Answer(result, CacheStatus.MISS, call.stopwatch.seconds)
-        return Answer.of(stored, CacheStatus.MISS, call.stopwatch.seconds)
+        stored = self._entry_format.encode_loaded(result, load_seconds=call.stopwatch.seconds, key=call.key)
+        kept = self._keep_unless_changed(call, lookup, stored)
+        stale_at = stored.entry.stale_at if kept and stored is not None else None  # how long it answers, once kept
+        return Answer(result, CacheStatus.MISS, call.stopwatch.seconds, stale_at)
 
     def _keep_unless_changed(
         self,
         call: Call,
         lookup: Lookup,
         stored: Stored | None,
-    ) -> None:
+    ) -> bool:
+        # whether it kept stored
         if call.changes_at_start != self._changes:  # set or deleted by hand while it loaded: what it loaded is old
-            return
-        self._storage.keep(lookup, stored)
+            return False
+        return self._storage.keep(lookup, stored)
 
     def _load_under_lock(  # noqa: WPS231 - the lock, the read after it and the load in one place
         self,
@@ -222,9 +207,8 @@ class FunctionCache[V]:
         lookup: Lookup,
         load: Load[V],
     ) -> Answer:
-        lock_key = KeyPrefix.STAMPEDE_LOCK + call.key
         try:
-            lease = take(self._backend, (lock_key,), self._policy.stampede.lock_for, name=lock_key, hooks=self._hooks)
+            lease = self._load_locks.take_load(call.key, self._policy.stampede.lock_for)
         except BackendError as error:
             self._hooks.on_error(Failure(Operation.STAMPEDE_LOCK, call.key, error))
             return self._load_and_store(call, lookup, load)
@@ -236,7 +220,7 @@ class FunctionCache[V]:
             except BackendError as error:
                 self._hooks.on_error(Failure(Operation.GET, call.key, error))
             else:
-                answer = self._policy.answer_for(self._format.decode(lookup))
+                answer = self._policy.answer_for(self._entry_format.decode(lookup))
                 if answer is not None:  # a "not found" the load before this one kept answers as it is
                     hit = answer.status is not CacheStatus.NOT_FOUND
                     return dataclasses.replace(answer, status=CacheStatus.HIT) if hit else answer

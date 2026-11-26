@@ -3,7 +3,7 @@ from typing import TypedDict
 
 from pashe import Cache
 from pashe.backends import MemoryBackend
-from pashe.options import IfError, IfSlow, Negative, Stale, Stampede, Store
+from pashe.options import Negative, Stale, Stampede, Store
 
 cache = Cache(MemoryBackend())
 
@@ -23,8 +23,10 @@ def worth_keeping(user: User) -> bool:
 # --8<-- [start:stale]
 stale = Stale(
     while_revalidate=30,  # answer at once, reload behind
-    if_error=IfError(600, on=(ConnectionError,)),  # answer the errors of on
-    if_slow=IfSlow(60, after=0.5),  # answer a load slower than after
+    if_error=600,  # answer the errors of if_error_on
+    if_error_on=(ConnectionError,),  # the errors it answers; every Exception by default
+    if_slow=60,  # answer a load slower than slow_after
+    slow_after=0.5,  # how long a call waits for the load
 )
 # --8<-- [end:stale]
 # --8<-- [start:stampede]

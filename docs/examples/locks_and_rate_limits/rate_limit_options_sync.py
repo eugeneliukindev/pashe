@@ -1,10 +1,10 @@
 # ruff: noqa: F841 - the page shows how to read what is left of the limit
 # --8<-- [start:show]
-from pashe import Cache
+from pashe import RateLimiter
 from pashe.backends import MemoryBackend
 from pashe.ratelimit import FixedWindow, SlidingWindow
 
-cache = Cache(MemoryBackend())
+limiter = RateLimiter(MemoryBackend())
 
 exports = SlidingWindow(
     calls=10,  # calls that pass
@@ -17,7 +17,7 @@ logins = FixedWindow(
 )
 
 
-@cache.rate_limited(
+@limiter.limited(
     exports,  # the limit
     key="user:{user_id}",  # a template; None: one per function
 )
@@ -25,7 +25,7 @@ def export(user_id: int) -> None: ...
 
 
 def main() -> None:
-    state = cache.rate_limit(
+    state = limiter.count(
         "login:ada@example.com",  # what the limit counts
         logins,  # the limit
         cost=1,  # how many calls this one counts as

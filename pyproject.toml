@@ -190,7 +190,7 @@ max-try-body-length = 2
 per-file-ignores = [
     "*/__init__.py: WPS412",
     "src/pashe/__init__.py: WPS412",  # the root package re-exports what most users import
-    # the facade wires every part of a cache together, each method names the arguments it checks, such as
+    # the facade wires every part of a cache and of each cached function together, each method names the arguments it checks, such as
     # "ttl", and the defaults of the groups of options, such as Stale(), are frozen, safe to share
     "src/pashe/_internal/async_/cache/cache.py: WPS201, WPS203, WPS226, WPS404",
     "src/pashe/_internal/async_/backends/near.py: WPS404",  # AsyncNoOpBus() as the default of bus has no state, safe to share
@@ -198,9 +198,7 @@ per-file-ignores = [
     "src/pashe/_internal/async_/backends/redis/backend.py: WPS404",
     "src/pashe/_internal/async_/backends/redis/buses.py: WPS404",
     "src/pashe/_internal/async_/cache/function_cache.py: WPS201",  # get-or-load decides with every part a cached call is made of
-    # the decorators assemble every part of a cached call, so a cached function is one object to call
-    "src/pashe/_internal/async_/cache/cached.py: WPS201",
-    "src/pashe/_internal/async_/cache/cached_batch.py: WPS201",
+    "src/pashe/_internal/async_/limiter.py: WPS201",  # it checks what it is given, counts in both windows, and decorates
     "src/pashe/errors.py: WPS202",  # every error of pashe in the one module users import them from
     "src/pashe/_internal/checks.py: WPS202",  # every check of what users give in one module: one rule, one place
     "src/pashe/_internal/cache/keys.py: WPS202",  # every rule of what a key is made of in one module
@@ -504,24 +502,22 @@ ruff_format = true
 "src/pashe/_internal/async_/backends/redis/__init__.py" = "src/pashe/_internal/sync/backends/redis/__init__.py"
 "src/pashe/_internal/async_/cache/__init__.py" = "src/pashe/_internal/sync/cache/__init__.py"
 "src/pashe/_internal/async_/locks/__init__.py" = "src/pashe/_internal/sync/locks/__init__.py"
-"src/pashe/_internal/async_/cache/around.py" = "src/pashe/_internal/sync/cache/around.py"
 "src/pashe/_internal/async_/backends/backend.py" = "src/pashe/_internal/sync/backends/backend.py"
 "src/pashe/_internal/async_/cache/batch_cache.py" = "src/pashe/_internal/sync/cache/batch_cache.py"
 "src/pashe/_internal/async_/cache/cache.py" = "src/pashe/_internal/sync/cache/cache.py"
 "src/pashe/_internal/async_/cache/cached.py" = "src/pashe/_internal/sync/cache/cached.py"
 "src/pashe/_internal/async_/cache/cached_batch.py" = "src/pashe/_internal/sync/cache/cached_batch.py"
 "src/pashe/_internal/async_/cache/storage.py" = "src/pashe/_internal/sync/cache/storage.py"
-"src/pashe/_internal/async_/cache/fallback.py" = "src/pashe/_internal/sync/cache/fallback.py"
 "src/pashe/_internal/async_/limiter.py" = "src/pashe/_internal/sync/limiter.py"
 "src/pashe/_internal/async_/cache/function_cache.py" = "src/pashe/_internal/sync/cache/function_cache.py"
 "src/pashe/_internal/async_/cache/reload.py" = "src/pashe/_internal/sync/cache/reload.py"
 "src/pashe/_internal/async_/locks/locking.py" = "src/pashe/_internal/sync/locks/locking.py"
+"src/pashe/_internal/async_/locks/locks.py" = "src/pashe/_internal/sync/locks/locks.py"
 "src/pashe/_internal/async_/backends/memory.py" = "src/pashe/_internal/sync/backends/memory.py"
 "src/pashe/_internal/async_/backends/near.py" = "src/pashe/_internal/sync/backends/near.py"
 "src/pashe/_internal/async_/backends/prefixed.py" = "src/pashe/_internal/sync/backends/prefixed.py"
 "src/pashe/_internal/async_/backends/redis/backend.py" = "src/pashe/_internal/sync/backends/redis/backend.py"
 "src/pashe/_internal/async_/backends/redis/buses.py" = "src/pashe/_internal/sync/backends/redis/buses.py"
-"src/pashe/_internal/async_/cache/tags.py" = "src/pashe/_internal/sync/cache/tags.py"
 
 [tool.unasyncd.add_replacements]
 # A sibling has a name of its own on each side, as the public classes do: unasyncd renames it bare
@@ -532,18 +528,10 @@ AsyncCachedFunctionDecorator = "CachedFunctionDecorator"
 "pashe._internal.async_.cache.cached.AsyncCachedFunctionDecorator" = "pashe._internal.sync.cache.cached.CachedFunctionDecorator"
 AsyncCachedBatchFunctionDecorator = "CachedBatchFunctionDecorator"
 "pashe._internal.async_.cache.cached_batch.AsyncCachedBatchFunctionDecorator" = "pashe._internal.sync.cache.cached_batch.CachedBatchFunctionDecorator"
-AsyncFallbackStore = "FallbackStore"
-"pashe._internal.async_.cache.fallback.AsyncFallbackStore" = "pashe._internal.sync.cache.fallback.FallbackStore"
 AsyncLoad = "Load"
 "pashe._internal.async_.cache.function_cache.AsyncLoad" = "pashe._internal.sync.cache.function_cache.Load"
-AsyncNoOpFallbackStore = "NoOpFallbackStore"
-"pashe._internal.async_.cache.fallback.AsyncNoOpFallbackStore" = "pashe._internal.sync.cache.fallback.NoOpFallbackStore"
-AsyncBackendFallbackStore = "BackendFallbackStore"
-"pashe._internal.async_.cache.fallback.AsyncBackendFallbackStore" = "pashe._internal.sync.cache.fallback.BackendFallbackStore"
 AsyncRateLimiter = "RateLimiter"
 "pashe._internal.async_.limiter.AsyncRateLimiter" = "pashe._internal.sync.limiter.RateLimiter"
-AsyncInvalidatingDecorator = "InvalidatingDecorator"
-"pashe._internal.async_.cache.around.AsyncInvalidatingDecorator" = "pashe._internal.sync.cache.around.InvalidatingDecorator"
 AsyncFunctionCache = "FunctionCache"
 "pashe._internal.async_.cache.function_cache.AsyncFunctionCache" = "pashe._internal.sync.cache.function_cache.FunctionCache"
 AsyncStorage = "Storage"
@@ -564,8 +552,12 @@ AsyncPubSubListener = "PubSubListener"
 "pashe._internal.async_.backends.redis.listeners.AsyncPubSubListener" = "pashe._internal.sync.backends.redis.listeners.PubSubListener"
 AsyncTrackingListener = "TrackingListener"
 "pashe._internal.async_.backends.redis.listeners.AsyncTrackingListener" = "pashe._internal.sync.backends.redis.listeners.TrackingListener"
-AsyncTags = "Tags"
-"pashe._internal.async_.cache.tags.AsyncTags" = "pashe._internal.sync.cache.tags.Tags"
+AsyncLoadLocks = "LoadLocks"
+AsyncLocks = "Locks"
+"pashe._internal.async_.locks.locks.AsyncLocks" = "pashe._internal.sync.locks.locks.Locks"
+AsyncDecorator = "Decorator"
+"pashe._internal.async_.tasks.AsyncDecorator" = "pashe._internal.sync.threads.Decorator"
+"pashe._internal.async_.locks.locking.AsyncLoadLocks" = "pashe._internal.sync.locks.locking.LoadLocks"
 AsyncBackgroundTasks = "BackgroundTasks"
 "pashe._internal.async_.tasks.AsyncBackgroundTasks" = "pashe._internal.sync.threads.BackgroundTasks"
 AsyncSharedLoads = "SharedLoads"
@@ -609,12 +601,6 @@ AsyncCachedBatchFunction = "CachedBatchFunction"
 "pashe._internal.async_.cache.cached_batch.AsyncCachedBatchFunction" = "pashe._internal.sync.cache.cached_batch.CachedBatchFunction"
 AsyncBatchFunction = "BatchFunction"
 "pashe._internal.async_.cache.batch_cache.AsyncBatchFunction" = "pashe._internal.sync.cache.batch_cache.BatchFunction"
-AsyncKeyedDecorator = "KeyedDecorator"
-"pashe._internal.async_.cache.around.AsyncKeyedDecorator" = "pashe._internal.sync.cache.around.KeyedDecorator"
-AsyncLockedDecorator = "LockedDecorator"
-"pashe._internal.async_.cache.around.AsyncLockedDecorator" = "pashe._internal.sync.cache.around.LockedDecorator"
-AsyncRateLimitedDecorator = "RateLimitedDecorator"
-"pashe._internal.async_.cache.around.AsyncRateLimitedDecorator" = "pashe._internal.sync.cache.around.RateLimitedDecorator"
 AsyncCache = "Cache"
 "pashe._internal.async_.cache.cache.AsyncCache" = "pashe._internal.sync.cache.cache.Cache"
 

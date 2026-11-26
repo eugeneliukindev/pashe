@@ -232,10 +232,10 @@ class RateLimitState:
             a SlidingWindow, the fixed window it counts in.
 
     Examples:
-        >>> from pashe import Cache
+        >>> from pashe import RateLimiter
         >>> from pashe.backends import MemoryBackend
         >>> from pashe.ratelimit import FixedWindow
-        >>> state = Cache(MemoryBackend()).rate_limit("login:ada", FixedWindow(calls=5, per=60))
+        >>> state = RateLimiter(MemoryBackend()).count("login:ada", FixedWindow(calls=5, per=60))
         >>> state.limit, state.remaining
         (5, 4)
     """

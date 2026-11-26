@@ -1,27 +1,13 @@
 from __future__ import annotations
 
 import functools
-from typing import TYPE_CHECKING, Concatenate, Self, final, overload, override
-
-from pashe._internal.async_.cache.function_cache import AsyncFunctionCache
-from pashe._internal.async_.tasks import AsyncBackgroundTasks, aexpect_side
-from pashe._internal.cache.call import CallReporter
-from pashe._internal.cache.entry import EntryFormat
-from pashe._internal.cache.keys import CallKeys, key_name, qualified_name
-from pashe._internal.cache.value_types import return_type
+from typing import TYPE_CHECKING, Concatenate, Protocol, Self, final, overload, override
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping, Sequence
 
-    from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend
-    from pashe._internal.async_.cache.function_cache import AsyncLoad
-    from pashe._internal.async_.cache.storage import AsyncStorage
-    from pashe._internal.async_.cache.tags import AsyncTags
-    from pashe._internal.cache.keys import KeyTemplate
-    from pashe._internal.cache.policy import Policy
-    from pashe.codecs import Codec
-    from pashe.compressors import Compressor
-    from pashe.hooks import Hook
+    from pashe._internal.async_.cache.function_cache import AsyncFunctionCache, AsyncLoad
+    from pashe._internal.cache.keys import CallKeys
 
 
 class AsyncCachedValue[**P, R]:
@@ -278,112 +264,17 @@ class AsyncCachedFunction[**P, R](AsyncCachedValue[P, R]):
         return AsyncCachedFunction(self._function, self._keys, self._function_cache, instance=instance)
 
 
-@final
-class AsyncCachedFunctionDecorator:
+class AsyncCachedFunctionDecorator(Protocol):
     """What ``@cache(...)`` returns: a decorator that caches the results of a function."""
 
-    __slots__ = (
-        "_backend",
-        "_background",
-        "_codec",
-        "_compressor",
-        "_hooks",
-        "_key_template",
-        "_policy",
-        "_storage",
-        "_tag_templates",
-        "_tags",
-    )
-
-    def __init__(
-        self,
-        policy: Policy,
-        /,
-        *,
-        key_template: KeyTemplate | None,
-        tag_templates: tuple[KeyTemplate, ...],
-        codec: Codec,
-        compressor: Compressor,
-        storage: AsyncStorage,
-        tags: AsyncTags,
-        backend: AsyncPrefixedBackend,
-        background: AsyncBackgroundTasks,
-        hooks: Hook,
-    ) -> None:
-        self._policy = policy
-        self._key_template = key_template
-        self._tag_templates = tag_templates
-
-        self._codec = codec
-        self._compressor = compressor
-        self._storage = storage
-        self._tags = tags
-        self._backend = backend
-        self._background = background
-        self._hooks = hooks
-
-    def __call__[**Q, T](self, function: Callable[Q, Awaitable[T]]) -> AsyncCachedFunction[Q, T]:
-        """Cache the results of function.
-
-        Args:
-            function: the function to cache, of the side of the cache.
-
-        Returns:
-            The cached function.
-        """
-        return AsyncCachedFunction(function, *self._keys_and_cache(function))
-
-    def cached_value[**Q, T](self, function: Callable[Q, Awaitable[T]]) -> AsyncCachedValue[Q, T]:
-        """Make function a value, as ``@cache.value(...)`` does: stored as a cached result is, never loaded.
-
-        Args:
-            function: names the value by its arguments and its return annotation.
-
-        Returns:
-            The value.
-        """
-        return AsyncCachedValue(function, *self._keys_and_cache(function))
-
-    def _keys_and_cache[T](self, function: Callable[..., Awaitable[T]]) -> tuple[CallKeys, AsyncFunctionCache[T]]:
-        aexpect_side(function, "cache")
-        if self._key_template is None:
-            key_name(function)  # refuses a lambda, whose name is no key of its own
-        keys = CallKeys(function, self._key_template, self._tag_templates)
-
-        entry_format = EntryFormat(
-            self._policy, return_type(function), codec=self._codec, compressor=self._compressor, hooks=self._hooks
-        )
-        function_cache = AsyncFunctionCache[T](
-            self._policy,
-            storage=self._storage,
-            entry_format=entry_format,
-            tags=self._tags,
-            backend=self._backend,
-            background=self._background,
-            reporter=CallReporter(
-                qualified_name(function), self._backend.full_key, hooks=self._hooks, clock=self._policy.clock
-            ),
-            hooks=self._hooks,
-        )
-        return keys, function_cache
+    def __call__[**Q, T](self, function: Callable[Q, Awaitable[T]], /) -> AsyncCachedFunction[Q, T]:
+        """Cache the results of function, of the side of the cache."""
+        ...
 
 
-@final
-class AsyncCachedValueDecorator:
+class AsyncCachedValueDecorator(Protocol):
     """What ``@cache.value(...)`` returns: a decorator that makes a value set by hand of a function."""
 
-    __slots__ = ("_cached",)
-
-    def __init__(self, cached: AsyncCachedFunctionDecorator) -> None:
-        self._cached = cached  # a value is stored as a cached result is, with no load
-
-    def __call__[**Q, T](self, function: Callable[Q, Awaitable[T]]) -> AsyncCachedValue[Q, T]:
-        """Make function a value: its signature gives the key, its body never runs.
-
-        Args:
-            function: names the value by its arguments and its return annotation.
-
-        Returns:
-            The value.
-        """
-        return self._cached.cached_value(function)
+    def __call__[**Q, T](self, function: Callable[Q, Awaitable[T]], /) -> AsyncCachedValue[Q, T]:
+        """Make function a value: its signature gives the key, its body never runs."""
+        ...

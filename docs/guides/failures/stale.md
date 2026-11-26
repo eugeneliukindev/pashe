@@ -69,7 +69,7 @@ reload before the result goes stale, see
 flowchart LR
     fresh["0 to 60 s<br/>fresh: HIT"] --> load{"60 s to 11 min<br/>the call loads"}
     load -- "it succeeds" --> stored["MISS"]
-    load -- "it raises one of IfError.on" --> stale["the old result: STALE_IF_ERROR"]
+    load -- "it raises one of if_error_on" --> stale["the old result: STALE_IF_ERROR"]
     stale --> gone["after 11 min<br/>the error reaches the caller"]
     classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
     classDef fromSource fill:#2b5b84,color:#ffffff,stroke:#1f4466
@@ -77,8 +77,8 @@ flowchart LR
     class load,stored,gone fromSource
 ```
 
-For 10 minutes after the TTL, a load that raises one of `IfError.on` is answered with the
-stale result instead; the error goes to `on_error`. `if_error=600`, a plain duration, counts
+For 10 minutes after the TTL, a load that raises one of `if_error_on` is answered with the
+stale result instead; the error goes to `on_error`. Without `if_error_on`, `if_error` answers
 every `Exception`. A batch takes `if_error` alone: when its function raises, the stale results
 answer if each item it loads has one, see [Batches](../caching/batches.md).
 
@@ -116,8 +116,8 @@ sequenceDiagram
 ```
 
 A call waits at most 0.2 seconds for the function; past it the stale result answers and the load
-goes on in the background. `IfSlow` takes both: how long the window lasts, and how long a call
-waits.
+goes on in the background. `if_slow` says how long the window lasts and `slow_after` how long a
+call waits; one is refused without the other.
 
 ---
 

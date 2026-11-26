@@ -301,8 +301,6 @@ class Operation(enum.StrEnum):
     """A write to the backend."""
     SET_MANY = "set_many"
     """A write to the backend for a batch."""
-    READ_TAGS = "read_tags"
-    """A read of the counters of tags."""
     FALLBACK_GET = "fallback_get"
     """A read of the fallback, while the backend fails."""
     FALLBACK_SET = "fallback_set"
@@ -339,7 +337,7 @@ class RateLimitDecision:
     """What a rate limit decided of a call it counted.
 
     Attributes:
-        key: what the limit counts, as rate_limit was given it, such as ``"ip:203.0.113.7"``: for
+        key: what the limit counts, as count of the rate limiter was given it, such as ``"ip:203.0.113.7"``: for
             logs; too many values for a label of metrics.
         allowed: whether the call went through; False when it raised RateLimitedError.
     """

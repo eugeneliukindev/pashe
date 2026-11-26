@@ -52,7 +52,7 @@ pages.
     --8<-- "caching_functions/decorator_options_async.py:show"
     ```
 
-API reference: [`Cache.__call__`](../../reference/caches.md#pashe.Cache.__call__), [`Stale`](../../reference/options.md#pashe.options.Stale), [`IfError`](../../reference/options.md#pashe.options.IfError), [`IfSlow`](../../reference/options.md#pashe.options.IfSlow), [`Stampede`](../../reference/options.md#pashe.options.Stampede), [`Negative`](../../reference/options.md#pashe.options.Negative), [`Store`](../../reference/options.md#pashe.options.Store).
+API reference: [`Cache.__call__`](../../reference/caches.md#pashe.Cache.__call__), [`Stale`](../../reference/options.md#pashe.options.Stale), [`Stampede`](../../reference/options.md#pashe.options.Stampede), [`Negative`](../../reference/options.md#pashe.options.Negative), [`Store`](../../reference/options.md#pashe.options.Store).
 
 ## Reading and writing a result
 

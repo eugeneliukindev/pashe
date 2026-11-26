@@ -10,7 +10,7 @@ import pytest
 from fastapi import Depends, FastAPI, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from pashe import AsyncCache, Cache
+from pashe import AsyncCache, AsyncRateLimiter, Cache
 from pashe.asgi import CacheHeadersMiddleware
 from pashe.backends import AsyncMemoryBackend, MemoryBackend
 from pashe.contrib.fastapi import rate_limit
@@ -30,6 +30,7 @@ def _app(clock: Clock) -> FastAPI:  # noqa: C901 - one endpoint per case under t
     headers = CacheHeadersHook()
     cache = AsyncCache(AsyncMemoryBackend(), hooks=[headers], clock=clock)
     sync_cache = Cache(MemoryBackend(), hooks=[headers], clock=clock)
+    limiter = AsyncRateLimiter(AsyncMemoryBackend(), clock=clock)
     app = FastAPI()
     app.add_middleware(CacheHeadersMiddleware, hook=headers)
 
@@ -88,7 +89,7 @@ def _app(clock: Clock) -> FastAPI:  # noqa: C901 - one endpoint per case under t
         raise OverloadedError
 
     @app.get(
-        "/limited", dependencies=[Depends(rate_limit(cache, FixedWindow(calls=2, per=60), key=lambda _: "client"))]
+        "/limited", dependencies=[Depends(rate_limit(limiter, FixedWindow(calls=2, per=60), key=lambda _: "client"))]
     )
     async def limited() -> dict[str, bool]:
         return {"ok": True}
@@ -203,10 +204,10 @@ async def _nothing() -> Message:
 
 
 def test_a_rate_limit_that_costs_more_than_its_limit_is_refused_when_it_is_made() -> None:
-    cache = AsyncCache(AsyncMemoryBackend())
+    limiter = AsyncRateLimiter(AsyncMemoryBackend())
 
     with pytest.raises(InvalidOptionsError, match="cost is 10: a call must cost from 1 to the 5 calls"):
-        rate_limit(cache, FixedWindow(calls=5, per=60), key=lambda _request: "ip", cost=10)
+        rate_limit(limiter, FixedWindow(calls=5, per=60), key=lambda _request: "ip", cost=10)
 
 
 def _reloading_app(

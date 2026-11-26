@@ -1,11 +1,11 @@
 # --8<-- [start:show]
-from pashe import Cache
+from pashe import Locks
 from pashe.backends import MemoryBackend
 
-cache = Cache(MemoryBackend())
+locks = Locks(MemoryBackend())
 
 
-@cache.locked(
+@locks.locked(
     ttl=30,  # the lock lives this long unextended
     key="report:{report_id}",  # a template; None: one per function
     timeout=None,  # the longest wait; None: forever
@@ -15,7 +15,7 @@ def build(report_id: int) -> None: ...
 
 
 def main() -> None:
-    with cache.lock(
+    with locks.lock(
         "nightly-export",  # the name of the lock
         ttl=30,  # as in locked
         timeout=10,  # as in locked
@@ -23,7 +23,7 @@ def main() -> None:
     ):
         build(1)
 
-    lock = cache.try_lock(
+    lock = locks.try_lock(
         "nightly-export",  # the name of the lock
         ttl=30,  # as in locked; no wait, no timeout
         holders=1,  # as in locked

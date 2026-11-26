@@ -6,12 +6,11 @@ options when it is made and raises InvalidOptionsError for options that cannot w
 
 from __future__ import annotations
 
-from dataclasses import KW_ONLY, dataclass, field
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Final, final
 
 from pashe._internal.checks import (
-    DURATION,
     FUNCTION,
     duration_seconds,
     expect_error_classes,
@@ -29,8 +28,6 @@ __all__ = [
     "TTL",
     "Duration",
     "Fallback",
-    "IfError",
-    "IfSlow",
     "Negative",
     "Stale",
     "Stampede",
@@ -49,104 +46,80 @@ type TTL = Duration | Callable[[Any], Duration]
 
 
 @final
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(frozen=True, slots=True, init=False)
 class Stale:
     """How long after its TTL a stale result still answers, and in which cases; 0 turns a window off.
 
     Attributes:
-        while_revalidate: a stale result answers at once while one caller reloads it in the
-            background (RFC 5861).
-        if_error: a stale result answers an error of the function (RFC 5861): seconds or a timedelta answer
-            any Exception; IfError names the errors.
-        if_slow: a stale result answers a function slower than IfSlow.after; the load goes on in
-            the background. None turns it off.
+        while_revalidate: seconds a stale result answers at once while one caller reloads it in
+            the background (RFC 5861).
+        if_error: seconds a stale result answers an error of the function of if_error_on (RFC 5861).
+        if_error_on: the errors of the function if_error answers.
+        if_slow: seconds a stale result answers a function slower than slow_after, while the load
+            goes on in the background.
+        slow_after: how long a call waits for the function before the stale result answers it, in
+            seconds; more than 0 once if_slow is.
 
     Examples:
-        >>> from pashe.options import IfError, IfSlow, Stale
-        >>> Stale(while_revalidate=30, if_error=600)
-        Stale(while_revalidate=30, if_error=600, if_slow=None)
-        >>> Stale(if_error=IfError(600, on=(ConnectionError,)), if_slow=IfSlow(30, after=0.5))
-        Stale(while_revalidate=0, if_error=IfError(window=600, on=(<class 'ConnectionError'>,)), if_slow=IfSlow(window=30, after=0.5))
+        >>> from pashe.options import Stale
+        >>> Stale(while_revalidate=30, if_error=600, if_error_on=(ConnectionError,))
+        Stale(while_revalidate=30.0, if_error=600.0, if_error_on=(<class 'ConnectionError'>,), if_slow=0.0, slow_after=0.0)
+        >>> Stale(if_slow=30, slow_after=0.5).slow_after
+        0.5
     """
 
-    while_revalidate: Duration = 0
-    if_error: Duration | IfError = 0
-    if_slow: IfSlow | None = None
+    while_revalidate: float
+    if_error: float
+    if_error_on: tuple[type[Exception], ...]
+    if_slow: float
+    slow_after: float
 
-    def __post_init__(self) -> None:
-        """Check the windows.
+    def __init__(
+        self,
+        *,
+        while_revalidate: Duration = 0,
+        if_error: Duration = 0,
+        if_error_on: tuple[type[Exception], ...] = (Exception,),
+        if_slow: Duration = 0,
+        slow_after: Duration = 0,
+    ) -> None:
+        """Check the windows and keep them in seconds.
+
+        Args:
+            while_revalidate: seconds or a timedelta.
+            if_error: seconds or a timedelta.
+            if_error_on: the errors of the function it answers; every Exception by default.
+            if_slow: seconds or a timedelta.
+            slow_after: seconds or a timedelta.
 
         Raises:
             TypeError: an option is not of the type its annotation names.
-            InvalidOptionsError: a window is negative.
+            InvalidOptionsError: a window is negative, if_error_on names errors while if_error is 0,
+                or one of if_slow and slow_after is set without the other.
         """
-        parse_seconds("Stale.while_revalidate", self.while_revalidate, _WINDOW)
-        expect_type("Stale.if_error", self.if_error, DURATION | IfError)
-        if not isinstance(self.if_error, IfError):
-            parse_seconds("Stale.if_error", self.if_error, _WINDOW)
-        expect_type("Stale.if_slow", self.if_slow, IfSlow | None)
+        expect_error_classes("Stale.if_error_on", if_error_on)
+        if_error = parse_seconds("Stale.if_error", if_error, _WINDOW)
+        if_slow = parse_seconds("Stale.if_slow", if_slow, _WINDOW)
+        slow_after = parse_seconds("Stale.slow_after", slow_after, "how long a call waits for the function")
+        if if_error_on != (Exception,) and not if_error:
+            msg = "Stale.if_error_on names errors and Stale.if_error is 0: set how long the stale result answers them"
+            raise InvalidOptionsError(msg)
+        if bool(if_slow) != bool(slow_after):
+            msg = (
+                f"Stale.if_slow is {if_slow:g} and Stale.slow_after is {slow_after:g}: set both, how long the stale"
+                " result answers a slow function and how long a call waits for it"
+            )
+            raise InvalidOptionsError(msg)
+
+        object.__setattr__(self, "while_revalidate", parse_seconds("Stale.while_revalidate", while_revalidate, _WINDOW))
+        object.__setattr__(self, "if_error", if_error)
+        object.__setattr__(self, "if_error_on", if_error_on)
+        object.__setattr__(self, "if_slow", if_slow)
+        object.__setattr__(self, "slow_after", slow_after)
 
 
 @final
-@dataclass(frozen=True, slots=True)
-class IfError:
-    """How long after its TTL a stale result answers a function that raised one of on (RFC 5861).
-
-    Attributes:
-        window: how long after the TTL, seconds or a timedelta.
-        on: the errors of the function it answers.
-
-    Examples:
-        >>> from pashe.options import IfError
-        >>> IfError(600, on=(ConnectionError, TimeoutError))
-        IfError(window=600, on=(<class 'ConnectionError'>, <class 'TimeoutError'>))
-    """
-
-    window: Duration
-    on: tuple[type[Exception], ...] = field(default=(Exception,), kw_only=True)
-
-    def __post_init__(self) -> None:
-        """Check the window and the errors.
-
-        Raises:
-            TypeError: an option is not of the type its annotation names.
-            InvalidOptionsError: the window is negative.
-        """
-        parse_seconds("IfError.window", self.window, _WINDOW)
-        expect_error_classes("IfError.on", self.on)
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class IfSlow:
-    """How long after its TTL a stale result answers a function slower than after; the load goes on in the background.
-
-    Attributes:
-        window: how long after the TTL, seconds or a timedelta.
-        after: how long a call waits for the function before the stale result answers it.
-
-    Examples:
-        >>> from pashe.options import IfSlow
-        >>> IfSlow(300, after=0.2)
-        IfSlow(window=300, after=0.2)
-    """
-
-    window: Duration
-    after: Duration = field(kw_only=True)
-
-    def __post_init__(self) -> None:
-        """Check the window and the wait.
-
-        Raises:
-            TypeError: an option is not of the type its annotation names.
-            InvalidOptionsError: the window is negative, or after is not more than 0.
-        """
-        parse_seconds("IfSlow.window", self.window, _WINDOW)
-        parse_seconds("IfSlow.after", self.after, "how long a call waits for the function", positive=True)
-
-
-@final
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(frozen=True, slots=True, init=False)
 class Stampede:
     """How the loads of a key are shared and spread, so the source is not asked by every caller at once.
 
@@ -156,8 +129,8 @@ class Stampede:
             turns it off. It must be shorter than a fixed ttl less its jitter; a ttl from a function shorter
             than it reloads on every call.
         lock_for: when positive, a missing key loads under a lock in the backend: one caller
-            loads, the others wait and take its result. It is the longest the lock is held, so
-            a holder that dies frees it.
+            loads, the others wait and take its result. It is the longest the lock is held, in
+            seconds, so a holder that dies frees it.
         jitter: spreads TTLs randomly by up to this share, from 0 to less than 1, so entries
             stored together do not expire together: 0.1 means +-10%; the TTL of Negative too.
         max_loads: how many loads of the function may run at once in this process; 0 means no
@@ -169,44 +142,61 @@ class Stampede:
     Examples:
         >>> from pashe.options import Stampede
         >>> Stampede(revalidate_before=10, jitter=0.1, lock_for=5)
-        Stampede(revalidate_before=10, lock_for=5, jitter=0.1, max_loads=0, share_loads=True)
+        Stampede(revalidate_before=10.0, lock_for=5.0, jitter=0.1, max_loads=0, share_loads=True)
     """
 
-    revalidate_before: Duration = 0
-    lock_for: Duration = 0
-    jitter: float = 0
-    max_loads: int = 0
-    share_loads: bool = True
+    revalidate_before: float
+    lock_for: float
+    jitter: float
+    max_loads: int
+    share_loads: bool
 
-    def __post_init__(self) -> None:
-        """Check the options.
+    def __init__(
+        self,
+        *,
+        revalidate_before: Duration = 0,
+        lock_for: Duration = 0,
+        jitter: float = 0,
+        max_loads: int = 0,
+        share_loads: bool = True,
+    ) -> None:
+        """Check the options and keep the durations in seconds.
+
+        Args:
+            revalidate_before: seconds or a timedelta.
+            lock_for: seconds or a timedelta.
+            jitter: a share from 0 to less than 1.
+            max_loads: 0 or more.
+            share_loads: whether concurrent calls of a key share one load.
 
         Raises:
             TypeError: an option is not of the type its annotation names.
             InvalidOptionsError: jitter is not from 0 to less than 1, or revalidate_before, lock_for or
                 max_loads is negative.
         """
-        parse_seconds(
-            "Stampede.revalidate_before",
-            self.revalidate_before,
-            "0 turns it off, more reloads that long before the TTL",
+        expect_type("Stampede.jitter", jitter, int | float)
+        expect_type("Stampede.max_loads", max_loads, int)
+        expect_type("Stampede.share_loads", share_loads, bool)
+        if not 0 <= jitter < 1:
+            msg = f"Stampede.jitter is {jitter!r}: a share from 0 to less than 1, such as 0.1 for +-10%"
+            raise InvalidOptionsError(msg)
+        if max_loads < 0:
+            msg = f"Stampede.max_loads is {max_loads}: 0 means no limit, more is the limit"
+            raise InvalidOptionsError(msg)
+
+        revalidate_before = parse_seconds(
+            "Stampede.revalidate_before", revalidate_before, "0 turns it off, more reloads that long before the TTL"
         )
-        expect_type("Stampede.jitter", self.jitter, int | float)
-        expect_type("Stampede.share_loads", self.share_loads, bool)
-        parse_seconds("Stampede.lock_for", self.lock_for, "0 turns the lock off, more holds it that long")
-        expect_type("Stampede.max_loads", self.max_loads, int)
-
-        if not 0 <= self.jitter < 1:
-            msg = f"Stampede.jitter is {self.jitter!r}: a share from 0 to less than 1, such as 0.1 for +-10%"
-            raise InvalidOptionsError(msg)
-
-        if self.max_loads < 0:
-            msg = f"Stampede.max_loads is {self.max_loads}: 0 means no limit, more is the limit"
-            raise InvalidOptionsError(msg)
+        lock_for = parse_seconds("Stampede.lock_for", lock_for, "0 turns the lock off, more holds it that long")
+        object.__setattr__(self, "revalidate_before", revalidate_before)
+        object.__setattr__(self, "lock_for", lock_for)
+        object.__setattr__(self, "jitter", float(jitter))
+        object.__setattr__(self, "max_loads", max_loads)
+        object.__setattr__(self, "share_loads", share_loads)
 
 
 @final
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(frozen=True, slots=True, init=False)
 class Negative:
     """Negative caching: errors of the function that mean "there is no such data", kept as the answer for a while.
 
@@ -216,39 +206,44 @@ class Negative:
 
     Attributes:
         on: the errors of the function that mean "not found", such as ``(UserNotFoundError,)``.
-        ttl: how long a "not found" is kept; positive once on names an error.
+        ttl: how long a "not found" is kept, in seconds; positive once on names an error.
 
     Examples:
         >>> from pashe.options import Negative
         >>> Negative(on=(LookupError,), ttl=30)
-        Negative(on=(<class 'LookupError'>,), ttl=30)
+        Negative(on=(<class 'LookupError'>,), ttl=30.0)
     """
 
-    on: tuple[type[Exception], ...] = ()
-    ttl: Duration = 0
+    on: tuple[type[Exception], ...]
+    ttl: float
 
-    def __post_init__(self) -> None:
-        """Check the options.
+    def __init__(self, *, on: tuple[type[Exception], ...] = (), ttl: Duration = 0) -> None:
+        """Check the options and keep ttl in seconds.
+
+        Args:
+            on: the errors of the function that mean "not found".
+            ttl: seconds or a timedelta.
 
         Raises:
             TypeError: an option is not of the type its annotation names.
             InvalidOptionsError: ttl is negative, on names errors without a positive ttl, or ttl is
                 set without errors in on.
         """
-        expect_error_classes("Negative.on", self.on)
-        ttl = parse_seconds("Negative.ttl", self.ttl, "how long a not found is kept")
-
-        if self.on and not ttl:
-            msg = f"Negative.on names {len(self.on)} errors and Negative.ttl is 0: set how long a not found is kept"
+        expect_error_classes("Negative.on", on)
+        seconds = parse_seconds("Negative.ttl", ttl, "how long a not found is kept")
+        if on and not seconds:
+            msg = f"Negative.on names {len(on)} errors and Negative.ttl is 0: set how long a not found is kept"
             raise InvalidOptionsError(msg)
-
-        if ttl and not self.on:
+        if seconds and not on:
             msg = "Negative.ttl is set and Negative.on is empty: name the errors of the function, such as (UserNotFoundError,)"
             raise InvalidOptionsError(msg)
 
+        object.__setattr__(self, "on", on)
+        object.__setattr__(self, "ttl", seconds)
+
 
 @final
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(frozen=True, slots=True, init=False)
 class Store:
     """Which loaded results are stored; by default every one.
 
@@ -262,22 +257,32 @@ class Store:
         Store(when=None, slower_than=0.05)
     """
 
-    when: Callable[[Any], bool] | None = None
-    slower_than: Duration = 0
+    when: Callable[[Any], bool] | None
+    slower_than: float
 
-    def __post_init__(self) -> None:
-        """Check the options.
+    def __init__(self, *, when: Callable[[Any], bool] | None = None, slower_than: Duration = 0) -> None:
+        """Check the options and keep slower_than in seconds.
+
+        Args:
+            when: a function of the result, or None to store every one.
+            slower_than: seconds or a timedelta.
 
         Raises:
             TypeError: an option is not of the type its annotation names.
             InvalidOptionsError: slower_than is negative.
         """
-        expect_type("Store.when", self.when, FUNCTION | None)
-        parse_seconds("Store.slower_than", self.slower_than, "0 stores every result, more stores slow loads only")
+        expect_type("Store.when", when, FUNCTION | None)
+
+        object.__setattr__(self, "when", when)
+        object.__setattr__(
+            self,
+            "slower_than",
+            parse_seconds("Store.slower_than", slower_than, "0 stores every result, more stores slow loads only"),
+        )
 
 
 @final
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class Fallback[B: Backend | AsyncBackend]:
     """Where a cache keeps the results it loads while its backend fails, and for how long.
 
@@ -287,7 +292,7 @@ class Fallback[B: Backend | AsyncBackend]:
 
     Attributes:
         backend: where the results are kept, usually a memory backend of the side of the cache.
-        ttl: the longest a result stays there: seconds or a timedelta.
+        ttl: the longest a result stays there, in seconds.
 
     Examples:
         >>> from pashe.backends import MemoryBackend
@@ -296,14 +301,20 @@ class Fallback[B: Backend | AsyncBackend]:
     """
 
     backend: B
-    _: KW_ONLY  # noqa: WPS122 - the marker of dataclasses: the fields after it take keywords only
-    ttl: Duration = 30
+    ttl: float
 
-    def __post_init__(self) -> None:
-        """Check the options.
+    def __init__(self, backend: B, *, ttl: Duration = 30) -> None:
+        """Check the options and keep ttl in seconds.
+
+        Args:
+            backend: where the results are kept.
+            ttl: seconds or a timedelta, more than 0.
 
         Raises:
             TypeError: an option is not of the type its annotation names.
             InvalidOptionsError: ttl is not positive.
         """
-        parse_seconds("Fallback.ttl", self.ttl, "the longest a result stays in the fallback", positive=True)
+        object.__setattr__(self, "backend", backend)
+        object.__setattr__(
+            self, "ttl", parse_seconds("Fallback.ttl", ttl, "the longest a result stays in the fallback", positive=True)
+        )

@@ -7,6 +7,7 @@ import secrets
 import time
 from typing import TYPE_CHECKING, Final, final
 
+from pashe._internal.cache.keys import KeyPrefix
 from pashe._internal.sync.threads import shield
 from pashe.errors import BackendError
 from pashe.hooks import Failure, Operation
@@ -54,6 +55,28 @@ class Lease:
             shield(self._backend.delete_if_equals(self._slot, self._owner))  # a cancelled caller still releases it
         except BackendError as error:
             self._hooks.on_error(Failure(Operation.RELEASE_LOCK, self._name, error))
+
+
+@final
+class LoadLocks:
+    # The locks a cache takes in its backend around its own loads, apart from the keys of results:
+    # one load of a key at a time, as Stampede.lock_for asks, and one reload of a key at a time. A
+    # failing backend raises: the caller loads all the same and tells its hooks.
+    __slots__ = ("_backend", "_hooks")
+
+    def __init__(self, backend: Backend, *, hooks: Hook) -> None:
+        self._backend = backend
+        self._hooks = hooks
+
+    def take_load(self, key: str, ttl: float) -> Lease | None:
+        # waits while another load of key holds it: None only for a timeout, which it has none of
+        lock_key = KeyPrefix.STAMPEDE_LOCK + key
+        return take(self._backend, (lock_key,), ttl, name=lock_key, hooks=self._hooks)
+
+    def try_take_reload(self, key: str, ttl: float) -> Lease | None:
+        # None while another reload of key holds it
+        lock_key = KeyPrefix.REVALIDATION_LOCK + key
+        return try_take(self._backend, (lock_key,), ttl, name=lock_key, hooks=self._hooks)
 
 
 def take(

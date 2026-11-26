@@ -8,18 +8,18 @@ import time
 
 import pytest
 
-from pashe import AsyncCache, Cache
+from pashe import AsyncLocks, AsyncRateLimiter, Locks, RateLimiter
 from pashe.backends import AsyncMemoryBackend, MemoryBackend
 from pashe.errors import RateLimitedError
 from pashe.ratelimit import FixedWindow
 
 
 def test_locked_runs_calls_of_one_key_one_at_a_time() -> None:
-    cache = Cache(MemoryBackend())
+    locks = Locks(MemoryBackend())
     running = peak = 0
     guard = threading.Lock()
 
-    @cache.locked(ttl=5, key="report:{report_id}")
+    @locks.locked(ttl=5, key="report:{report_id}")
     def build(report_id: int) -> int:
         nonlocal running, peak
         with guard:
@@ -39,10 +39,10 @@ def test_locked_runs_calls_of_one_key_one_at_a_time() -> None:
 
 
 async def test_async_locked_runs_calls_of_one_key_one_at_a_time() -> None:
-    cache = AsyncCache(AsyncMemoryBackend())
+    locks = AsyncLocks(AsyncMemoryBackend())
     order: list[str] = []
 
-    @cache.locked(ttl=5)
+    @locks.locked(ttl=5)
     async def build(name: str) -> None:
         order.append(name)
         await asyncio.sleep(0.01)
@@ -53,9 +53,9 @@ async def test_async_locked_runs_calls_of_one_key_one_at_a_time() -> None:
 
 
 def test_rate_limited_counts_calls_per_key() -> None:
-    cache = Cache(MemoryBackend())
+    limiter = RateLimiter(MemoryBackend())
 
-    @cache.rate_limited(FixedWindow(calls=2, per=60), key="api:{user_id}")
+    @limiter.limited(FixedWindow(calls=2, per=60), key="api:{user_id}")
     def call_api(user_id: int) -> int:
         return user_id
 
@@ -66,9 +66,9 @@ def test_rate_limited_counts_calls_per_key() -> None:
 
 
 async def test_async_rate_limited() -> None:
-    cache = AsyncCache(AsyncMemoryBackend())
+    limiter = AsyncRateLimiter(AsyncMemoryBackend())
 
-    @cache.rate_limited(FixedWindow(calls=1, per=60))
+    @limiter.limited(FixedWindow(calls=1, per=60))
     async def call_api() -> str:
         return "ok"
 
@@ -78,10 +78,10 @@ async def test_async_rate_limited() -> None:
 
 
 def test_decorated_methods_keep_working() -> None:
-    cache = Cache(MemoryBackend())
+    locks = Locks(MemoryBackend())
 
     class Reports:
-        @cache.locked(ttl=5, key="report:{report_id}")
+        @locks.locked(ttl=5, key="report:{report_id}")
         def build(self, report_id: int) -> int:
             return report_id * 10
 
@@ -95,7 +95,7 @@ def test_a_function_of_the_other_kind_is_refused() -> None:
     def load() -> None:
         return None
 
-    with pytest.raises(TypeError, match="AsyncCache"):
-        Cache(MemoryBackend()).locked(ttl=5)(aload)
-    with pytest.raises(TypeError, match="Cache"):
-        AsyncCache(AsyncMemoryBackend()).locked(ttl=5)(load)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="AsyncLocks"):
+        Locks(MemoryBackend()).locked(ttl=5)(aload)
+    with pytest.raises(TypeError, match="Locks"):
+        AsyncLocks(AsyncMemoryBackend()).locked(ttl=5)(load)  # type: ignore[arg-type]

@@ -9,12 +9,12 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from pashe import AsyncCache
+from pashe import AsyncRateLimiter
 from pashe.asgi import RateLimitMiddleware
 from pashe.backends import AsyncMemoryBackend
 from pashe.ratelimit import SlidingWindow
 
-cache = AsyncCache(AsyncMemoryBackend())
+limiter = AsyncRateLimiter(AsyncMemoryBackend())
 
 
 def client(scope: MutableMapping[str, Any]) -> str:
@@ -28,6 +28,6 @@ async def search(request: Request) -> JSONResponse:
 
 app = Starlette(
     routes=[Route("/search", search)],
-    middleware=[Middleware(RateLimitMiddleware, cache=cache, limit=SlidingWindow.per_minute(100), key=client)],
+    middleware=[Middleware(RateLimitMiddleware, limiter=limiter, limit=SlidingWindow.per_minute(100), key=client)],
 )
 # --8<-- [end:show]

@@ -1,7 +1,7 @@
 # FastAPI
 
 `rate_limit` of `pashe.contrib.fastapi`, the `fastapi` extra, is a dependency that counts the
-requests of a route with a rate limit of the cache.
+requests of a route with a `RateLimiter` of `pashe`, an `AsyncRateLimiter`.
 
 ```python hl_lines="10 27 29 31 39 40 43"
 --8<-- "web/fastapi_async.py:show"

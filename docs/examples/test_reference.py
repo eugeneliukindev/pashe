@@ -8,10 +8,10 @@ import re
 
 import pytest
 
-from pashe.options import Fallback, IfError, IfSlow, Negative, Stale, Stampede, Store
+from pashe.options import Fallback, Negative, Stale, Stampede, Store
 from pashe.ratelimit import FixedWindow, RateLimitState, SlidingWindow
 
-_GROUPS = (Stale, IfError, IfSlow, Stampede, Negative, Store, Fallback, SlidingWindow, FixedWindow, RateLimitState)
+_GROUPS = (Stale, Stampede, Negative, Store, Fallback, SlidingWindow, FixedWindow, RateLimitState)
 
 
 @pytest.mark.parametrize("group", _GROUPS, ids=lambda group: group.__name__)

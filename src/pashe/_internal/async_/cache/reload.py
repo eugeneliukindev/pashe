@@ -4,16 +4,13 @@ import asyncio
 import functools
 from typing import TYPE_CHECKING, Final, final
 
-from pashe._internal.async_.locks.locking import atry_take
-from pashe._internal.cache.keys import KeyPrefix
 from pashe.errors import BackendError
 from pashe.hooks import Failure, Operation
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend
-    from pashe._internal.async_.locks.locking import AsyncLease
+    from pashe._internal.async_.locks.locking import AsyncLease, AsyncLoadLocks
     from pashe._internal.async_.tasks import AsyncBackgroundTasks
     from pashe._internal.cache.call import Answer, Call
     from pashe.hooks import Hook
@@ -29,26 +26,25 @@ type AsyncLoadAndStore = Callable[[Call], Awaitable[Answer]]  # loads the entry 
 class AsyncReload:
     # The loads of an entry that run apart from the call it answers: one per key across processes,
     # under a lock in the backend, in the background tasks of the cache.
-    __slots__ = ("_backend", "_background", "_hooks", "_slow_after")
+    __slots__ = ("_background", "_hooks", "_load_locks", "_slow_after")
 
     def __init__(
         self,
         *,
-        backend: AsyncPrefixedBackend,
+        load_locks: AsyncLoadLocks,
         background: AsyncBackgroundTasks,
         slow_after: float,
         hooks: Hook,
     ) -> None:
-        self._backend = backend
+        self._load_locks = load_locks
         self._background = background
         self._slow_after = slow_after  # Stale.slow_after, in seconds
         self._hooks = hooks
 
     async def start(self, call: Call, load_and_store: AsyncLoadAndStore) -> None:
         # Revalidate in the background, unless another call does already; the call answers at once.
-        lock_key = KeyPrefix.REVALIDATION_LOCK + call.key
         try:  # held as long as a load in the background may take, not the window: a slow load still stores
-            lease = await atry_take(self._backend, (lock_key,), _LOCK_SECONDS, name=lock_key, hooks=self._hooks)
+            lease = await self._load_locks.try_take_reload(call.key, _LOCK_SECONDS)
         except BackendError as error:
             self._hooks.on_error(Failure(Operation.REVALIDATION_LOCK, call.key, error))
             return
@@ -64,10 +60,9 @@ class AsyncReload:
     async def wait_at_most_slow_after(self, call: Call, load_and_store: AsyncLoadAndStore) -> Answer | None:
         # The load, if it ends within Stale.slow_after; None when it is slower or another call
         # revalidates already, and the stale result answers. A slower load goes on in the background.
-        lock_key = KeyPrefix.REVALIDATION_LOCK + call.key
         lease: AsyncLease | None
         try:
-            lease = await atry_take(self._backend, (lock_key,), _LOCK_SECONDS, name=lock_key, hooks=self._hooks)
+            lease = await self._load_locks.try_take_reload(call.key, _LOCK_SECONDS)
         except BackendError as error:
             self._hooks.on_error(Failure(Operation.REVALIDATION_LOCK, call.key, error))
             lease = None  # load all the same, with no lock to release

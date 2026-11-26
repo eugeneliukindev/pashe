@@ -2,10 +2,12 @@
 # src/pashe/_internal/async_/cache/storage.py
 from __future__ import annotations
 
+import random
 from dataclasses import replace
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, Final, final
 
 from pashe._internal.cache.entry import Lookup, pack, unpack
+from pashe._internal.cache.keys import KeyPrefix
 from pashe.errors import BackendError, CodecError
 from pashe.hooks import Failure, Operation
 
@@ -14,90 +16,87 @@ if TYPE_CHECKING:
 
     from pashe._internal.cache.entry import Generations, Stored
     from pashe._internal.cache.keys import KeyAndTags
+    from pashe._internal.sync.backends.backend import Backend
     from pashe._internal.sync.backends.prefixed import PrefixedBackend
-    from pashe._internal.sync.cache.fallback import FallbackStore
-    from pashe._internal.sync.cache.tags import Tags
     from pashe.hooks import Hook
+    from pashe.options import Fallback
+
+type _Read = tuple[bytes | None, Generations]  # an entry as the backend keeps it, and the generations of its tags
+
+_GENERATION_BITS: Final = 62  # leaves room for a counter to count up within 64 bits
 
 
 @final
 class Storage:
-    # Where the entries of a cache live: in the backend, checked against the generations of their
-    # tags, or in the fallback, untagged, while the backend fails. On the way of a call a failing
-    # backend goes to the hooks and the fallback takes its place; what is done by hand raises.
-    __slots__ = ("_backend", "_fallback", "_hooks", "_tags")
+    # Where the entries of a cache live, with the counters of their tags: in the backend, an entry
+    # checked against the generations of its tags, or in the fallback, untagged, while the backend
+    # fails; a cache without a fallback finds nothing there and keeps nothing. A method named as one of the backend does as that one does and raises; lookup and keep,
+    # on the way of a call, tell the hooks of what fails and take the fallback in its place.
+    __slots__ = ("_backend", "_fallback", "_hooks", "_invalidations")
 
     def __init__(
         self,
         backend: PrefixedBackend,
         *,
-        tags: Tags,
-        fallback: FallbackStore,
+        fallback: Fallback[Backend] | None,
         hooks: Hook,
     ) -> None:
+        # fallback: under the prefix of the cache, as its backend is; the cache closes it
         self._backend = backend
-        self._tags = tags
         self._fallback = fallback
         self._hooks = hooks
 
-    # For a call
+        self._invalidations = 0  # of this process: a call after one shares no load started before it
 
-    def find(self, key: str, tags: tuple[str, ...]) -> Lookup:
+    @property
+    def invalidations(self) -> int:
+        return self._invalidations
+
+    # On the way of a call
+
+    def lookup(self, key: str, tags: tuple[str, ...]) -> Lookup:
         try:
-            return self.get(key, tags)
+            raw, tag_generations = self._read(key, tags)
         except BackendError as error:
             self._hooks.on_error(Failure(Operation.GET, key, error))
-        return self._read_fallback(key)
+            return self._lookup(key, self._fallback_get(key), (), from_fallback=True)
+        return self._lookup(key, raw, tag_generations)
 
-    def find_many(self, keys_and_tags: Sequence[KeyAndTags]) -> list[Lookup]:
+    def lookup_many(self, keys_and_tags: Sequence[KeyAndTags]) -> list[Lookup]:
         # the entries of a batch and the generations of their tags, in one call to the backend
         try:
-            found = self._tags.read_many(keys_and_tags)
+            found = self._read_many(keys_and_tags)
         except BackendError as error:
             self._hooks.on_error(Failure(Operation.GET_MANY, "", error))
-            return [self._read_fallback(key) for key, _ in keys_and_tags]  # noqa: WPS476 - memory, nothing to win at once
+            return [
+                self._lookup(key, self._fallback_get(key), (), from_fallback=True)  # noqa: WPS476 - memory, nothing to win at once
+                for key, _ in keys_and_tags
+            ]
         return [
-            self._lookup(key, raw, generations)
-            for (key, _), (raw, generations) in zip(keys_and_tags, found, strict=True)
+            self._lookup(key, raw, tag_generations)
+            for (key, _), (raw, tag_generations) in zip(keys_and_tags, found, strict=True)
         ]
 
-    def open(self, key: str, tags: tuple[str, ...]) -> Lookup:
-        # the generations alone, for a load that reads no entry
-        try:
-            generations = self._tags.generations(tags)
-        except BackendError as error:
-            self._hooks.on_error(Failure(Operation.READ_TAGS, key, error))
-            return Lookup(key, None, from_fallback=True)
-        return Lookup(key, None, generations)
-
-    def open_many(self, keys_and_tags: Sequence[KeyAndTags]) -> list[Lookup]:
-        # the generations alone, for the items of a batch that read no entry
-        try:
-            found = self._tags.read_many(keys_and_tags)
-        except BackendError as error:
-            self._hooks.on_error(Failure(Operation.READ_TAGS, "", error))
-            return [Lookup(key, None, from_fallback=True) for key, _ in keys_and_tags]
-        return [Lookup(key, None, generations) for (key, _), (_, generations) in zip(keys_and_tags, found, strict=True)]
-
-    def keep(self, lookup: Lookup, stored: Stored | None) -> None:
-        # None, what the policy does not store, keeps nothing
+    def keep(self, lookup: Lookup, stored: Stored | None) -> bool:
+        # Whether stored is kept, in the backend or in the fallback; None, what the policy does not
+        # store, keeps nothing.
         if stored is None:
-            return
+            return False
         if lookup.from_fallback:
-            self._keep_in_fallback(lookup.key, stored)
-            return
+            return self._keep_in_fallback(lookup.key, stored)
         try:
-            self._backend.set(lookup.key, _packed(stored, lookup.generations), ttl=stored.storage_seconds)
+            self._backend.set(lookup.key, _packed(stored, lookup.tag_generations), ttl=stored.storage_seconds)
         except BackendError as error:
             self._hooks.on_error(Failure(Operation.SET, lookup.key, error))
-            self._keep_in_fallback(lookup.key, stored)
+            return self._keep_in_fallback(lookup.key, stored)
+        return True
 
     def keep_many(self, loaded: Sequence[tuple[Lookup, Stored]]) -> None:
         in_fallback = {lookup.key: stored for lookup, stored in loaded if lookup.from_fallback}
         in_backend = {lookup.key: stored for lookup, stored in loaded if not lookup.from_fallback}
         if in_backend:
-            generations = {lookup.key: lookup.generations for lookup, _ in loaded}
-            raws = {key: _packed(stored, generations[key]) for key, stored in in_backend.items()}
+            tag_generations = {lookup.key: lookup.tag_generations for lookup, _ in loaded}
+            raws = {key: _packed(stored, tag_generations[key]) for key, stored in in_backend.items()}
             try:
                 self._backend.set_many(raws, ttl=max(stored.storage_seconds for stored in in_backend.values()))
             except BackendError as error:
@@ -106,11 +105,20 @@ class Storage:
         for key, stored in in_fallback.items():
             self._keep_in_fallback(key, stored)  # noqa: WPS476 - memory, nothing to win at once
 
-    # By hand
+    def replace(self, lookup: Lookup, stored: Stored | None) -> None:
+        # What refresh loaded in place of what lookup found: None, what the policy does not store,
+        # deletes it, as the old result must not answer after a refresh. A failing backend raises,
+        # unless the lookup already went to the fallback, which keeps nothing to delete.
+        if stored is not None:
+            self.keep(lookup, stored)
+        elif not lookup.from_fallback:
+            self._backend.delete(lookup.key)
+
+    # By hand, as the backend does: a failing backend raises
 
     def get(self, key: str, tags: tuple[str, ...]) -> Lookup:
-        raw, generations = self._tags.read(key, tags)
-        return self._lookup(key, raw, generations)
+        raw, tag_generations = self._read(key, tags)
+        return self._lookup(key, raw, tag_generations)
 
     def set(
         self,
@@ -122,37 +130,118 @@ class Storage:
         if stored is None:
             self._backend.delete(key)
             return
-        generations = self._tags.generations(tags)
-        self._backend.set(key, _packed(stored, generations), ttl=stored.storage_seconds)
+        tag_generations = self._read_tag_generations(tags)
+        self._backend.set(key, _packed(stored, tag_generations), ttl=stored.storage_seconds)
 
     def delete(self, key: str) -> bool:
         return self._backend.delete(key)
+
+    def invalidate_tags(self, tags: Sequence[str]) -> None:
+        # An invalidation is rare: one write after another is fine.
+        try:
+            for counter in _counters(tags):
+                self._backend.set_if_absent(counter, _random_start())  # noqa: WPS476 - INCRBY alone would start at 1
+                self._backend.incr(counter, 1)  # noqa: WPS476 - as above
+        finally:  # counted after the writes: a load that started meanwhile may have read the old data
+            self._invalidations += 1
 
     def _lookup(
         self,
         key: str,
         raw: bytes | None,
-        generations: Generations,
+        tag_generations: Generations,
         *,
         from_fallback: bool = False,
     ) -> Lookup:
         # an entry cut short, of another format, or of a tag invalidated after it was stored, is no entry
         if raw is None:
-            return Lookup(key, None, generations, from_fallback)
+            return Lookup(key, None, tag_generations, from_fallback)
         try:
             entry = unpack(raw)
         except CodecError as error:
             self._hooks.on_error(Failure(Operation.DECODE, key, error))
-            return Lookup(key, None, generations, from_fallback)
-        return Lookup(key, entry if entry.tag_generations == generations else None, generations, from_fallback)
+            return Lookup(key, None, tag_generations, from_fallback)
+        return Lookup(key, entry if entry.tag_generations == tag_generations else None, tag_generations, from_fallback)
 
-    def _read_fallback(self, key: str) -> Lookup:
-        return self._lookup(key, self._fallback.get(key), (), from_fallback=True)
+    def _fallback_get(self, key: str) -> bytes | None:
+        # None with no fallback, or one that fails too
+        if self._fallback is None:
+            return None
+        try:
+            return self._fallback.backend.get(key)
+        except BackendError as error:
+            self._hooks.on_error(Failure(Operation.FALLBACK_GET, key, error))
+            return None
 
-    def _keep_in_fallback(self, key: str, stored: Stored) -> None:
-        # untagged: no invalidation reaches the fallback while the backend is down
-        self._fallback.set(key, _packed(stored, ()), fresh_seconds=stored.fresh_seconds)
+    def _keep_in_fallback(self, key: str, stored: Stored) -> bool:
+        # Untagged, as no invalidation reaches the fallback while the backend is down; kept while
+        # fresh, or for the ttl of the fallback if that is shorter.
+        if self._fallback is None:
+            return False
+        fresh_seconds, ttl = stored.fresh_seconds, self._fallback.ttl
+        try:
+            self._fallback.backend.set(
+                key, _packed(stored, ()), ttl=min(fresh_seconds, ttl) if fresh_seconds > 0 else ttl
+            )
+        except BackendError as error:
+            self._hooks.on_error(Failure(Operation.FALLBACK_SET, key, error))
+            return False
+        return True
+
+    def _read(self, key: str, tags: Sequence[str]) -> _Read:
+        if not tags:
+            return self._backend.get(key), ()
+        counters = _counters(tags)
+        raws = self._backend.get_many([key, *counters])
+        return raws[0], self._tag_generations(counters, raws[1:])
+
+    def _read_many(self, keys_and_tags: Sequence[KeyAndTags]) -> list[_Read]:
+        counters = list(dict.fromkeys(counter for _, tags in keys_and_tags for counter in _counters(tags)))
+        raws = self._backend.get_many([*(key for key, _ in keys_and_tags), *counters])
+        by_counter = dict(zip(counters, self._tag_generations(counters, raws[len(keys_and_tags) :]), strict=True))
+        return [
+            (raw, tuple(by_counter[counter] for counter in _counters(tags)))
+            for (_, tags), raw in zip(keys_and_tags, raws, strict=False)  # raws: the entries, then the counters
+        ]
+
+    def _read_tag_generations(self, tags: Sequence[str]) -> Generations:
+        if not tags:
+            return ()
+        counters = _counters(tags)
+        return self._tag_generations(counters, self._backend.get_many(counters))
+
+    def _tag_generations(self, counters: Sequence[str], raws: Sequence[bytes | None]) -> Generations:
+        parsed = [_parse(raw) for raw in raws if raw is not None]
+        if len(parsed) == len(raws):  # every counter exists, as on almost every call: no task per tag
+            return tuple(parsed)
+        pairs = zip(counters, raws, strict=True)
+        return tuple([self._counter_or_create(counter, raw) for counter, raw in pairs])  # noqa: WPS476 - once per new tag
+
+    def _counter_or_create(self, counter: str, raw: bytes | None) -> int:
+        if raw is not None:
+            return _parse(raw)
+        start = _random_start()
+        if self._backend.set_if_absent(counter, start):
+            return _parse(start)
+        created = self._backend.get(counter)  # another caller created it first
+        return _parse(created or start)
 
 
-def _packed(stored: Stored, generations: Generations) -> bytes:
-    return pack(replace(stored.entry, tag_generations=generations))
+def _counters(tags: Sequence[str]) -> list[str]:
+    return [KeyPrefix.TAG + tag for tag in tags]
+
+
+def _random_start() -> bytes:
+    return str(random.getrandbits(_GENERATION_BITS)).encode()
+
+
+def _parse(raw: bytes) -> int:
+    try:
+        return int(raw)
+    except ValueError as error:
+        msg = "a tag counter is not an integer"
+        raise CodecError(msg) from error
+
+
+def _packed(stored: Stored, tag_generations: Generations) -> bytes:
+    return pack(replace(stored.entry, tag_generations=tag_generations))

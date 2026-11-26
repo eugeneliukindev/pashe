@@ -1,15 +1,15 @@
 # --8<-- [start:show]
-from pashe import AsyncCache
+from pashe import AsyncLocks
 from pashe.backends import AsyncMemoryBackend
 
-cache = AsyncCache(AsyncMemoryBackend())
+locks = AsyncLocks(AsyncMemoryBackend())
 
 
 async def build_report() -> None: ...  # the work of yours that one process at a time may do
 
 
 async def main() -> None:
-    async with cache.lock("report", ttl=30):
+    async with locks.lock("report", ttl=30):
         await build_report()
 
 

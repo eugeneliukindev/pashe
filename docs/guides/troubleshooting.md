@@ -25,7 +25,7 @@ of `pashe.errors`, so `except PasheError` takes them all.
     A template is checked when the function is decorated: every field must name a parameter of
     the function. Fix the name, such as `{user_id}`.
 
-??? question "TypeError: get_user is not async: cache it with a Cache"
+??? question "TypeError: get_user is not async: cache it with Cache"
 
     `AsyncCache` caches `async def` functions and `Cache` caches `def` ones. A function of the
     other side is refused when it is decorated, as awaiting a sync result, or calling an async

@@ -3,27 +3,13 @@
 from __future__ import annotations
 
 import functools
-from typing import TYPE_CHECKING, Concatenate, Self, final, overload, override
-
-from pashe._internal.cache.call import CallReporter
-from pashe._internal.cache.entry import EntryFormat
-from pashe._internal.cache.keys import CallKeys, key_name, qualified_name
-from pashe._internal.cache.value_types import return_type
-from pashe._internal.sync.cache.function_cache import FunctionCache
-from pashe._internal.sync.threads import BackgroundTasks, expect_side
+from typing import TYPE_CHECKING, Concatenate, Protocol, Self, final, overload, override
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
-    from pashe._internal.cache.keys import KeyTemplate
-    from pashe._internal.cache.policy import Policy
-    from pashe._internal.sync.backends.prefixed import PrefixedBackend
-    from pashe._internal.sync.cache.function_cache import Load
-    from pashe._internal.sync.cache.storage import Storage
-    from pashe._internal.sync.cache.tags import Tags
-    from pashe.codecs import Codec
-    from pashe.compressors import Compressor
-    from pashe.hooks import Hook
+    from pashe._internal.cache.keys import CallKeys
+    from pashe._internal.sync.cache.function_cache import FunctionCache, Load
 
 
 class CachedValue[**P, R]:
@@ -280,112 +266,17 @@ class CachedFunction[**P, R](CachedValue[P, R]):
         return CachedFunction(self._function, self._keys, self._function_cache, instance=instance)
 
 
-@final
-class CachedFunctionDecorator:
+class CachedFunctionDecorator(Protocol):
     """What ``@cache(...)`` returns: a decorator that caches the results of a function."""
 
-    __slots__ = (
-        "_backend",
-        "_background",
-        "_codec",
-        "_compressor",
-        "_hooks",
-        "_key_template",
-        "_policy",
-        "_storage",
-        "_tag_templates",
-        "_tags",
-    )
-
-    def __init__(
-        self,
-        policy: Policy,
-        /,
-        *,
-        key_template: KeyTemplate | None,
-        tag_templates: tuple[KeyTemplate, ...],
-        codec: Codec,
-        compressor: Compressor,
-        storage: Storage,
-        tags: Tags,
-        backend: PrefixedBackend,
-        background: BackgroundTasks,
-        hooks: Hook,
-    ) -> None:
-        self._policy = policy
-        self._key_template = key_template
-        self._tag_templates = tag_templates
-
-        self._codec = codec
-        self._compressor = compressor
-        self._storage = storage
-        self._tags = tags
-        self._backend = backend
-        self._background = background
-        self._hooks = hooks
-
-    def __call__[**Q, T](self, function: Callable[Q, T]) -> CachedFunction[Q, T]:
-        """Cache the results of function.
-
-        Args:
-            function: the function to cache, of the side of the cache.
-
-        Returns:
-            The cached function.
-        """
-        return CachedFunction(function, *self._keys_and_cache(function))
-
-    def cached_value[**Q, T](self, function: Callable[Q, T]) -> CachedValue[Q, T]:
-        """Make function a value, as ``@cache.value(...)`` does: stored as a cached result is, never loaded.
-
-        Args:
-            function: names the value by its arguments and its return annotation.
-
-        Returns:
-            The value.
-        """
-        return CachedValue(function, *self._keys_and_cache(function))
-
-    def _keys_and_cache[T](self, function: Callable[..., T]) -> tuple[CallKeys, FunctionCache[T]]:
-        expect_side(function, "cache")
-        if self._key_template is None:
-            key_name(function)  # refuses a lambda, whose name is no key of its own
-        keys = CallKeys(function, self._key_template, self._tag_templates)
-
-        entry_format = EntryFormat(
-            self._policy, return_type(function), codec=self._codec, compressor=self._compressor, hooks=self._hooks
-        )
-        function_cache = FunctionCache[T](
-            self._policy,
-            storage=self._storage,
-            entry_format=entry_format,
-            tags=self._tags,
-            backend=self._backend,
-            background=self._background,
-            reporter=CallReporter(
-                qualified_name(function), self._backend.full_key, hooks=self._hooks, clock=self._policy.clock
-            ),
-            hooks=self._hooks,
-        )
-        return keys, function_cache
+    def __call__[**Q, T](self, function: Callable[Q, T], /) -> CachedFunction[Q, T]:
+        """Cache the results of function, of the side of the cache."""
+        ...
 
 
-@final
-class CachedValueDecorator:
+class CachedValueDecorator(Protocol):
     """What ``@cache.value(...)`` returns: a decorator that makes a value set by hand of a function."""
 
-    __slots__ = ("_cached",)
-
-    def __init__(self, cached: CachedFunctionDecorator) -> None:
-        self._cached = cached  # a value is stored as a cached result is, with no load
-
-    def __call__[**Q, T](self, function: Callable[Q, T]) -> CachedValue[Q, T]:
-        """Make function a value: its signature gives the key, its body never runs.
-
-        Args:
-            function: names the value by its arguments and its return annotation.
-
-        Returns:
-            The value.
-        """
-        return self._cached.cached_value(function)
+    def __call__[**Q, T](self, function: Callable[Q, T], /) -> CachedValue[Q, T]:
+        """Make function a value: its signature gives the key, its body never runs."""
+        ...

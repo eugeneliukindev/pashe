@@ -5,12 +5,12 @@ from typing import Any
 from litestar import Litestar, get
 from litestar.middleware import DefineMiddleware
 
-from pashe import AsyncCache
+from pashe import AsyncRateLimiter
 from pashe.asgi import RateLimitMiddleware
 from pashe.backends import AsyncMemoryBackend
 from pashe.ratelimit import FixedWindow
 
-cache = AsyncCache(AsyncMemoryBackend())
+limiter = AsyncRateLimiter(AsyncMemoryBackend())
 
 
 def client(scope: MutableMapping[str, Any]) -> str:
@@ -19,7 +19,7 @@ def client(scope: MutableMapping[str, Any]) -> str:
 
 
 limit = FixedWindow(calls=5, per=60, ban_for=300)
-logins = DefineMiddleware(RateLimitMiddleware, cache=cache, limit=limit, key=client)  # type: ignore[arg-type]  # Litestar types ASGI with TypedDicts, Starlette and pashe with mappings
+logins = DefineMiddleware(RateLimitMiddleware, limiter=limiter, limit=limit, key=client)  # type: ignore[arg-type]  # Litestar types ASGI with TypedDicts, Starlette and pashe with mappings
 
 
 @get("/catalog")

@@ -2,10 +2,18 @@
 # src/pashe/_internal/async_/limiter.py
 from __future__ import annotations
 
+import functools
 import math
-from typing import TYPE_CHECKING, Final, assert_never, final
+import time
+from typing import TYPE_CHECKING, Final, assert_never, final, override
 
-from pashe._internal.cache.keys import KeyPrefix
+from pashe._internal.cache.keys import CallKeys, KeyPrefix, KeyTemplate, key_name, parse_key
+from pashe._internal.checks import FUNCTION, expect_type, parse_secret
+from pashe._internal.hooks import Hooks
+from pashe._internal.limits import LIMIT, parse_cost
+from pashe._internal.sync.backends.backend import Backend
+from pashe._internal.sync.backends.prefixed import PrefixedBackend
+from pashe._internal.sync.threads import expect_side
 from pashe.errors import BackendError, RateLimitedError, WrongTypeError
 from pashe.hooks import Failure, Operation, RateLimitDecision
 from pashe.ratelimit import FixedWindow, Limit, RateLimitState, SlidingWindow
@@ -13,7 +21,7 @@ from pashe.ratelimit import FixedWindow, Limit, RateLimitState, SlidingWindow
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from pashe._internal.sync.backends.backend import Backend
+    from pashe._internal.sync.threads import Decorator
     from pashe.hooks import Hook
 
 _WINDOWS_KEPT: Final = 2  # a sliding limit reads the current and the previous fixed window
@@ -23,26 +31,103 @@ _PAST_THE_EDGE: Final = 4  # steps of the float of the clock: what now % per may
 
 @final
 class RateLimiter:
-    __slots__ = ("_backend", "_clock", "_hooks")
+    """Counts calls per key in a backend, for every process over it, and refuses those over a limit.
+
+    The counters live under prefix, apart from the entries of a cache over the same backend and
+    prefix. It closes nothing: the backend belongs to whoever made it.
+
+    Examples:
+        >>> from pashe import RateLimiter
+        >>> from pashe.backends import MemoryBackend
+        >>> from pashe.ratelimit import SlidingWindow
+        >>> limiter = RateLimiter(MemoryBackend(), prefix="app:")
+        >>> state = limiter.count("ip:203.0.113.7", SlidingWindow.per_minute(100))
+        >>> state.remaining
+        99
+    """
+
+    __slots__ = ("_backend", "_clock", "_hooks", "_key_secret")
 
     def __init__(
         self,
         backend: Backend,
-        hooks: Hook,
-        clock: Callable[[], float],
+        /,
+        *,
+        prefix: str = "",
+        hooks: list[Hook] | tuple[Hook, ...] = (),
+        key_secret: str | bytes | None = None,
+        clock: Callable[[], float] = time.time,
     ) -> None:
-        self._backend = backend
-        self._hooks = hooks
+        """Create the rate limiter of backend.
+
+        Args:
+            backend: where the counters live.
+            prefix: put in front of every counter, as a cache puts its own in front of its keys.
+            hooks: what the limiter tells about itself: each Hook gets every decision, and the
+                errors of the backend it lets calls through.
+            key_secret: the secret of ``{name:hmac}`` in the key templates of limited.
+            clock: wall-clock seconds, for tests.
+
+        Raises:
+            TypeError: an argument is not of the type its annotation names.
+            InvalidOptionsError: key_secret is shorter than 16 bytes.
+        """
+        expect_type("backend", backend, Backend)
+        expect_type("prefix", prefix, str)
+        expect_type("key_secret", key_secret, str | bytes | None)
+        expect_type("clock", clock, FUNCTION)
+
+        self._backend = PrefixedBackend(backend, prefix)
+        self._hooks = Hooks(hooks)
+        self._key_secret = None if key_secret is None else parse_secret("key_secret", key_secret)
         self._clock = clock
 
     def count(
         self,
         key: str,
         limit: Limit,
+        /,
         *,
-        cost: int,
-        fail_open: bool,
+        cost: int = 1,
+        fail_open: bool = True,
     ) -> RateLimitState | None:
+        """Count a call for key, and return what is left of the limit.
+
+        Call it before the work it guards. A failing backend lets the call through uncounted,
+        returns None and goes to on_error.
+
+        Args:
+            key: what the limit counts, such as ``f"ip:{ip}"``.
+            limit: the limit, such as ``SlidingWindow.per_minute(100)``.
+            cost: how many calls this one counts as, such as 5 for a heavy request.
+            fail_open: let a call through when the backend fails; off, raise BackendError instead,
+                for limits that guard against abuse.
+
+        Returns:
+            What is left of the limit after this call; None if the backend failed and the call
+            went through uncounted.
+
+        Raises:
+            RateLimitedError: the key is over limit; retry_after says for how long.
+            BackendError: the backend failed and fail_open is off.
+            WrongTypeError: a counter of the limit holds what is not an integer, such as a value
+                another program wrote under its key: fail_open lets through an outage, not that.
+            InvalidOptionsError: cost is not from 1 to the calls of the limit.
+
+        Examples:
+            >>> from pashe import RateLimiter
+            >>> from pashe.backends import MemoryBackend
+            >>> from pashe.ratelimit import FixedWindow
+            >>> limiter = RateLimiter(MemoryBackend())
+            >>> state = limiter.count("login:ada@example.com", FixedWindow(calls=5, per=60), cost=2)
+            >>> state.remaining
+            3
+        """
+        expect_type("key", key, str)
+        expect_type("limit", limit, LIMIT)
+        cost = parse_cost(limit, cost)
+        expect_type("fail_open", fail_open, bool)
+
         try:
             match limit:
                 case SlidingWindow():
@@ -61,6 +146,54 @@ class RateLimiter:
             return None
         self._hooks.on_rate_limit(RateLimitDecision(key, allowed=True))
         return state
+
+    def limited(self, limit: Limit, /, *, key: str | None = None) -> Decorator:
+        """Count every call of a function with count before it runs.
+
+        Args:
+            limit: the limit, such as ``SlidingWindow.per_minute(10)``.
+            key: a str.format template over the arguments, such as ``"export:{user_id}"``; by
+                default one limit for the function.
+
+        Returns:
+            A decorator for a function of the side of the limiter; the function raises
+            RateLimitedError over the limit.
+
+        Raises:
+            TypeError: an argument is not of the type its annotation names.
+
+        Examples:
+            >>> from pashe import RateLimiter
+            >>> from pashe.backends import MemoryBackend
+            >>> from pashe.ratelimit import SlidingWindow
+            >>> limiter = RateLimiter(MemoryBackend())
+            >>> @limiter.limited(SlidingWindow.per_minute(10), key="export:{user_id}")
+            ... def export(user_id: int) -> int:
+            ...     return user_id
+            >>> export(1)
+            1
+        """
+        expect_type("limit", limit, LIMIT)
+        key_template = parse_key(key, key_secret=self._key_secret)
+
+        def decorator[**P, R](function: Callable[P, R], /) -> Callable[P, R]:
+            expect_side(function, "decorate", self)
+            keys = CallKeys(function, key_template or KeyTemplate(key_name(function), key_secret=self._key_secret), ())
+
+            @functools.wraps(function)
+            def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+                self.count(keys.key(args, kwargs), limit)  # over the limit it raises RateLimitedError
+                return function(*args, **kwargs)
+
+            return wrapper
+
+        return decorator
+
+    @override
+    def __repr__(self) -> str:
+        """Show the backend and the prefix of the limiter."""
+        backend, prefix = self._backend.backend, self._backend.prefix
+        return f"{type(self).__name__}({backend!r}, prefix={prefix!r})"
 
     def _count_sliding(
         self,

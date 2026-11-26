@@ -17,19 +17,19 @@ if TYPE_CHECKING:
 
 @final
 class Lock(BaseLock):
-    """A lock for a ``with`` block, held in the backend for every cache over it.
+    """A lock for a ``with`` block, held in the backend for every process over it.
 
-    Cache.lock and Cache.try_lock make it. Entering the block waits for the lock, unless
+    Locks.lock and Locks.try_lock make it. Entering the block waits for the lock, unless
     try_lock already took it. While the block runs, a thread extends the lock by ttl every third
     of ttl, so the block may run longer than ttl; the lock is released after the block. A sync
     block cannot be interrupted: if an extension fails, the block runs to its end and
     LockLostError is raised after it, unless the block raised an error of its own.
 
     Examples:
-        >>> from pashe import Cache
+        >>> from pashe import Locks
         >>> from pashe.backends import MemoryBackend
-        >>> cache = Cache(MemoryBackend())
-        >>> with cache.lock("report", ttl=30) as lock:
+        >>> locks = Locks(MemoryBackend())
+        >>> with locks.lock("report", ttl=30) as lock:
         ...     lock.key
         'report'
     """

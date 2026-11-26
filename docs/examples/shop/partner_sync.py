@@ -1,7 +1,7 @@
 # --8<-- [start:imports]
 import httpx
 
-from pashe.options import IfError, Negative, Stale
+from pashe.options import Negative, Stale
 
 # --8<-- [end:imports]
 from examples.shop.data_sync import partner
@@ -15,7 +15,7 @@ class UnknownCurrencyError(LookupError):
 
 @cache(
     ttl=600,
-    stale=Stale(if_error=IfError(3_600, on=(httpx.HTTPError,))),
+    stale=Stale(if_error=3_600, if_error_on=(httpx.HTTPError,)),
     negative=Negative(on=(UnknownCurrencyError,), ttl=600),
 )
 def get_rate(currency: str) -> float:

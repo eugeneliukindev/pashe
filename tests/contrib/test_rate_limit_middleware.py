@@ -13,7 +13,7 @@ from starlette.middleware import Middleware
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-from pashe import AsyncCache
+from pashe import AsyncCache, AsyncRateLimiter
 from pashe.asgi import CacheHeadersMiddleware, RateLimitMiddleware
 from pashe.backends import AsyncMemoryBackend
 from pashe.hooks import CacheHeadersHook
@@ -32,18 +32,18 @@ def _client(_scope: Scope) -> str:
     return "client"
 
 
-def _starlette(cache: AsyncCache, reached: list[str]) -> Starlette:
+def _starlette(limiter: AsyncRateLimiter, reached: list[str]) -> Starlette:
     async def search(_request: Request) -> PlainTextResponse:
         reached.append("search")
         return PlainTextResponse("found")
 
-    limited = [Middleware(RateLimitMiddleware, cache=cache, limit=_LIMIT, key=_client)]
+    limited = [Middleware(RateLimitMiddleware, limiter=limiter, limit=_LIMIT, key=_client)]
     return Starlette(routes=[Route("/search", search, middleware=limited)])
 
 
 async def test_a_request_over_the_limit_is_answered_429_and_never_reaches_the_route() -> None:
     reached: list[str] = []
-    app = _starlette(AsyncCache(AsyncMemoryBackend()), reached)
+    app = _starlette(AsyncRateLimiter(AsyncMemoryBackend()), reached)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as http:
         first = await http.get("/search")
         await http.get("/search")
@@ -63,7 +63,7 @@ async def test_a_request_over_the_limit_is_answered_429_and_never_reaches_the_ro
 async def test_a_backend_that_fails_lets_the_request_through_uncounted() -> None:
     backend = AsyncFailingMemoryBackend()
     backend.down = True
-    app = _starlette(AsyncCache(backend), [])
+    app = _starlette(AsyncRateLimiter(backend), [])
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as http:
         response = await http.get("/search")
 
@@ -72,9 +72,9 @@ async def test_a_backend_that_fails_lets_the_request_through_uncounted() -> None
 
 
 async def test_a_route_of_litestar_takes_the_rate_limit() -> None:
-    cache = AsyncCache(AsyncMemoryBackend())
+    limiter = AsyncRateLimiter(AsyncMemoryBackend())
 
-    limited = DefineMiddleware(RateLimitMiddleware, cache=cache, limit=_LIMIT, key=_client)  # type: ignore[arg-type]  # Litestar types ASGI with TypedDicts, Starlette and pashe with mappings
+    limited = DefineMiddleware(RateLimitMiddleware, limiter=limiter, limit=_LIMIT, key=_client)  # type: ignore[arg-type]  # Litestar types ASGI with TypedDicts, Starlette and pashe with mappings
 
     @get("/search", middleware=[limited])
     async def search() -> str:
@@ -111,4 +111,4 @@ async def test_litestar_takes_the_cache_headers_middleware() -> None:
 
 def test_a_cost_over_the_limit_is_refused_when_it_is_made() -> None:
     with pytest.raises(ValueError, match="cost is 3"):
-        RateLimitMiddleware(_client, cache=AsyncCache(AsyncMemoryBackend()), limit=_LIMIT, key=_client, cost=3)  # type: ignore[arg-type]  # any function is an app here
+        RateLimitMiddleware(_client, limiter=AsyncRateLimiter(AsyncMemoryBackend()), limit=_LIMIT, key=_client, cost=3)  # type: ignore[arg-type]  # any function is an app here

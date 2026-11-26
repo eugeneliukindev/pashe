@@ -44,7 +44,7 @@ The cache keeps keys of its own under `prefix + "__"`, so keys of yours must not
 | `shop:__tag:users` | `856716400446053776`, as text | the generation of the tag `users`: `invalidate_tags("users")` changes it, and every entry stored with the old one is a miss, with no scan of keys |
 | `shop:__stampede:user:1` | the token of its owner | the lock of `Stampede.lock_for` while one caller loads `user:1` |
 | `shop:__revalidation:user:1` | the token of its owner | the lock of the one revalidation of `user:1` in the background |
-| `shop:__lock:report` | the token of its owner | a lock of `cache.lock("report", ...)`, `try_lock` or `locked` |
+| `shop:__lock:report` | the token of its owner | a lock of `locks.lock("report", ...)`, `try_lock` or `locked`, over the prefix `shop:` |
 | `shop:__rate:sliding:100/60.0:ip:1.2.3.4:29400000` | a count, as text | a counter of a `SlidingWindow` of 100 calls per 60 seconds, one per fixed window |
 | `shop:__rate:fixed:5/60.0/300.0:login:ada` | a count, as text | the counter of a `FixedWindow` of 5 calls per 60 seconds with a ban of 300 |
 

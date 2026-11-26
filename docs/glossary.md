@@ -43,7 +43,7 @@ the cache works in its process only: [Where each feature works](guides/choosing.
 | bus | what tells the near caches of every process that keys changed: `RedisPubSubBus`, `RedisTrackingBus` |
 | fallback | where a cache keeps what it loads while its backend fails: `Fallback` |
 | breaker | what skips a backend that is down for a while: `CircuitBreaker` |
-| lock | a lock in the backend that one holder takes at a time, or `holders` of them |
-| rate limit | a count of calls per key and window that refuses those over it: `SlidingWindow`, `FixedWindow` |
+| lock | a lock in the backend that one holder takes at a time, or `holders` of them: `Locks` takes them |
+| rate limit | a count of calls per key and window that refuses those over it: `SlidingWindow`, `FixedWindow`, counted by `RateLimiter` |
 | hook | what a cache tells how every call was answered and every error it worked around: `Hook` |
 | codec, compressor | how a result turns into bytes, and how those bytes shrink: `Codec`, `Compressor` |

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import contextvars
-from typing import TYPE_CHECKING, Any, Final, Literal, final
+from typing import TYPE_CHECKING, Any, Final, Literal, Protocol, final
 
 from pashe._internal.checks import is_async
 from pashe.errors import OverloadedError
@@ -102,9 +102,23 @@ class AsyncBackgroundTasks:
         await asyncio.gather(*self._tasks, return_exceptions=True)
 
 
-def aexpect_side(function: Callable[..., object], action: Literal["decorate", "cache"]) -> None:
+class AsyncDecorator(Protocol):
+    """A decorator of an ``async def`` function that keeps its signature, as locked, limited and invalidates return."""
+
+    def __call__[**P, R](self, function: Callable[P, Awaitable[R]], /) -> Callable[P, Awaitable[R]]:
+        """Return function, run as the decorator says."""
+        ...
+
+
+def aexpect_side(
+    function: Callable[..., object],
+    action: Literal["decorate", "cache"],
+    owner: object,
+) -> None:
+    # owner: the cache, the locks or the limiter whose decorator takes function; the error names its sync twin
     if not is_async(function):
-        msg = f"{getattr(function, '__qualname__', function)} is not async: {action} it with a Cache"
+        twin = type(owner).__name__.removeprefix("Async")
+        msg = f"{getattr(function, '__qualname__', function)} is not async: {action} it with {twin}"
         raise TypeError(msg)
 
 

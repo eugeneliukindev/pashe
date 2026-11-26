@@ -12,7 +12,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from prometheus_client import CollectorRegistry
 
-from pashe import Cache
+from pashe import Cache, RateLimiter
 from pashe.backends import CircuitBreaker, MemoryBackend, NearCacheBackend
 from pashe.contrib.opentelemetry import OtelMetricsHook, OtelSpanEventsHook
 from pashe.contrib.prometheus import PrometheusMetricsHook
@@ -40,10 +40,11 @@ def _scenario(hook: Hook) -> None:
     get_rate = cache(ttl=60)(_rate)
     get_rate()
     get_rate()
+    limiter = RateLimiter(backend, hooks=[hook])
     limit = FixedWindow(calls=1, per=60, ban_for=60)
-    cache.rate_limit("ip", limit)
+    limiter.count("ip", limit)
     with contextlib.suppress(RateLimitedError):
-        cache.rate_limit("ip", limit)
+        limiter.count("ip", limit)
     backend.down = True
     get_rate()
 

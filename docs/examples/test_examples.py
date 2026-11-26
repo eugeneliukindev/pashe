@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from tests.harness.helpers import call
 
-from pashe import AsyncCache, Cache
+from pashe import AsyncCache, AsyncLocks, AsyncRateLimiter, Cache, Locks, RateLimiter
 
 _ROOT = Path(__file__).parent
 _EXAMPLES = sorted(path for path in _ROOT.glob("*/*.py") if not path.name.startswith(("test_", "_")))
@@ -49,19 +49,24 @@ async def test_the_calls_of_an_example_run(path: Path) -> None:
 @pytest.mark.parametrize("path", _OPTIONS, ids=_name)
 def test_an_example_of_every_option_passes_every_option(path: Path) -> None:
     example = importlib.import_module(f"examples.{path.parent.name}.{path.stem}")
-    cache_class = AsyncCache if path.stem.endswith("_async") else Cache
+    is_async = path.stem.endswith("_async")
+    classes = {  # the name an example gives each object of pashe it calls
+        "cache": AsyncCache if is_async else Cache,
+        "locks": AsyncLocks if is_async else Locks,
+        "limiter": AsyncRateLimiter if is_async else RateLimiter,
+    }
     shown: dict[str, tuple[object, int, set[str | None]]] = {}
     for node in ast.walk(ast.parse(path.read_text())):
         if not isinstance(node, ast.Call):
             continue
         if isinstance(node.func, ast.Name) and node.func.id == "cache":
-            called: object = cache_class.__call__
+            called: object = classes["cache"].__call__
         elif (
             isinstance(node.func, ast.Attribute)
             and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "cache"
+            and node.func.value.id in classes
         ):
-            called = getattr(cache_class, node.func.attr)
+            called = getattr(classes[node.func.value.id], node.func.attr)
         elif (
             isinstance(node.func, ast.Name)
             and getattr(getattr(example, node.func.id, None), "__module__", None) in _OPTION_MODULES

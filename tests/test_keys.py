@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from pashe import Cache
+from pashe import Cache, Locks
 from pashe.backends import MemoryBackend
 from pashe.errors import InvalidOptionsError
 from tests.harness.helpers import RecordingHook, call
@@ -98,7 +98,7 @@ def test_a_template_names_only_parameters() -> None:
     with pytest.raises(InvalidOptionsError, match=r"\{0\}"):
         cache(ttl=60, key="user:{0}")(get_user)
     with pytest.raises(InvalidOptionsError, match="usr_id"):
-        cache.locked(ttl=30, key="user:{usr_id}")(get_user)
+        Locks(MemoryBackend()).locked(ttl=30, key="user:{usr_id}")(get_user)
     cached = cache(ttl=60, key="user:{user[id]}:{email:blake2b}", tags=["user:{user[id]}"])(get_user)
     assert cached({"id": 1}, "ada@example.com") == "1:ada@example.com"
 

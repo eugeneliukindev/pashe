@@ -66,7 +66,7 @@ In `async_`:
 
 A module opens with what it is for, its main class or function; the helpers it needs follow.
 
-A call takes what it works on by position, before `/`, as `Cache(backend)` or `cache.lock("job")`, and
+A call takes what it works on by position, before `/`, as `Cache(backend)` or `locks.lock("job")`, and
 its options by name, after `*`, as `GzipCompressor(level=9)`. The methods of a contract, such as
 `Backend.get` or `Codec.encode`, take everything by position: pashe calls them so, and an
 implementation names its parameters as it likes. A public call checks what it takes with `expect`;

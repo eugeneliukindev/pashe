@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, override
 
 import pytest
 
-from pashe import Cache
-from pashe.backends import MemoryBackend
+from pashe import Cache, Locks, RateLimiter
+from pashe.backends import Backend, MemoryBackend
 from pashe.options import Stampede
 from pashe.ratelimit import FixedWindow, SlidingWindow
 
@@ -146,28 +146,28 @@ def test_a_cached_call_makes_the_calls_the_page_tells(
 @pytest.mark.parametrize(
     ("operation", "calls"),
     [
-        (lambda cache: cache.invalidate_tags("user:1", "team:7"), {"set_if_absent": 2, "incr": 2}),
-        (lambda cache: cache.rate_limit("ip", SlidingWindow(calls=10, per=60)), {"incr": 1, "get": 1}),
-        (lambda cache: cache.rate_limit("ip", FixedWindow(calls=10, per=60)), {"incr": 1, "ttl": 1}),
-        (lambda cache: cache.try_lock("job", ttl=30), {"set_if_absent": 1}),
+        (lambda backend: Cache(backend).invalidate_tags("user:1", "team:7"), {"set_if_absent": 2, "incr": 2}),
+        (lambda backend: RateLimiter(backend).count("ip", SlidingWindow(calls=10, per=60)), {"incr": 1, "get": 1}),
+        (lambda backend: RateLimiter(backend).count("ip", FixedWindow(calls=10, per=60)), {"incr": 1, "ttl": 1}),
+        (lambda backend: Locks(backend).try_lock("job", ttl=30), {"set_if_absent": 1}),
     ],
     ids=["invalidate 2 tags", "sliding window", "fixed window", "try_lock"],
 )
 def test_an_operation_makes_the_calls_the_page_tells(
-    operation: Callable[[Cache], object], calls: dict[str, int]
+    operation: Callable[[Backend], object], calls: dict[str, int]
 ) -> None:
     backend = _Counting()
 
-    operation(Cache(backend))
+    operation(backend)
 
     assert backend.calls == calls
 
 
 def test_a_lock_block_takes_and_releases_in_two_calls() -> None:
     backend = _Counting()
-    cache = Cache(backend)
+    locks = Locks(backend)
 
-    with cache.lock("job", ttl=30):
+    with locks.lock("job", ttl=30):
         pass
 
     assert backend.calls == {"set_if_absent": 1, "delete_if_equals": 1}

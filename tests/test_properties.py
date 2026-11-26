@@ -10,7 +10,7 @@ import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
-from pashe import Cache
+from pashe import RateLimiter
 from pashe._internal.cache.entry import Entry, pack, unpack
 from pashe._internal.cache.keys import canonical
 from pashe._internal.redis.listening import ReconnectBackoff
@@ -54,13 +54,13 @@ def test_what_is_left_of_a_sliding_limit_stays_within_it(
 ) -> None:
     clock = Clock()
     clock.now = now
-    cache = Cache(MemoryBackend(), clock=clock)
+    limiter = RateLimiter(MemoryBackend(), clock=clock)
     limit = SlidingWindow(calls=calls, per=per)
 
     states: list[RateLimitState | None] = []
     for _ in range(made):
         with contextlib.suppress(RateLimitedError):
-            states.append(cache.rate_limit("api", limit))
+            states.append(limiter.count("api", limit))
 
     assert states  # the first call always passes
     assert all(state is not None and 0 <= state.remaining <= calls for state in states)
@@ -78,17 +78,17 @@ def test_a_refused_call_waits_a_finite_time_that_is_not_negative(
     assume(all(cost <= calls for cost in costs))
     clock = Clock()
     clock.now = now
-    cache = Cache(MemoryBackend(), clock=clock)
+    limiter = RateLimiter(MemoryBackend(), clock=clock)
     limit = SlidingWindow(calls=calls, per=per)
     for _ in range(before):  # the last window, which the sliding one still overlaps
         with contextlib.suppress(RateLimitedError):
-            cache.rate_limit("api", limit)
+            limiter.count("api", limit)
     clock.now += per
 
     waits = []
     for cost in costs:  # calls of different costs: one may not fit in the window the others left
         try:
-            cache.rate_limit("api", limit, cost=cost)
+            limiter.count("api", limit, cost=cost)
         except RateLimitedError as refused:
             waits.append(refused.retry_after)
 
@@ -106,17 +106,17 @@ def test_a_call_made_after_its_retry_after_passes(
     assume(all(cost <= calls for cost in costs))
     clock = Clock()
     clock.now = now
-    cache = Cache(MemoryBackend(clock=clock), clock=clock)
+    limiter = RateLimiter(MemoryBackend(clock=clock), clock=clock)
     limit = SlidingWindow(calls=calls, per=per)
 
     waits = []
     for cost in costs:
         try:
-            cache.rate_limit("api", limit, cost=cost)
+            limiter.count("api", limit, cost=cost)
         except RateLimitedError as refused:
             waits.append(refused.retry_after)
             clock.now += refused.retry_after
-            cache.rate_limit("api", limit, cost=cost)  # raises if the wait was not enough
+            limiter.count("api", limit, cost=cost)  # raises if the wait was not enough
 
     assert all(wait > 0 for wait in waits)
 

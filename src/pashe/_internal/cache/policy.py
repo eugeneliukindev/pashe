@@ -8,7 +8,7 @@ from pashe._internal.cache.call import Answer
 from pashe._internal.checks import duration_seconds, expect_type, parse_ttl
 from pashe.errors import InvalidOptionsError, NotFoundError, OverloadedError
 from pashe.hooks import CacheStatus
-from pashe.options import IfError, Negative, Stale, Stampede, Store
+from pashe.options import Negative, Stale, Stampede, Store
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -25,10 +25,10 @@ class Policy:
     # How one cached function behaves, from its options checked once, here: its function cache asks
     # it and trusts it. Only decisions: encoding is EntryFormat's, telling the hooks the caller's.
     ttl: Callable[[Any], Duration]  # of the result: a fixed ttl is a function that returns it
-    stale: StalePolicy
-    stampede: StampedePolicy
-    negative: NegativePolicy
-    store: StorePolicy
+    stale: Stale
+    stampede: Stampede
+    negative: Negative
+    store: Store
 
     clock: Callable[[], float]
 
@@ -50,28 +50,26 @@ class Policy:
         expect_type("negative", negative, Negative)
         expect_type("store", store, Store)
 
-        stale_policy = StalePolicy.of(stale)
-        if ttl == 0 and stale_policy.longest_window == 0:  # a function as ttl is never 0
+        policy = cls(
+            ttl=ttl if callable(ttl) else lambda _result: ttl,
+            stale=stale,
+            stampede=stampede,
+            negative=negative,
+            store=store,
+            clock=clock,
+        )
+        if ttl == 0 and policy.stale_seconds == 0:  # a function as ttl is never 0
             msg = "ttl is 0 and no Stale window is set, so no result would ever be stored: set either"
             raise InvalidOptionsError(msg)
 
-        stampede_policy = StampedePolicy.of(stampede)
-        shortest = 0 if callable(ttl) else ttl * (1 - stampede_policy.jitter)  # as jitter may spread it
-        if 0 < shortest <= stampede_policy.revalidate_before:
+        shortest = 0 if callable(ttl) else ttl * (1 - stampede.jitter)  # as jitter may spread it
+        if 0 < shortest <= stampede.revalidate_before:
             msg = (
-                f"Stampede.revalidate_before is {stampede.revalidate_before!r} and ttl is {ttl}: "
+                f"Stampede.revalidate_before is {stampede.revalidate_before:g} and ttl is {ttl:g}: "
                 "it reloads in the last seconds of the TTL, so it must be shorter, jitter counted"
             )
             raise InvalidOptionsError(msg)
-
-        return cls(
-            ttl=ttl if callable(ttl) else lambda _result: ttl,
-            stale=stale_policy,
-            stampede=stampede_policy,
-            negative=NegativePolicy.of(negative),
-            store=StorePolicy.of(store),
-            clock=clock,
-        )
+        return policy
 
     @classmethod
     def of_batch(
@@ -91,7 +89,7 @@ class Policy:
                 ("Stampede.lock_for", policy.stampede.lock_for),
                 ("Stampede.revalidate_before", policy.stampede.revalidate_before),
                 ("Stale.while_revalidate", policy.stale.while_revalidate),
-                ("Stale.if_slow", policy.stale.slow_after),
+                ("Stale.if_slow", policy.stale.if_slow),
             )
             if given
         ]
@@ -100,6 +98,11 @@ class Policy:
             msg = f"a batch shares no loads, waits for its load and reloads nothing in the background: it takes no {names}"
             raise InvalidOptionsError(msg)
         return policy
+
+    @property
+    def stale_seconds(self) -> float:
+        # how long past fresh a result may still answer: the longest window of Stale
+        return max(self.stale.while_revalidate, self.stale.if_error, self.stale.if_slow)
 
     def add_jitter(self, seconds: float) -> float:
         jitter = self.stampede.jitter
@@ -124,7 +127,7 @@ class Policy:
         if fresh < 0:
             msg = f"ttl returned {fresh}; leave a result out with Store(when=...)"
             raise InvalidOptionsError(msg)
-        if fresh + self.stale.longest_window <= 0:
+        if fresh + self.stale_seconds <= 0:
             return None
         return self.add_jitter(fresh)
 
@@ -134,9 +137,15 @@ class Policy:
 
     def storage_seconds(self, fresh_seconds: float) -> float:
         # how long the backend keeps a result: fresh, then its stale windows
-        return fresh_seconds + self.stale.longest_window
+        return fresh_seconds + self.stale_seconds
 
-    def answer_for(self, stored: Stored | None) -> Answer | None:
+    def answer_for(
+        self,
+        stored: Stored | None,
+        *,
+        hit: CacheStatus = CacheStatus.HIT,
+    ) -> Answer | None:
+        # hit: the status of a fresh answer, FALLBACK for an entry of the fallback
         if stored is None:
             return None
         entry = stored.entry
@@ -144,7 +153,7 @@ class Policy:
         if entry.negative:
             return Answer(None, CacheStatus.NOT_FOUND) if now < entry.stale_at else None
         if now < entry.stale_at:
-            return Answer.of(stored, CacheStatus.HIT)
+            return Answer.of(stored, hit)
         if now < entry.stale_at + self.stale.while_revalidate:
             return Answer.of(stored, CacheStatus.STALE_WHILE_REVALIDATE)
         return None
@@ -183,81 +192,7 @@ class Policy:
 
 
 @final
-@dataclass(frozen=True, slots=True, kw_only=True)
-class StalePolicy:
-    # Stale with its windows in seconds
-    while_revalidate: float
-    if_error: float
-    if_error_on: tuple[type[Exception], ...]
-    if_slow: float
-    slow_after: float  # 0 exactly when if_slow is off
-
-    @classmethod
-    def of(cls, stale: Stale) -> Self:
-        # Stale checked its windows: here they only turn into seconds
-        if_error = stale.if_error if isinstance(stale.if_error, IfError) else IfError(stale.if_error)
-        if_slow = stale.if_slow
-        return cls(
-            while_revalidate=duration_seconds(stale.while_revalidate),
-            if_error=duration_seconds(if_error.window),
-            if_error_on=if_error.on,
-            if_slow=0 if if_slow is None else duration_seconds(if_slow.window),
-            slow_after=0 if if_slow is None else duration_seconds(if_slow.after),
-        )
-
-    @property
-    def longest_window(self) -> float:
-        # how long past fresh a result may still answer
-        return max(self.while_revalidate, self.if_error, self.if_slow)
-
-
-@final
 class StaleWindows(NamedTuple):
     # which windows of Stale a stale result is still inside, for the reload it waits on
     within_if_error: bool
     within_if_slow: bool
-
-
-@final
-@dataclass(frozen=True, slots=True, kw_only=True)
-class StampedePolicy:
-    # Stampede with revalidate_before and lock_for in seconds
-    revalidate_before: float
-    lock_for: float
-    jitter: float
-    max_loads: int  # 0 means no limit
-    share_loads: bool
-
-    @classmethod
-    def of(cls, stampede: Stampede) -> Self:
-        return cls(
-            revalidate_before=duration_seconds(stampede.revalidate_before),
-            lock_for=duration_seconds(stampede.lock_for),
-            jitter=stampede.jitter,
-            max_loads=stampede.max_loads,
-            share_loads=stampede.share_loads,
-        )
-
-
-@final
-@dataclass(frozen=True, slots=True, kw_only=True)
-class NegativePolicy:
-    # Negative with its ttl in seconds
-    on: tuple[type[Exception], ...]
-    ttl: float
-
-    @classmethod
-    def of(cls, negative: Negative) -> Self:
-        return cls(on=negative.on, ttl=duration_seconds(negative.ttl))
-
-
-@final
-@dataclass(frozen=True, slots=True, kw_only=True)
-class StorePolicy:
-    # Store with slower_than in seconds
-    when: Callable[[Any], bool] | None
-    slower_than: float
-
-    @classmethod
-    def of(cls, store: Store) -> Self:
-        return cls(when=store.when, slower_than=duration_seconds(store.slower_than))

@@ -19,16 +19,16 @@ if TYPE_CHECKING:
 class AsyncLock(BaseLock):
     """Lock for ``async with``: if an extension fails, the block is cancelled.
 
-    AsyncCache.lock and AsyncCache.try_lock make it. LockLostError is then raised in place of
+    AsyncLocks.lock and AsyncLocks.try_lock make it. LockLostError is then raised in place of
     the cancellation, unless the block raised an error of its own.
 
     Examples:
         >>> import asyncio
-        >>> from pashe import AsyncCache
+        >>> from pashe import AsyncLocks
         >>> from pashe.backends import AsyncMemoryBackend
         >>> async def build_report() -> str:
-        ...     cache = AsyncCache(AsyncMemoryBackend())
-        ...     async with cache.lock("report", ttl=30) as lock:
+        ...     locks = AsyncLocks(AsyncMemoryBackend())
+        ...     async with locks.lock("report", ttl=30) as lock:
         ...         return lock.key
         >>> asyncio.run(build_report())
         'report'

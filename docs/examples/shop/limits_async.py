@@ -4,24 +4,24 @@ from pashe.ratelimit import FixedWindow, SlidingWindow
 
 # --8<-- [end:imports]
 from examples.shop.data_async import db, start
-from examples.shop.shop_async import Product, cache
+from examples.shop.shop_async import Product, limiter, locks
 
 # --8<-- [start:show]
 LOGINS = FixedWindow(calls=5, per=900, ban_for=3_600)  # 5 failures in 15 minutes: an hour of ban
 
 
 async def failed_login(email: str) -> None:
-    await cache.rate_limit(f"login:{email}", LOGINS, fail_open=False)  # raises RateLimitedError
+    await limiter.count(f"login:{email}", LOGINS, fail_open=False)  # raises RateLimitedError
 
 
-@cache.rate_limited(SlidingWindow.per_minute(100), key="partner:{partner_id}")
+@limiter.limited(SlidingWindow.per_minute(100), key="partner:{partner_id}")
 async def search_catalogue(partner_id: str, query: str) -> list[Product]:
     rows = await db.execute_fetchall("SELECT * FROM products WHERE name LIKE ?", (f"%{query}%",))
     return [Product(*row) for row in rows]
 
 
 async def nightly_export() -> None:
-    lock = await cache.try_lock("job:nightly-export", ttl=600)
+    lock = await locks.try_lock("job:nightly-export", ttl=600)
     if lock is None:
         return  # another server runs it
     async with lock:

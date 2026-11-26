@@ -1,14 +1,14 @@
 # --8<-- [start:show]
-from pashe import Cache
+from pashe import Locks
 from pashe.backends import MemoryBackend
 
-cache = Cache(MemoryBackend())
+locks = Locks(MemoryBackend())
 
 
 def build_report() -> None: ...  # the work of yours that one process at a time may do
 
 
-with cache.lock("report", ttl=30):
+with locks.lock("report", ttl=30):
     build_report()
 
 

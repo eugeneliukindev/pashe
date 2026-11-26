@@ -11,7 +11,16 @@ from tests.harness.stores import SERVED, STORE_PARAMS, STORES
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-    from tests.harness.helpers import EitherCache, NewCache, Side
+    from tests.harness.helpers import (
+        EitherBackend,
+        EitherCache,
+        EitherLimiter,
+        EitherLocks,
+        NewCache,
+        NewLimiter,
+        NewLocks,
+        Side,
+    )
 
 pytest_plugins = ["tests.harness.servers"]
 
@@ -58,3 +67,49 @@ async def new_process_cache(
 
     for cache in caches:
         await close(cache)
+
+
+@pytest.fixture(params=STORE_PARAMS)
+async def new_process_locks(
+    request: pytest.FixtureRequest,
+    side: Side,
+    key_prefix: str,
+) -> AsyncIterator[NewLocks]:
+    """Make the locks of the side over one store of every kind, each as a process of its own."""
+    connect = STORES[request.param](request, side)
+    backends: list[EitherBackend] = []
+
+    def make(**options: object) -> EitherLocks:
+        backend = connect()
+        backends.append(backend)
+        if request.param in SERVED:  # the tests share the server: keys of this test alone
+            backend = side.prefixed(backend, key_prefix)
+        return side.new_locks(backend, **options)
+
+    yield make
+
+    for backend in backends:  # the locks close nothing: the backend is the test's
+        await close(backend)
+
+
+@pytest.fixture(params=STORE_PARAMS)
+async def new_process_limiter(
+    request: pytest.FixtureRequest,
+    side: Side,
+    key_prefix: str,
+) -> AsyncIterator[NewLimiter]:
+    """Make rate limiters of the side over one store of every kind, each as a process of its own."""
+    connect = STORES[request.param](request, side)
+    backends: list[EitherBackend] = []
+
+    def make(**options: object) -> EitherLimiter:
+        backend = connect()
+        backends.append(backend)
+        if request.param in SERVED:  # the tests share the server: keys of this test alone
+            backend = side.prefixed(backend, key_prefix)
+        return side.new_limiter(backend, **options)
+
+    yield make
+
+    for backend in backends:  # the limiter closes nothing: the backend is the test's
+        await close(backend)

@@ -16,7 +16,7 @@ from redis.asyncio import Redis as AsyncRedis
 from redis.asyncio.cluster import RedisCluster as AsyncRedisCluster
 from redis.cluster import RedisCluster
 
-from pashe import AsyncCache, Cache
+from pashe import AsyncCache, AsyncLocks, AsyncRateLimiter, Cache, Locks, RateLimiter
 from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend
 from pashe._internal.sync.backends.prefixed import PrefixedBackend
 from pashe.backends import (
@@ -49,6 +49,10 @@ if TYPE_CHECKING:
 type EitherCache = Cache | AsyncCache
 type EitherBackend = Backend | AsyncBackend
 type NewCache = Callable[..., EitherCache]  # makes a cache of the side that stands for a process of its own
+type EitherLocks = Locks | AsyncLocks
+type NewLocks = Callable[..., EitherLocks]  # makes the locks of the side that stand for a process of their own
+type EitherLimiter = RateLimiter | AsyncRateLimiter
+type NewLimiter = Callable[..., EitherLimiter]  # makes a rate limiter of the side that stands for a process of its own
 
 # A sync call that waits in the loop, as for a busy file, blocks it for seconds; a busy machine of CI
 # stalls it for a fifth of a second, the default of pyleak, as it opens a file.
@@ -234,6 +238,18 @@ class Side:
             return AsyncCache(AsyncMemoryBackend() if backend is None else _async(backend), **options)
         return Cache(MemoryBackend() if backend is None else _sync(backend), **options)
 
+    def new_locks(self, backend: EitherBackend | None = None, **options: Any) -> EitherLocks:
+        """Return the locks of the side over backend, a new memory backend by default; options as new_cache."""
+        if self.is_async:
+            return AsyncLocks(AsyncMemoryBackend() if backend is None else _async(backend), **options)
+        return Locks(MemoryBackend() if backend is None else _sync(backend), **options)
+
+    def new_limiter(self, backend: EitherBackend | None = None, **options: Any) -> EitherLimiter:
+        """Return the rate limiter of the side over backend, a new memory backend by default; options as new_cache."""
+        if self.is_async:
+            return AsyncRateLimiter(AsyncMemoryBackend() if backend is None else _async(backend), **options)
+        return RateLimiter(MemoryBackend() if backend is None else _sync(backend), **options)
+
     def redis(self, url: str) -> RedisBackend | AsyncRedisBackend:
         """Return a Redis backend of the side, with a client of its own to the server at url."""
         if self.is_async:
@@ -328,12 +344,12 @@ async def run_block(lock: Lock | AsyncLock) -> None:
         pass
 
 
-async def close(cache: EitherCache) -> None:
-    """Wait for the background reloads of a cache of either side."""
-    if isinstance(cache, Cache):
-        cache.close()
+async def close(closing: EitherCache | EitherBackend) -> None:
+    """Close a cache of either side, after its background reloads, or a backend."""
+    if isinstance(closing, Cache | Backend):
+        closing.close()
     else:
-        await cache.aclose()
+        await closing.aclose()
 
 
 class Source:

@@ -1,26 +1,13 @@
 from __future__ import annotations
 
 import functools
-from typing import TYPE_CHECKING, final, override
-
-from pashe._internal.async_.cache.batch_cache import AsyncBatchCache
-from pashe._internal.async_.tasks import aexpect_side
-from pashe._internal.cache.call import CallReporter
-from pashe._internal.cache.entry import EntryFormat
-from pashe._internal.cache.keys import ItemKeys, qualified_name
-from pashe._internal.cache.value_types import item_type
+from typing import TYPE_CHECKING, Protocol, final, override
 
 if TYPE_CHECKING:
     from collections.abc import Hashable, Iterable
 
-    from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend
-    from pashe._internal.async_.cache.batch_cache import AsyncBatchFunction
-    from pashe._internal.async_.cache.storage import AsyncStorage
-    from pashe._internal.cache.keys import KeyTemplate
-    from pashe._internal.cache.policy import Policy
-    from pashe.codecs import Codec
-    from pashe.compressors import Compressor
-    from pashe.hooks import Hook
+    from pashe._internal.async_.cache.batch_cache import AsyncBatchCache, AsyncBatchFunction
+    from pashe._internal.cache.keys import ItemKeys
 
 
 @final
@@ -116,66 +103,9 @@ class AsyncCachedBatchFunction[K: Hashable, V]:
         return f"{type(self).__name__}({getattr(self._function, '__qualname__', self._function)})"
 
 
-@final
-class AsyncCachedBatchFunctionDecorator:
+class AsyncCachedBatchFunctionDecorator(Protocol):
     """What ``@cache.batch(...)`` returns: a decorator that caches every item of a batch function on its own."""
 
-    __slots__ = (
-        "_backend",
-        "_codec",
-        "_compressor",
-        "_hooks",
-        "_key_template",
-        "_policy",
-        "_storage",
-        "_tag_templates",
-    )
-
-    def __init__(
-        self,
-        policy: Policy,
-        /,
-        *,
-        key_template: KeyTemplate | None,
-        tag_templates: tuple[KeyTemplate, ...],
-        codec: Codec,
-        compressor: Compressor,
-        storage: AsyncStorage,
-        backend: AsyncPrefixedBackend,
-        hooks: Hook,
-    ) -> None:
-        self._policy = policy
-        self._key_template = key_template
-        self._tag_templates = tag_templates
-
-        self._codec = codec
-        self._compressor = compressor
-        self._storage = storage
-        self._backend = backend  # for the full keys the hooks are told
-        self._hooks = hooks
-
-    def __call__[K: Hashable, V](self, function: AsyncBatchFunction[K, V]) -> AsyncCachedBatchFunction[K, V]:
-        """Cache the items function loads.
-
-        Args:
-            function: takes a list of items and returns a dict of the ones it found.
-
-        Returns:
-            The cached batch function.
-        """
-        aexpect_side(function, "cache")
-        entry_format = EntryFormat(
-            self._policy, item_type(function), codec=self._codec, compressor=self._compressor, hooks=self._hooks
-        )
-        keys = ItemKeys(function, self._key_template, self._tag_templates)
-
-        batch_cache = AsyncBatchCache[K, V](
-            self._policy,
-            storage=self._storage,
-            entry_format=entry_format,
-            reporter=CallReporter(
-                qualified_name(function), self._backend.full_key, hooks=self._hooks, clock=self._policy.clock
-            ),
-            hooks=self._hooks,
-        )
-        return AsyncCachedBatchFunction(function, keys, batch_cache)
+    def __call__[K: Hashable, V](self, function: AsyncBatchFunction[K, V], /) -> AsyncCachedBatchFunction[K, V]:
+        """Cache the items function loads: it takes a list of items and returns a dict of those it found."""
+        ...

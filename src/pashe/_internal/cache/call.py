@@ -106,18 +106,18 @@ class Answer:
 @final
 class CallReporter:
     # tells the hooks how every call of one cached function was answered
-    __slots__ = ("_clock", "_full_key", "_function", "_hooks")
+    __slots__ = ("_clock", "_function", "_hooks", "_prefix")
 
     def __init__(
         self,
         function: str,
-        full_key: Callable[[str], str],
+        prefix: str,
         *,
         hooks: Hook,
         clock: Callable[[], float],
     ) -> None:
         self._function = function  # the qualified name of the function
-        self._full_key = full_key  # the key with the prefix of the cache
+        self._prefix = prefix  # of the cache: the hooks are told the keys as the backend keeps them
         self._hooks = hooks
         self._clock = clock
 
@@ -130,4 +130,4 @@ class CallReporter:
         stale_at: float | None = None,
     ) -> None:
         left = None if stale_at is None else stale_at - self._clock()
-        self._hooks.on_call(Outcome(self._function, self._full_key(key), status, load_seconds, left))
+        self._hooks.on_call(Outcome(self._function, self._prefix + key, status, load_seconds, left))

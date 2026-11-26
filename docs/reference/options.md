@@ -10,10 +10,6 @@ The groups of options of `@cache(...)` and of a cache. What `Cache(...)`, `@cach
 
 ::: pashe.options.Stale
 
-::: pashe.options.IfError
-
-::: pashe.options.IfSlow
-
 ::: pashe.options.Stampede
 
 ::: pashe.options.Negative

@@ -15,13 +15,13 @@ from typing import TYPE_CHECKING, Any, override
 import pytest
 
 import pashe
-from pashe import AsyncCache, Cache
+from pashe import AsyncCache, AsyncRateLimiter, Cache
 from pashe.backends import AsyncMemoryBackend, MemoryBackend
 from pashe.compressors import Compressor, GzipCompressor
 from pashe.contrib.msgspec import MsgspecJsonCodec
 from pashe.errors import BackendError, InvalidOptionsError, NotFoundError
 from pashe.hooks import CacheStatus, LoggingHook, Operation
-from pashe.options import Fallback, IfError, IfSlow, Negative, Stale, Stampede, Store
+from pashe.options import Fallback, Negative, Stale, Stampede, Store
 from pashe.ratelimit import SlidingWindow
 from tests.harness.helpers import (
     LOOP_BLOCK_SECONDS,
@@ -533,7 +533,7 @@ async def test_stale_if_error_answers_a_failing_function(new_process_cache: NewC
     outcomes: list[Outcome] = []
     cache = new_process_cache(clock=clock, hooks=[RecordingHook(outcomes=outcomes, failures=failures)])
     source = Source()
-    get_user = cached_function(cache, source, ttl=60, stale=Stale(if_error=IfError(600, on=(RuntimeError,))))
+    get_user = cached_function(cache, source, ttl=60, stale=Stale(if_error=600, if_error_on=(RuntimeError,)))
     await call(get_user, 1)
     clock.now += 61
     source.error = RuntimeError("down")
@@ -548,7 +548,7 @@ async def test_stale_if_error_answers_a_failing_function(new_process_cache: NewC
 async def test_stale_if_error_lets_other_errors_through(new_process_cache: NewCache, clock: Clock) -> None:
     cache = new_process_cache(clock=clock)
     source = Source()
-    get_user = cached_function(cache, source, ttl=60, stale=Stale(if_error=IfError(600, on=(RuntimeError,))))
+    get_user = cached_function(cache, source, ttl=60, stale=Stale(if_error=600, if_error_on=(RuntimeError,)))
     await call(get_user, 1)
     clock.now += 61
     source.error = ValueError("not a failure it answers")
@@ -579,7 +579,7 @@ async def test_stale_if_slow_answers_while_the_load_goes_on(side: Side, clock: C
     if side is SYNC:
         cache = sync_cache = Cache(MemoryBackend(), hooks=[RecordingHook(outcomes=outcomes)], clock=clock)
 
-        @sync_cache(ttl=60, stale=Stale(if_slow=IfSlow(600, after=0.05)))
+        @sync_cache(ttl=60, stale=Stale(if_slow=600, slow_after=0.05))
         def load_user(user_id: int) -> int:
             if slow:
                 time.sleep(0.3)
@@ -589,7 +589,7 @@ async def test_stale_if_slow_answers_while_the_load_goes_on(side: Side, clock: C
     else:
         cache = async_cache = AsyncCache(AsyncMemoryBackend(), hooks=[RecordingHook(outcomes=outcomes)], clock=clock)
 
-        @async_cache(ttl=60, stale=Stale(if_slow=IfSlow(600, after=0.05)))
+        @async_cache(ttl=60, stale=Stale(if_slow=600, slow_after=0.05))
         async def aload_user(user_id: int) -> int:
             if slow:
                 await asyncio.sleep(0.3)
@@ -934,6 +934,37 @@ async def test_the_fallback_answers_while_the_backend_fails(side: Side) -> None:
     assert results(outcomes) == [CacheStatus.MISS, CacheStatus.FALLBACK]
 
 
+async def test_a_load_of_no_cache_over_a_failing_backend_answers_from_the_fallback_after_it(side: Side) -> None:
+    outcomes: list[Outcome] = []
+    backend = side.failing_memory()
+    cache = side.new_cache(backend, hooks=[RecordingHook(outcomes=outcomes)], fallback=Fallback(side.memory()))
+    source = Source()
+    get_user = cached_function(cache, source, ttl=60, tags=["users"])
+    backend.down = True
+    with pashe.no_cache():
+        await call(get_user, 1)
+
+    user = await call(get_user, 1)
+
+    assert user == {"id": 1, "version": 1}
+    assert source.calls == 1
+    assert results(outcomes) == [CacheStatus.MISS, CacheStatus.FALLBACK]
+
+
+async def test_an_entry_of_the_fallback_past_its_windows_is_a_miss(side: Side, clock: Clock) -> None:
+    backend = side.failing_memory()
+    cache = side.new_cache(backend, fallback=Fallback(side.memory(), ttl=600), clock=clock)
+    source = Source()
+    get_user = cached_function(cache, source, ttl=0, stale=Stale(if_error=30))  # kept for the ttl of the fallback
+    backend.down = True
+    await call(get_user, 1)
+    clock.now += 31  # past the window of if_error, within the ttl of the fallback
+
+    await call(get_user, 1)
+
+    assert source.calls == 2
+
+
 @pytest.mark.parametrize(("elapsed", "loads"), [(9, 1), (11, 2)])
 async def test_a_result_stays_in_the_fallback_for_its_ttl(
     side: Side,
@@ -1120,8 +1151,9 @@ async def test_a_compressor_shrinks_what_is_stored() -> None:
     assert len(stored) < 1000
 
 
-async def test_tags_and_rate_limits_work_with_a_compressor() -> None:
-    cache = AsyncCache(AsyncMemoryBackend(), compressor=GzipCompressor())
+async def test_tags_and_rate_limits_work_beside_a_compressor() -> None:
+    backend = AsyncMemoryBackend()
+    cache, limiter = AsyncCache(backend, compressor=GzipCompressor()), AsyncRateLimiter(backend)
     loads = 0
 
     @cache(ttl=60, tags=["answers"])
@@ -1133,7 +1165,7 @@ async def test_tags_and_rate_limits_work_with_a_compressor() -> None:
     await answer()
     await cache.invalidate_tags("answers")
     await answer()
-    state = await cache.rate_limit("api", SlidingWindow.per_second(5))
+    state = await limiter.count("api", SlidingWindow.per_second(5))
 
     assert loads == 2
     assert state is not None
@@ -1340,7 +1372,7 @@ async def test_a_batch_raises_when_an_item_it_loads_has_no_stale_result(
     ("stale", "stampede", "refused"),
     [
         (Stale(while_revalidate=30), Stampede(), "Stale.while_revalidate"),
-        (Stale(if_slow=IfSlow(30, after=1)), Stampede(), "Stale.if_slow"),
+        (Stale(if_slow=30, slow_after=1), Stampede(), "Stale.if_slow"),
         (Stale(), Stampede(lock_for=5), "Stampede.lock_for"),
     ],
 )
@@ -1512,8 +1544,9 @@ def test_an_entry_of_the_format_before_is_a_miss() -> None:
     [
         (lambda: Cache(MemoryBackend())(ttl=-1), "ttl is -1"),
         (lambda: Cache(MemoryBackend())(ttl=0), "no result would ever be stored"),
-        (lambda: IfSlow(600, after=0), r"IfSlow\.after is 0"),
-        (lambda: IfError(-1), r"IfError\.window is -1"),
+        (lambda: Stale(if_slow=600), r"Stale\.if_slow is 600 and Stale\.slow_after is 0"),
+        (lambda: Stale(if_error=-1), r"Stale\.if_error is -1"),
+        (lambda: Stale(if_error_on=(KeyError,)), r"Stale\.if_error_on names errors and Stale\.if_error is 0"),
         (lambda: Stampede(revalidate_before=-1), r"Stampede\.revalidate_before is -1"),
         (lambda: Cache(MemoryBackend())(ttl=10, stampede=Stampede(revalidate_before=10)), "must be shorter"),
         (
@@ -1559,7 +1592,7 @@ def _as_untyped(value: object) -> Any:
         (lambda: Cache(MemoryBackend())(ttl=60, stale=_as_untyped({"if_error": 60})), "stale must be Stale, not dict"),
         (
             lambda: Stale(if_error=_as_untyped("60")),
-            "Stale.if_error must be int or float or timedelta or IfError, not str",
+            "Stale.if_error must be int or float or timedelta, not str",
         ),
         (lambda: Stampede(share_loads=_as_untyped(1)), "Stampede.share_loads must be bool, not int"),
         (lambda: Negative(on=_as_untyped((ValueError, 1)), ttl=30), r"Negative.on\[1\] must be a class of exceptions"),

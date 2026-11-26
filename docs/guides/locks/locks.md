@@ -1,7 +1,9 @@
 # Locks
 
-`cache.lock`, `cache.try_lock` and `@cache.locked` take a lock that lives in the backend, so every
-process that uses it shares it: one holder at a time, in any process.
+`Locks` of `pashe`, `AsyncLocks` on the async side, takes locks that live in a backend, so every
+process over it shares them: one holder at a time, in any process. `locks.lock`, `locks.try_lock`
+and `@locks.locked` take one. The locks live apart from the entries of a cache over the same
+backend and `prefix`, and close nothing: the backend belongs to whoever made it.
 
 !!! info "Where it works"
 
@@ -10,7 +12,7 @@ process that uses it shares it: one holder at a time, in any process.
 
 !!! tip "A lock for a cached function is `Stampede(lock_for=...)`"
 
-    A waiter of `@cache.locked` runs the function itself once the lock is free. To load a cached
+    A waiter of `@locks.locked` runs the function itself once the lock is free. To load a cached
     result once for the whole service, with the waiters taking that result, give the cached function
     `stampede=Stampede(lock_for=...)` instead: see [Locking a load across processes](../failures/stampedes.md#locking-a-load-across-processes).
 
@@ -29,10 +31,10 @@ process that uses it shares it: one holder at a time, in any process.
 ```mermaid
 sequenceDiagram
     box rgba(43,91,132,0.14) Process 1
-        participant A as with cache.lock
+        participant A as with locks.lock
     end
     box rgba(0,150,136,0.14) Process 2
-        participant B as with cache.lock
+        participant B as with locks.lock
     end
     box rgba(247,181,0,0.18) Redis: every process
         participant R as Redis
@@ -47,7 +49,7 @@ sequenceDiagram
     Note over R: a process that dies frees the lock after 30 s
 ```
 
-`cache.lock` and `cache.try_lock` return a `Lock` of `pashe.locks`, an `AsyncLock` on the async
+`locks.lock` and `locks.try_lock` return a `Lock` of `pashe.locks`, an `AsyncLock` on the async
 side; its `key` is the name it was given. Entering waits while someone else holds the lock;
 `timeout` bounds the wait and raises
 `LockTimeoutError`. While the block runs the lock is extended every third of `ttl`, so the block
@@ -71,7 +73,13 @@ may run longer than `ttl`; the `ttl` frees the lock if the process dies.
     `ttl`, someone else may hold it now, and `LockLostError` is raised: a sync block runs to its
     end first, as a thread cannot be interrupted; an async block is cancelled at once.
 
-API reference: [`Cache.lock`](../../reference/caches.md#pashe.Cache.lock), [`Cache.try_lock`](../../reference/caches.md#pashe.Cache.try_lock), [`Cache.locked`](../../reference/caches.md#pashe.Cache.locked), [`Lock`](../../reference/locks.md#pashe.locks.Lock), [`LockTimeoutError`](../../reference/errors.md#pashe.errors.LockTimeoutError), [`LockLostError`](../../reference/errors.md#pashe.errors.LockLostError).
+API reference: [`Locks`](../../reference/caches.md#pashe.Locks),
+[`Locks.lock`](../../reference/caches.md#pashe.Locks.lock),
+[`Locks.try_lock`](../../reference/caches.md#pashe.Locks.try_lock),
+[`Locks.locked`](../../reference/caches.md#pashe.Locks.locked),
+[`Lock`](../../reference/locks.md#pashe.locks.Lock),
+[`LockTimeoutError`](../../reference/errors.md#pashe.errors.LockTimeoutError),
+[`LockLostError`](../../reference/errors.md#pashe.errors.LockLostError).
 
 ## Every option
 
@@ -90,7 +98,7 @@ API reference: [`Cache.lock`](../../reference/caches.md#pashe.Cache.lock), [`Cac
 ## Several holders
 
 `holders` lets a lock be held by that many at once, as a semaphore across processes: a fourth
-waits while three hold `holders=3`. `lock`, `try_lock` and `@cache.locked` take it, and every
+waits while three hold `holders=3`. `lock`, `try_lock` and `@locks.locked` take it, and every
 holder is extended and released on its own.
 
 === "Sync"

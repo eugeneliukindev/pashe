@@ -4,7 +4,7 @@ import contextlib
 import contextvars
 import threading
 from concurrent import futures
-from typing import TYPE_CHECKING, Any, Final, Literal, final
+from typing import TYPE_CHECKING, Any, Final, Literal, Protocol, final
 
 from pashe._internal.checks import is_async
 from pashe.errors import OverloadedError
@@ -121,9 +121,23 @@ class BackgroundTasks:
             executor.shutdown(wait=True)
 
 
-def expect_side(function: Callable[..., object], action: Literal["decorate", "cache"]) -> None:
+class Decorator(Protocol):
+    """A decorator of a ``def`` function that keeps its signature, as locked, limited and invalidates return."""
+
+    def __call__[**P, R](self, function: Callable[P, R], /) -> Callable[P, R]:
+        """Return function, run as the decorator says."""
+        ...
+
+
+def expect_side(
+    function: Callable[..., object],
+    action: Literal["decorate", "cache"],
+    owner: object,
+) -> None:
+    # owner: the cache, the locks or the limiter whose decorator takes function; the error names its async twin
     if is_async(function):
-        msg = f"{getattr(function, '__qualname__', function)} is async: {action} it with an AsyncCache"
+        twin = f"Async{type(owner).__name__}"
+        msg = f"{getattr(function, '__qualname__', function)} is async: {action} it with {twin}"
         raise TypeError(msg)
 
 

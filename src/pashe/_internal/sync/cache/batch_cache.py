@@ -40,7 +40,7 @@ class _Pending[K: Hashable]:
 @final
 class BatchCache[K: Hashable, V]:
     # The cache of one batch function: reads every item at once, loads the missing ones in one call.
-    __slots__ = ("_format", "_hooks", "_load_limit", "_policy", "_reporter", "_storage")
+    __slots__ = ("_entry_format", "_hooks", "_load_limit", "_policy", "_reporter", "_storage")
 
     def __init__(
         self,
@@ -53,7 +53,7 @@ class BatchCache[K: Hashable, V]:
     ) -> None:
         self._policy = policy
         self._storage = storage
-        self._format = entry_format
+        self._entry_format = entry_format
         self._reporter = reporter
         self._hooks = hooks
 
@@ -62,19 +62,18 @@ class BatchCache[K: Hashable, V]:
     def get_or_load_many(  # noqa: WPS231 - the read of every item, then one load of the missing ones
         self, keys_and_tags: Mapping[K, KeyAndTags], load: BatchFunction[K, V]
     ) -> dict[K, V]:
-        if in_no_cache():  # no entry answers: every item loads, and is kept for the calls after it
-            lookups = self._storage.open_many(list(keys_and_tags.values()))
-        else:
-            lookups = self._storage.find_many(list(keys_and_tags.values()))
+        lookups = self._storage.lookup_many(list(keys_and_tags.values()))
+        no_cache = in_no_cache()  # no entry answers: every item loads, and is kept for the calls after it
         batch: list[_Pending[K]] = []
         for item, lookup in zip(keys_and_tags, lookups, strict=True):
             pending = _Pending(item, lookup)
-            stored = self._format.decode(lookup)
-            answer = self._policy.answer_for(stored)
+            stored = None if no_cache else self._entry_format.decode(lookup)
+            answer = self._policy.answer_for(
+                stored, hit=CacheStatus.FALLBACK if lookup.from_fallback else CacheStatus.HIT
+            )
             if answer is not None and answer.status is not CacheStatus.NOT_FOUND:  # a batch keeps no "not found"
                 pending.answer(answer.result)
-                status = CacheStatus.FALLBACK if lookup.from_fallback else CacheStatus.HIT
-                self._reporter.report(lookup.key, status, stale_at=answer.stale_at)
+                self._reporter.report(lookup.key, answer.status, stale_at=answer.stale_at)
             elif stored is not None and not stored.entry.negative:
                 pending.stored = stored
             batch.append(pending)
@@ -112,7 +111,7 @@ class BatchCache[K: Hashable, V]:
                 self._reporter.report(key, CacheStatus.MISS, load_seconds=stopwatch.seconds)
                 continue
             result = loaded[pending.item]
-            stored = self._format.encode_loaded(result, load_seconds=stopwatch.seconds, key=key)
+            stored = self._entry_format.encode_loaded(result, load_seconds=stopwatch.seconds, key=key)
             pending.answer(result if stored is None else stored.result)
             self._reporter.report(
                 key, CacheStatus.MISS, load_seconds=stopwatch.seconds, stale_at=stored and stored.entry.stale_at

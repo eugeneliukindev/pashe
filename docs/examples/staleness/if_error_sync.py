@@ -3,7 +3,7 @@ from typing import TypedDict
 
 from pashe import Cache
 from pashe.backends import MemoryBackend
-from pashe.options import IfError, Stale
+from pashe.options import Stale
 
 cache = Cache(MemoryBackend())
 
@@ -12,7 +12,7 @@ class Rates(TypedDict):
     id: int
 
 
-@cache(ttl=60, stale=Stale(if_error=IfError(600, on=(ConnectionError, TimeoutError))))
+@cache(ttl=60, stale=Stale(if_error=600, if_error_on=(ConnectionError, TimeoutError)))
 def get_rates() -> Rates:
 
     # --8<-- [end:show]

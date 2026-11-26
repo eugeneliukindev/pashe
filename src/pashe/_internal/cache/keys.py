@@ -129,17 +129,17 @@ class KeyAndTags(NamedTuple):
     tags: tuple[str, ...]
 
 
-def parse_key(key: str | None, *, secret: bytes | None) -> KeyTemplate | None:
+def parse_key(key: str | None, *, key_secret: bytes | None) -> KeyTemplate | None:
     # the key= of a decorator: a template, or None for the name of the function and its arguments
     expect_type("key", key, str | None)
-    return None if key is None else KeyTemplate(key, secret=secret)
+    return None if key is None else KeyTemplate(key, key_secret=key_secret)
 
 
-def parse_tags(tags: list[str] | tuple[str, ...], *, secret: bytes | None) -> tuple[KeyTemplate, ...]:
+def parse_tags(tags: list[str] | tuple[str, ...], *, key_secret: bytes | None) -> tuple[KeyTemplate, ...]:
     # the tags= of a decorator: not a str, which would split into one tag per letter
     expect_type("tags", tags, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
     expect_item_types("tags", tags, str)
-    return tuple(KeyTemplate(tag, secret=secret) for tag in tags)
+    return tuple(KeyTemplate(tag, key_secret=key_secret) for tag in tags)
 
 
 @final
@@ -147,9 +147,9 @@ class KeyTemplate:
     # a str.format template of a key or a tag, checked when it is made: only a checked one renders
     __slots__ = ("_formatter", "_parts", "_text", "names")
 
-    def __init__(self, text: str, *, secret: bytes | None) -> None:
-        # secret: the key_secret of the cache, for {name:hmac}
-        formatter = _KeyFormatter(secret)
+    def __init__(self, text: str, *, key_secret: bytes | None) -> None:
+        # key_secret: of the cache, for {name:hmac}
+        formatter = _KeyFormatter(key_secret)
         names: set[str] = set()
         parsed = list(formatter.parse(text))
         for _, field, spec, _ in parsed:
@@ -205,7 +205,7 @@ class KeyPrefix(enum.StrEnum):
     TAG = "__tag:"  # the generation counter of a tag
     STAMPEDE_LOCK = "__stampede:"  # the Stampede.lock_for lock of an entry
     REVALIDATION_LOCK = "__revalidation:"  # the lock of the one revalidation of an entry
-    LOCK = "__lock:"  # a lock of cache.lock, try_lock and locked
+    LOCK = "__lock:"  # a lock of Locks: lock, try_lock and locked
     SLIDING_WINDOW = "__rate:sliding:"  # the counters of a SlidingWindow
     FIXED_WINDOW = "__rate:fixed:"  # the counter of a FixedWindow
 
@@ -246,10 +246,10 @@ class _KeyFormatter(string.Formatter):
     # formats the fields of the keys of one cache, with its key_secret for hmac: digests, and the
     # text of a value only when it is stable
 
-    def __init__(self, secret: bytes | None) -> None:
+    def __init__(self, key_secret: bytes | None) -> None:
         super().__init__()
 
-        self._secret = secret
+        self._key_secret = key_secret
 
     @override
     def format_field(self, value: object, format_spec: str) -> str:
@@ -257,8 +257,8 @@ class _KeyFormatter(string.Formatter):
             return hashlib.blake2b(canonical(value), digest_size=_DIGEST_BYTES).hexdigest()
         if format_spec == _SHA256:
             return hashlib.sha256(canonical(value)).digest()[:_DIGEST_BYTES].hex()
-        if format_spec == _HMAC and self._secret is not None:
-            return hmac.digest(self._secret, canonical(value), _SHA256)[:_DIGEST_BYTES].hex()
+        if format_spec == _HMAC and self._key_secret is not None:
+            return hmac.digest(self._key_secret, canonical(value), _SHA256)[:_DIGEST_BYTES].hex()
         if not has_stable_text(value):
             msg = (
                 f"a value of {type(value).__name__} has no stable text for a key: name a plain part of it,"
@@ -268,7 +268,7 @@ class _KeyFormatter(string.Formatter):
         return str(super().format_field(value, format_spec))
 
     def check_spec(self, template: str, spec: str) -> None:
-        if spec == _HMAC and self._secret is None:
+        if spec == _HMAC and self._key_secret is None:
             msg = f"{template!r} uses hmac: give the cache a key_secret"
             raise InvalidOptionsError(msg)
         if spec not in _DIGESTS and spec.isidentifier() and len(spec) > 1:

@@ -1,7 +1,7 @@
 # Caches
 
-`pashe` exports the caches and the types of what they decorate. The async classes have the same
-methods as the sync ones, awaited.
+`pashe` exports the caches and the types of what they decorate, the locks and the rate limiter.
+The async classes have the same methods as the sync ones, awaited.
 
 ::: pashe.Cache
 
@@ -32,3 +32,11 @@ methods as the sync ones, awaited.
       merge_init_into_class: false  # made by the cache, not by hand
 
 ::: pashe.no_cache
+
+::: pashe.Locks
+
+::: pashe.AsyncLocks
+
+::: pashe.RateLimiter
+
+::: pashe.AsyncRateLimiter

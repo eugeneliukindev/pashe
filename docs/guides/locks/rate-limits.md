@@ -1,8 +1,10 @@
 # Rate limits
 
-`cache.rate_limit` and `@cache.rate_limited` count calls for a key in the backend, so every process
-that uses it shares the
-count, and refuses those over the limit with `RateLimitedError`.
+`RateLimiter` of `pashe`, `AsyncRateLimiter` on the async side, counts calls for a key in a
+backend, so every process over it shares the count, and refuses those over the limit with
+`RateLimitedError`: `limiter.count` counts one call, `@limiter.limited` every call of a function.
+The counters live apart from the entries of a cache over the same backend and `prefix`, and the
+limiter closes nothing: the backend belongs to whoever made it.
 
 !!! info "Where it works"
 
@@ -73,8 +75,9 @@ Each limit keeps counters of its own, named by the key and the limit. Two limits
 as 10 calls a minute and 100 an hour for one address, count apart, and a call passes when every
 one of them lets it. One limit used in two places on one key shares its counters.
 
-API reference: [`Cache.rate_limit`](../../reference/caches.md#pashe.Cache.rate_limit),
-[`Cache.rate_limited`](../../reference/caches.md#pashe.Cache.rate_limited),
+API reference: [`RateLimiter`](../../reference/caches.md#pashe.RateLimiter),
+[`RateLimiter.count`](../../reference/caches.md#pashe.RateLimiter.count),
+[`RateLimiter.limited`](../../reference/caches.md#pashe.RateLimiter.limited),
 [`SlidingWindow`](../../reference/ratelimit.md#pashe.ratelimit.SlidingWindow),
 [`FixedWindow`](../../reference/ratelimit.md#pashe.ratelimit.FixedWindow),
 [`RateLimitState`](../../reference/ratelimit.md#pashe.ratelimit.RateLimitState),
@@ -94,7 +97,7 @@ API reference: [`Cache.rate_limit`](../../reference/caches.md#pashe.Cache.rate_l
     --8<-- "locks_and_rate_limits/rate_limit_options_async.py:show"
     ```
 
-`rate_limit` returns a `RateLimitState` of `pashe.ratelimit`: the calls of the limit, those left,
+`count` returns a `RateLimitState` of `pashe.ratelimit`: the calls of the limit, those left,
 and the seconds until the window resets.
 
 !!! warning "A limit is checked in a few calls to the backend, not at once"

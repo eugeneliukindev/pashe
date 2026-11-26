@@ -4,11 +4,12 @@ The headers of caching come from pashe.asgi, with the CacheHeadersHook of pashe.
 
     headers = CacheHeadersHook()
     cache = AsyncCache(backend, hooks=[headers])
+    limiter = AsyncRateLimiter(backend)
     app = FastAPI()
     app.add_middleware(CacheHeadersMiddleware, hook=headers)
 
 
-    @app.get("/search", dependencies=[Depends(rate_limit(cache, SlidingWindow.per_minute(100), key=client_key))])
+    @app.get("/search", dependencies=[Depends(rate_limit(limiter, SlidingWindow.per_minute(100), key=client_key))])
     async def search() -> list[Result]: ...
 """
 
@@ -16,7 +17,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, final
 
-from pashe import AsyncCache
+from pashe import AsyncRateLimiter
 from pashe._internal.checks import FUNCTION, expect_type
 from pashe._internal.limits import LIMIT, parse_cost, rate_limit_headers
 from pashe.errors import MissingExtraError
@@ -45,26 +46,26 @@ class rate_limit:  # noqa: N801 - a dependency is named as what it does, as Depe
 
     Examples:
         >>> from fastapi import Depends, FastAPI, Request
-        >>> from pashe import AsyncCache
+        >>> from pashe import AsyncRateLimiter
         >>> from pashe.backends import AsyncMemoryBackend
         >>> from pashe.contrib.fastapi import rate_limit
         >>> from pashe.ratelimit import SlidingWindow
-        >>> cache = AsyncCache(AsyncMemoryBackend())
+        >>> limiter = AsyncRateLimiter(AsyncMemoryBackend())
         >>> app = FastAPI()
         >>> def client_key(request: Request) -> str:
         ...     return request.headers["x-forwarded-for"].split(",")[0]
         >>> @app.get(
-        ...     "/search", dependencies=[Depends(rate_limit(cache, SlidingWindow.per_minute(100), key=client_key))]
+        ...     "/search", dependencies=[Depends(rate_limit(limiter, SlidingWindow.per_minute(100), key=client_key))]
         ... )
         ... async def search() -> list[str]:
         ...     return []
     """
 
-    __slots__ = ("_cache", "_cost", "_fail_open", "_key", "_limit")
+    __slots__ = ("_cost", "_fail_open", "_key", "_limit", "_limiter")
 
     def __init__(
         self,
-        cache: AsyncCache,
+        limiter: AsyncRateLimiter,
         limit: Limit,
         /,
         *,
@@ -72,10 +73,10 @@ class rate_limit:  # noqa: N801 - a dependency is named as what it does, as Depe
         cost: int = 1,
         fail_open: bool = True,
     ) -> None:
-        """Count requests against limit in cache.
+        """Count requests against limit with limiter.
 
         Args:
-            cache: the cache whose backend keeps the counters.
+            limiter: counts the requests in its backend.
             limit: the limit, such as ``SlidingWindow.per_minute(100)``.
             key: what to count a request under, such as the address of its client; required, as
                 behind a proxy the address of the connection is the address of the proxy.
@@ -86,13 +87,13 @@ class rate_limit:  # noqa: N801 - a dependency is named as what it does, as Depe
             TypeError: an argument is not of the type its annotation names.
             InvalidOptionsError: cost is not from 1 to the calls of the limit.
         """
-        expect_type("cache", cache, AsyncCache)
+        expect_type("limiter", limiter, AsyncRateLimiter)
         expect_type("limit", limit, LIMIT)
         expect_type("key", key, FUNCTION)
         cost = parse_cost(limit, cost)
         expect_type("fail_open", fail_open, bool)
 
-        self._cache = cache
+        self._limiter = limiter
         self._limit = limit
         self._key = key
         self._cost = cost
@@ -111,9 +112,7 @@ class rate_limit:  # noqa: N801 - a dependency is named as what it does, as Depe
         Raises:
             RateLimitedError: the request is over the limit.
         """
-        state = await self._cache.rate_limit(
-            self._key(request), self._limit, cost=self._cost, fail_open=self._fail_open
-        )
+        state = await self._limiter.count(self._key(request), self._limit, cost=self._cost, fail_open=self._fail_open)
         if state is not None:
             response.headers.update(rate_limit_headers(state))
         return state

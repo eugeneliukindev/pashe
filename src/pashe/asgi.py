@@ -17,7 +17,7 @@ from collections.abc import Callable
 from http import HTTPMethod, HTTPStatus
 from typing import TYPE_CHECKING, Any, Final, final
 
-from pashe import AsyncCache
+from pashe import AsyncRateLimiter
 from pashe._internal.cache.call import no_cache
 from pashe._internal.checks import FUNCTION, expect_type
 from pashe._internal.limits import LIMIT, parse_cost, rate_limit_headers
@@ -153,27 +153,27 @@ class RateLimitMiddleware:
     Examples:
         >>> from starlette.applications import Starlette
         >>> from starlette.middleware import Middleware
-        >>> from pashe import AsyncCache
+        >>> from pashe import AsyncRateLimiter
         >>> from pashe.asgi import RateLimitMiddleware
         >>> from pashe.backends import AsyncMemoryBackend
         >>> from pashe.ratelimit import SlidingWindow
-        >>> cache = AsyncCache(AsyncMemoryBackend())
+        >>> limiter = AsyncRateLimiter(AsyncMemoryBackend())
         >>> def client(scope) -> str:
         ...     return dict(scope["headers"])[b"x-forwarded-for"].decode().split(",")[0]
         >>> app = Starlette(
         ...     middleware=[
-        ...         Middleware(RateLimitMiddleware, cache=cache, limit=SlidingWindow.per_minute(100), key=client)
+        ...         Middleware(RateLimitMiddleware, limiter=limiter, limit=SlidingWindow.per_minute(100), key=client)
         ...     ]
         ... )
     """
 
-    __slots__ = ("_app", "_cache", "_cost", "_fail_open", "_key", "_limit")
+    __slots__ = ("_app", "_cost", "_fail_open", "_key", "_limit", "_limiter")
 
     def __init__(
         self,
         app: ASGIApp,  # by name too: frameworks make a middleware as cls(app=app, ...)
         *,
-        cache: AsyncCache,
+        limiter: AsyncRateLimiter,
         limit: Limit,
         key: Callable[[Scope], str],
         cost: int = 1,
@@ -183,7 +183,7 @@ class RateLimitMiddleware:
 
         Args:
             app: the ASGI application, or the route.
-            cache: the cache whose backend keeps the counters.
+            limiter: counts the requests in its backend.
             limit: the limit, such as ``SlidingWindow.per_minute(100)``.
             key: what a request counts under, from its scope, such as the address of its client;
                 required, as behind a proxy the address of the connection is the address of the proxy.
@@ -195,13 +195,13 @@ class RateLimitMiddleware:
             InvalidOptionsError: cost is not from 1 to the calls of the limit.
         """
         expect_type("app", app, FUNCTION)
-        expect_type("cache", cache, AsyncCache)
+        expect_type("limiter", limiter, AsyncRateLimiter)
         expect_type("limit", limit, LIMIT)
         expect_type("key", key, FUNCTION)
         expect_type("fail_open", fail_open, bool)
 
         self._app = app
-        self._cache = cache
+        self._limiter = limiter
         self._limit = limit
         self._key = key
         self._cost = parse_cost(limit, cost)
@@ -224,9 +224,7 @@ class RateLimitMiddleware:
             await self._app(scope, receive, send)
             return
         try:
-            state = await self._cache.rate_limit(
-                self._key(scope), self._limit, cost=self._cost, fail_open=self._fail_open
-            )
+            state = await self._limiter.count(self._key(scope), self._limit, cost=self._cost, fail_open=self._fail_open)
         except RateLimitedError as error:
             await _refuse(send, error.retry_after)
             return

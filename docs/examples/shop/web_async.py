@@ -10,7 +10,7 @@ from pashe.errors import RateLimitedError
 from pashe.ratelimit import SlidingWindow
 
 # --8<-- [end:imports]
-from examples.shop.shop_async import Product, cache, headers
+from examples.shop.shop_async import Product, headers, limiter
 from examples.shop.slow_query_async import get_product
 
 # --8<-- [start:show]
@@ -28,7 +28,7 @@ async def rate_limited(request: Request, error: RateLimitedError) -> JSONRespons
 @app.get("/products/{product_id}")
 async def product_page(product_id: int, request: Request) -> Product:
     client = request.client.host if request.client else "unknown"
-    await cache.rate_limit(f"client:{client}", SlidingWindow.per_minute(600))
+    await limiter.count(f"client:{client}", SlidingWindow.per_minute(600))
     return await get_product(product_id)
 
 

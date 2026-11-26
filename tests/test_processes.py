@@ -21,7 +21,7 @@ from tests.harness.helpers import Source, batch_function, cached_function, call,
 
 if TYPE_CHECKING:
     from pashe import AsyncCachedFunction
-    from tests.harness.helpers import Clock, EitherCache, NewCache
+    from tests.harness.helpers import Clock, EitherCache, NewCache, NewLimiter, NewLocks
 
 
 class UserNotFoundError(LookupError):
@@ -180,8 +180,8 @@ async def test_lock_for_loads_once_for_all_processes(new_process_cache: NewCache
     assert loads == 1
 
 
-async def test_a_lock_held_by_one_process_is_busy_for_another(new_process_cache: NewCache) -> None:
-    holder, other = new_process_cache(), new_process_cache()
+async def test_a_lock_held_by_one_process_is_busy_for_another(new_process_locks: NewLocks) -> None:
+    holder, other = new_process_locks(), new_process_locks()
     await call(holder.try_lock, "job", ttl=5)
 
     lock = await call(other.try_lock, "job", ttl=5)
@@ -189,8 +189,8 @@ async def test_a_lock_held_by_one_process_is_busy_for_another(new_process_cache:
     assert lock is None
 
 
-async def test_a_lock_released_by_one_process_is_free_for_another(new_process_cache: NewCache) -> None:
-    holder, other = new_process_cache(), new_process_cache()
+async def test_a_lock_released_by_one_process_is_free_for_another(new_process_locks: NewLocks) -> None:
+    holder, other = new_process_locks(), new_process_locks()
     lock = await call(holder.try_lock, "job", ttl=5)
     assert lock is not None
 
@@ -199,21 +199,21 @@ async def test_a_lock_released_by_one_process_is_free_for_another(new_process_ca
     assert await call(other.try_lock, "job", ttl=5) is not None
 
 
-async def test_a_rate_limit_counts_the_calls_of_every_process(new_process_cache: NewCache) -> None:
-    first, second = new_process_cache(), new_process_cache()
-    await call(first.rate_limit, "ip", SlidingWindow.per_minute(2))
-    await call(second.rate_limit, "ip", SlidingWindow.per_minute(2))
+async def test_a_rate_limit_counts_the_calls_of_every_process(new_process_limiter: NewLimiter) -> None:
+    first, second = new_process_limiter(), new_process_limiter()
+    await call(first.count, "ip", SlidingWindow.per_minute(2))
+    await call(second.count, "ip", SlidingWindow.per_minute(2))
 
     with pytest.raises(RateLimitedError):
-        await call(first.rate_limit, "ip", SlidingWindow.per_minute(2))
+        await call(first.count, "ip", SlidingWindow.per_minute(2))
 
 
-async def test_a_fixed_window_bans_the_calls_of_every_process(new_process_cache: NewCache) -> None:
-    first, second = new_process_cache(), new_process_cache()
+async def test_a_fixed_window_bans_the_calls_of_every_process(new_process_limiter: NewLimiter) -> None:
+    first, second = new_process_limiter(), new_process_limiter()
     limit = FixedWindow(calls=1, per=60, ban_for=120)
-    await call(first.rate_limit, "ip", limit)
+    await call(first.count, "ip", limit)
 
     with pytest.raises(RateLimitedError) as refused:
-        await call(second.rate_limit, "ip", limit)
+        await call(second.count, "ip", limit)
 
     assert refused.value.retry_after == 120

@@ -145,7 +145,7 @@ class Lookup:
     # A load after it stores with these generations, so a tag invalidated meanwhile makes it a miss.
     key: str
     entry: Entry | None
-    generations: Generations = ()
+    tag_generations: Generations = ()
     from_fallback: bool = False  # the backend failed: the entry is of the fallback, and a store goes there
 
 
