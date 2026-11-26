@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from pashe._internal.sync.backends.prefixed import PrefixedBackend
     from pashe._internal.sync.cache.batch_function_cache import BatchFunction
     from pashe._internal.sync.cache.fallback import FallbackStore
+    from pashe._internal.sync.cache.tags import Tags
     from pashe.hooks import Hook
 
 
@@ -42,24 +43,28 @@ class CachedBatchFunction[K: Hashable, V]:
         {1: {'id': 1}, 2: {'id': 2}}
     """
 
-    __slots__ = ("__dict__", "_batch", "_function", "_key", "_name")
+    __slots__ = ("__dict__", "_batch", "_function", "_key", "_name", "_tags")
 
     def __init__(
         self,
         function: BatchFunction[K, V],
-        key: KeyTemplate | None,
         batch: BatchFunctionCache[K, V],
+        *,
+        key: KeyTemplate | None,
+        tags: tuple[KeyTemplate, ...],
     ) -> None:
         """Made by the batch decorator of a cache, not by hand.
 
         Args:
             function: the batch function whose results are cached per item.
-            key: the template of the key of an item.
             batch: answers the items from the backend or by calling the function.
+            key: the template of the key of an item.
+            tags: the templates of the tags of an item.
         """
         self._function = function
-        self._key = key
         self._batch = batch
+        self._key = key
+        self._tags = tags
 
         self._name = key_name(function) if key is None else qualified_name(function)
         functools.update_wrapper(self, function)
@@ -87,8 +92,11 @@ class CachedBatchFunction[K: Hashable, V]:
             >>> get_users([0, 1])
             {1: {'id': 1}}
         """
-        keys = {item: item_key(self._name, self._key, item) for item in items}
-        return self._batch.get_or_load_many(keys, self._function)
+        calls = {
+            item: (item_key(self._name, self._key, item), tuple(tag.render((item,), {}) for tag in self._tags))
+            for item in items
+        }
+        return self._batch.get_or_load_many(calls, self._function)
 
     def invalidate(self, item: K, /) -> bool:
         """Drop the cached result of item.
@@ -118,7 +126,7 @@ class CachedBatchFunction[K: Hashable, V]:
 class CachedBatchFunctionDecorator:
     """What ``@cache.batch(...)`` returns: a decorator that caches every item of a batch function on its own."""
 
-    __slots__ = ("_backend", "_fallback", "_hooks", "_key", "_policy", "_serializer")
+    __slots__ = ("_backend", "_fallback", "_hooks", "_key", "_policy", "_serializer", "_tag_store", "_tags")
 
     def __init__(
         self,
@@ -126,16 +134,20 @@ class CachedBatchFunctionDecorator:
         /,
         *,
         key: KeyTemplate | None,
+        tags: tuple[KeyTemplate, ...],
         serializer: Serializer,
         backend: PrefixedBackend,
+        tag_store: Tags,
         fallback: FallbackStore,
         hooks: Hook,
     ) -> None:
         self._policy = policy
         self._key = key
+        self._tags = tags
 
         self._serializer = serializer
         self._backend = backend
+        self._tag_store = tag_store
         self._fallback = fallback
         self._hooks = hooks
 
@@ -159,6 +171,7 @@ class CachedBatchFunctionDecorator:
             ),
             hooks=self._hooks,
             backend=self._backend,
+            tags=self._tag_store,
             fallback=self._fallback,
         )
-        return CachedBatchFunction(function, self._key, batch)
+        return CachedBatchFunction(function, batch, key=self._key, tags=self._tags)

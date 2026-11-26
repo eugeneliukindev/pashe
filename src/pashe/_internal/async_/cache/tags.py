@@ -12,6 +12,9 @@ if TYPE_CHECKING:
     from pashe._internal.async_.backends.backend import AsyncBackend
     from pashe._internal.cache.entry import Generations
 
+type _Call = tuple[str, Sequence[str]]  # the key of an entry, and its tags
+type _Read = tuple[bytes | None, Generations]  # an entry as the backend keeps it, and the generations of its tags
+
 _GENERATION_BITS: Final = 62  # leaves room for invalidation_count to count up within 64 bits
 
 
@@ -34,6 +37,16 @@ class AsyncTags:
         counters = _counters(tags)
         raws = await self._backend.get_many([key, *counters])
         return raws[0], await self._generations(counters, raws[1:])
+
+    async def read_many(self, calls: Sequence[_Call]) -> list[_Read]:
+        # the entries of a batch and the generations of their tags, in one call to the backend
+        counters = list(dict.fromkeys(counter for _, tags in calls for counter in _counters(tags)))
+        raws = await self._backend.get_many([*(key for key, _ in calls), *counters])
+        generations = dict(zip(counters, await self._generations(counters, raws[len(calls) :]), strict=True))
+        return [
+            (raw, tuple(generations[counter] for counter in _counters(tags)))
+            for (_, tags), raw in zip(calls, raws, strict=False)  # raws: the entries, then the counters
+        ]
 
     async def generations(self, tags: Sequence[str]) -> Generations:
         if not tags:

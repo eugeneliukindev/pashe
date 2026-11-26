@@ -51,7 +51,7 @@ async def test_a_batch_loads_only_the_items_it_misses(side: str, monkeypatch: py
 
     await call(example.main)
 
-    assert asked == [([1, 2, 3],), ([4],)]
+    assert asked == [([1, 2, 3],), ([4],), ([2, 3],)]
 
 
 @pytest.mark.parametrize("side", ["sync", "async"])

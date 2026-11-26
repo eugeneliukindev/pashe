@@ -2,7 +2,9 @@
 
 A tag names a group of results, so one call drops them all: the results of one user, of one team,
 or every user. `tags=` of the decorator takes templates over the arguments, as `key=` does, and
-`invalidate_tags` takes the tags as they are filled in.
+`invalidate_tags` takes the tags as they are filled in. A batch takes `tags=` too, templates over
+its item such as `["user:{}"]`: one tag drops the result of `get_user(3)` and of item 3 of
+`get_users([...])` alike, see [Batches](../caching/batches.md).
 
 !!! info "Where it works"
 

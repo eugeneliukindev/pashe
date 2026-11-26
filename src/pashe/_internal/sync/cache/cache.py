@@ -270,6 +270,8 @@ class Cache:
         *,
         ttl: TTL,
         key: str | None = None,
+        tags: list[str] | tuple[str, ...] = (),
+        stale: Stale = Stale(),
         stampede: Stampede = Stampede(),
         store: Store = Store(),
     ) -> CachedBatchFunctionDecorator:
@@ -282,6 +284,11 @@ class Cache:
             ttl: as in ``@cache(...)``.
             key: a str.format template over the item, such as ``"user:{}"``; by default the
                 qualified name of the function and the repr of the item.
+            tags: templates over the item like key, such as ``["user:{}"]``: invalidate_tags of
+                one makes the result of its item a miss, as of ``@cache(...)``.
+            stale: its if_error: when the batch function raises, the stale results of its items
+                answer, if each item has one, and the error goes to on_error. A batch waits for its
+                load and reloads nothing in the background: while_revalidate and if_slow are refused.
             stampede: its jitter, and max_loads: how many batches may load at once in
                 this cache. A batch shares no loads and reloads nothing in the background: lock_for and
                 revalidate_before are refused, share_loads unused.
@@ -307,23 +314,33 @@ class Cache:
         """
         policy = Policy.of(
             ttl=ttl,
-            stale=Stale(),
+            stale=stale,
             stampede=stampede,
             negative=Negative(),
             store=store,
             clock=self._clock,
         )
-        if policy.stampede.lock_for:
-            msg = "a batch shares no loads: its Stampede takes no lock_for"
-            raise InvalidOptionsError(msg)
-        if policy.stampede.revalidate_before:
-            msg = "a batch reloads nothing in the background: its Stampede takes no revalidate_before"
+        refused = [
+            name
+            for name, given in (
+                ("Stampede.lock_for", policy.stampede.lock_for),
+                ("Stampede.revalidate_before", policy.stampede.revalidate_before),
+                ("Stale.while_revalidate", policy.stale.while_revalidate),
+                ("Stale.if_slow", policy.stale.slow_after),
+            )
+            if given
+        ]
+        if refused:
+            names = ", ".join(refused)
+            msg = f"a batch shares no loads, waits for its load and reloads nothing in the background: it takes no {names}"
             raise InvalidOptionsError(msg)
         return CachedBatchFunctionDecorator(
             policy,
             key=parse_key(key, secret=self._key_secret),
+            tags=parse_tags(tags, secret=self._key_secret),
             serializer=self._serializer,
             backend=self._backend,
+            tag_store=self._tags,
             fallback=self._fallback,
             hooks=self._hooks,
         )

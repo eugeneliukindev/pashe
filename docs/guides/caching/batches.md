@@ -18,8 +18,15 @@ all items in one backend call and calls the function once with the missing ones.
     ```
 
 `@cache.batch(...)` makes a `CachedBatchFunction`, an `AsyncCachedBatchFunction` on the async side.
-Items the function leaves out are absent from the result and not stored. `batch` takes `ttl`,
-`key`, `stampede` with its `jitter` and `max_loads`, and `store`.
+Items the function leaves out are absent from the result and not stored. `batch` takes the
+options of `@cache(...)` but `negative`: `ttl`; `key` and `tags`, templates over the item, so
+`invalidate_tags("user:3")` makes item 3 a miss in the batch and in `get_user(3)` alike; `stale`
+with its `if_error`; `stampede` with its `jitter` and `max_loads`; and `store`.
+
+When the function raises, the stale results of the items answer, if each item it loads has one
+within `if_error`, and the error goes to `on_error`; with one item short of a stale result, the
+call raises, as the items are one call. A batch waits for its load and loads nothing in the
+background, so it refuses `while_revalidate`, `if_slow`, `lock_for` and `revalidate_before`.
 
 ---
 

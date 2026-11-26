@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend
     from pashe._internal.async_.cache.batch_function_cache import AsyncBatchFunction
     from pashe._internal.async_.cache.fallback import AsyncFallbackStore
+    from pashe._internal.async_.cache.tags import AsyncTags
     from pashe._internal.cache.entry import Serializer
     from pashe._internal.cache.keys import KeyTemplate
     from pashe._internal.cache.policy import Policy
@@ -40,24 +41,28 @@ class AsyncCachedBatchFunction[K: Hashable, V]:
         {1: {'id': 1}, 2: {'id': 2}}
     """
 
-    __slots__ = ("__dict__", "_batch", "_function", "_key", "_name")
+    __slots__ = ("__dict__", "_batch", "_function", "_key", "_name", "_tags")
 
     def __init__(
         self,
         function: AsyncBatchFunction[K, V],
-        key: KeyTemplate | None,
         batch: AsyncBatchFunctionCache[K, V],
+        *,
+        key: KeyTemplate | None,
+        tags: tuple[KeyTemplate, ...],
     ) -> None:
         """Made by the batch decorator of a cache, not by hand.
 
         Args:
             function: the batch function whose results are cached per item.
-            key: the template of the key of an item.
             batch: answers the items from the backend or by calling the function.
+            key: the template of the key of an item.
+            tags: the templates of the tags of an item.
         """
         self._function = function
-        self._key = key
         self._batch = batch
+        self._key = key
+        self._tags = tags
 
         self._name = key_name(function) if key is None else qualified_name(function)
         functools.update_wrapper(self, function)
@@ -85,8 +90,11 @@ class AsyncCachedBatchFunction[K: Hashable, V]:
             >>> await get_users([0, 1])
             {1: {'id': 1}}
         """
-        keys = {item: item_key(self._name, self._key, item) for item in items}
-        return await self._batch.get_or_load_many(keys, self._function)
+        calls = {
+            item: (item_key(self._name, self._key, item), tuple(tag.render((item,), {}) for tag in self._tags))
+            for item in items
+        }
+        return await self._batch.get_or_load_many(calls, self._function)
 
     async def invalidate(self, item: K, /) -> bool:
         """Drop the cached result of item.
@@ -116,7 +124,7 @@ class AsyncCachedBatchFunction[K: Hashable, V]:
 class AsyncCachedBatchFunctionDecorator:
     """What ``@cache.batch(...)`` returns: a decorator that caches every item of a batch function on its own."""
 
-    __slots__ = ("_backend", "_fallback", "_hooks", "_key", "_policy", "_serializer")
+    __slots__ = ("_backend", "_fallback", "_hooks", "_key", "_policy", "_serializer", "_tag_store", "_tags")
 
     def __init__(
         self,
@@ -124,16 +132,20 @@ class AsyncCachedBatchFunctionDecorator:
         /,
         *,
         key: KeyTemplate | None,
+        tags: tuple[KeyTemplate, ...],
         serializer: Serializer,
         backend: AsyncPrefixedBackend,
+        tag_store: AsyncTags,
         fallback: AsyncFallbackStore,
         hooks: Hook,
     ) -> None:
         self._policy = policy
         self._key = key
+        self._tags = tags
 
         self._serializer = serializer
         self._backend = backend
+        self._tag_store = tag_store
         self._fallback = fallback
         self._hooks = hooks
 
@@ -157,6 +169,7 @@ class AsyncCachedBatchFunctionDecorator:
             ),
             hooks=self._hooks,
             backend=self._backend,
+            tags=self._tag_store,
             fallback=self._fallback,
         )
-        return AsyncCachedBatchFunction(function, self._key, batch)
+        return AsyncCachedBatchFunction(function, batch, key=self._key, tags=self._tags)

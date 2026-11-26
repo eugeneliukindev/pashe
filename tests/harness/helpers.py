@@ -35,6 +35,7 @@ from pashe.errors import BackendError
 from pashe.hooks import Hook
 from pashe.invalidation import InvalidationBus
 from pashe.locks import AsyncLock, Lock
+from pashe.options import Stale
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping, Sequence
@@ -390,6 +391,9 @@ def batch_function(
     asked: list[list[int]],
     *,
     left_out: frozenset[int] = frozenset(),
+    tags: tuple[str, ...] = (),
+    stale: Stale = Stale(),
+    errors: list[Exception] | None = None,
 ) -> CachedBatchFunction[int, int]: ...
 @overload
 def batch_function(
@@ -397,27 +401,42 @@ def batch_function(
     asked: list[list[int]],
     *,
     left_out: frozenset[int] = frozenset(),
+    tags: tuple[str, ...] = (),
+    stale: Stale = Stale(),
+    errors: list[Exception] | None = None,
 ) -> AsyncCachedBatchFunction[int, int]: ...
 def batch_function(
     cache: EitherCache,
     asked: list[list[int]],
     *,
     left_out: frozenset[int] = frozenset(),
+    tags: tuple[str, ...] = (),
+    stale: Stale = Stale(),
+    errors: list[Exception] | None = None,
 ) -> CachedBatchFunction[int, int] | AsyncCachedBatchFunction[int, int]:
-    """Return a cached batch function of the side of cache: it counts what it is asked, and leaves left_out out."""
+    """Return a cached batch function of the side of cache.
+
+    It counts what it is asked, leaves left_out out, and raises the first of errors while there is one.
+    """
+    raised = [] if errors is None else errors
+
+    def answer(ids: list[int]) -> dict[int, int]:
+        asked.append(ids)
+        if raised:
+            raise raised[0]
+        return {item_id: item_id * 10 for item_id in ids if item_id not in left_out}
+
     if isinstance(cache, Cache):
 
-        @cache.batch(ttl=60, key="item:{}")
+        @cache.batch(ttl=60, key="item:{}", tags=tags, stale=stale)
         def load_items(ids: list[int]) -> dict[int, int]:
-            asked.append(ids)
-            return {item_id: item_id * 10 for item_id in ids if item_id not in left_out}
+            return answer(ids)
 
         return load_items
 
-    @cache.batch(ttl=60, key="item:{}")
+    @cache.batch(ttl=60, key="item:{}", tags=tags, stale=stale)
     async def aload_items(ids: list[int]) -> dict[int, int]:
-        asked.append(ids)
-        return {item_id: item_id * 10 for item_id in ids if item_id not in left_out}
+        return answer(ids)
 
     return aload_items
 

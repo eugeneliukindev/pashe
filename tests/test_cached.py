@@ -1263,6 +1263,62 @@ def test_a_batch_keeps_in_the_fallback_what_it_could_not_write() -> None:
     assert asked == [[1]]
 
 
+async def test_a_tag_of_an_item_makes_its_batch_result_a_miss(new_process_cache: NewCache) -> None:
+    cache = new_process_cache()
+    asked: list[list[int]] = []
+    get_items = batch_function(cache, asked, tags=("item:{}", "items"))
+    await call(get_items, [1, 2])
+
+    await call(cache.invalidate_tags, "item:1")
+    items = await call(get_items, [1, 2])
+
+    assert items == {1: 10, 2: 20}
+    assert asked == [[1, 2], [1]]
+
+
+async def test_a_batch_answers_stale_results_when_its_load_fails(new_process_cache: NewCache, clock: Clock) -> None:
+    failures: list[Failure] = []
+    errors: list[Exception] = []
+    asked: list[list[int]] = []
+    cache = new_process_cache(clock=clock, hooks=[RecordingHook(failures=failures)])
+    get_items = batch_function(cache, asked, stale=Stale(if_error=600), errors=errors)
+    await call(get_items, [1, 2])
+    clock.now += 61  # past the ttl, within if_error
+    errors.append(ConnectionError("the source is down"))
+
+    items = await call(get_items, [1, 2])
+
+    assert items == {1: 10, 2: 20}
+    assert [(failure.operation, type(failure.error)) for failure in failures] == [(Operation.LOAD, ConnectionError)]
+
+
+async def test_a_batch_raises_when_an_item_it_loads_has_no_stale_result(
+    new_process_cache: NewCache,
+    clock: Clock,
+) -> None:
+    errors: list[Exception] = []
+    get_items = batch_function(new_process_cache(clock=clock), [], stale=Stale(if_error=600), errors=errors)
+    await call(get_items, [1])
+    clock.now += 61
+    errors.append(ConnectionError("the source is down"))
+
+    with pytest.raises(ConnectionError):
+        await call(get_items, [1, 2])
+
+
+@pytest.mark.parametrize(
+    ("stale", "stampede", "refused"),
+    [
+        (Stale(while_revalidate=30), Stampede(), "Stale.while_revalidate"),
+        (Stale(if_slow=IfSlow(30, after=1)), Stampede(), "Stale.if_slow"),
+        (Stale(), Stampede(lock_for=5), "Stampede.lock_for"),
+    ],
+)
+def test_a_batch_refuses_what_waits_for_another_load(stale: Stale, stampede: Stampede, refused: str) -> None:
+    with pytest.raises(InvalidOptionsError, match=refused):
+        Cache(MemoryBackend()).batch(ttl=60, stale=stale, stampede=stampede)
+
+
 def test_batch_items_must_be_hashable() -> None:
     def by_lists(items: list[list[int]]) -> dict[list[int], int]:  # noqa: ARG001 - the signature of a batch function
         return {}

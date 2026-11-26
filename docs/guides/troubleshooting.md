@@ -60,6 +60,13 @@ of `pashe.errors`, so `except PasheError` takes them all.
     `ttl=0` keeps a result only for its stale windows; with none, nothing would ever be stored.
     Give the function a positive `ttl` or a window such as `Stale(while_revalidate=30)`.
 
+??? question "InvalidOptionsError: a batch shares no loads, waits for its load and reloads nothing in the background"
+
+    A batch loads its missing items in one call, and the call waits for it: it refuses what waits
+    for another load or reloads in the background, `Stale(while_revalidate=...)`,
+    `Stale(if_slow=...)`, `Stampede(lock_for=...)` and `Stampede(revalidate_before=...)`. The
+    error names those it was given. `Stale(if_error=...)` works.
+
 ??? question "InvalidOptionsError: redis: a backend needs a client without decode_responses"
 
     A backend stores bytes: the codec decides what they mean. Create the client without

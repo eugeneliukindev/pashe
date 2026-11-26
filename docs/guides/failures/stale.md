@@ -79,7 +79,8 @@ flowchart LR
 
 For 10 minutes after the TTL, a load that raises one of `IfError.on` is answered with the
 stale result instead; the error goes to `on_error`. `if_error=600`, a plain duration, counts
-every `Exception`.
+every `Exception`. A batch takes `if_error` alone: when its function raises, the stale results
+answer if each item it loads has one, see [Batches](../caching/batches.md).
 
 !!! tip "A circuit breaker composes with it"
 

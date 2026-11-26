@@ -29,7 +29,7 @@ per node at once, and `set_many` of a batch as one pipeline per node.
 | Call | Round trips |
 | --- | --- |
 | `invalidate_tags` | 2 per tag: `SET NX` of the counter, then `INCRBY` |
-| a batch | one `MGET` of every item, then one `SET` per loaded item in one pipeline |
+| a batch | one `MGET` of every item and the counters of their tags, then one `SET` per loaded item in one pipeline |
 
 ## Locks and rate limits
 
