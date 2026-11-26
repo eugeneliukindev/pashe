@@ -106,4 +106,12 @@ is slow or failing, and a fallback keeps working while Redis is down.
 
 </div>
 
+## LLMs support
+
+Do you write code with an AI assistant? These files give it the docs as context:
+
+- [`llms.txt`](llms.txt): an index with a link to every page;
+- [`llms-full.txt`](llms-full.txt): the complete docs in one file;
+- every page as Markdown: press **Copy as Markdown** next to its title.
+
 Next: [Getting started](getting-started.md).

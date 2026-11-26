@@ -4,6 +4,11 @@ A tag names a group of results, so one call drops them all: the results of one u
 or every user. `tags=` of the decorator takes templates over the arguments, as `key=` does, and
 `invalidate_tags` takes the tags as they are filled in.
 
+!!! info "Where it works"
+
+    A tag is a counter in the backend: every process of every machine over Redis, every process of
+    one machine over SQLite, one process over memory. See [Where each feature works](../choosing.md#where-each-feature-works).
+
 === "Sync"
 
     ```python

@@ -51,11 +51,13 @@ stored with the old generation becomes a miss. Nothing is scanned.
 | stored | `4711` | remembers `users: 4711` | HIT |
 | `invalidate_tags("users")` | `4712` | still remembers `4711` | MISS: loads, stores with `4712` |
 
-## Processes
+## Where each feature works
 
-EntryCodec, tags, locks and rate limits live in the backend, so every process that uses the same
-Redis shares them. Sharing loads between concurrent calls happens in two places: `Stampede.single_flight`
-inside a process, `Stampede.lock_for` across processes.
+A feature that lives in the backend works for every process over that backend; one that lives in
+the cache works in its process only. So the backend decides how far a lock, a limit or a tag
+reaches: over memory, a lock keeps apart the threads and tasks of one process, not two servers.
+
+[What to choose](guides/choosing.md#where-each-feature-works) lists where every feature lives.
 
 In the diagrams of these docs a box is where something lives: blue and green boxes are
 processes, each with its own memory; the yellow box is Redis, shared by every process.

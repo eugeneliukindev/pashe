@@ -144,26 +144,17 @@ Results change at the source. Drop them when you change the data, or let them ex
     --8<-- "getting_started/fresh_async.py:show"
     ```
 
-## LLMs support
-
-Do you write code with an AI assistant? These files give it the docs as context:
-
-- [`llms.txt`](llms.txt): an index with a link to every page;
-- [`llms-full.txt`](llms-full.txt): the complete docs in one file;
-- every page as Markdown: press **Copy as Markdown** next to its title.
-
 ## Next
 
 The guides run in the order you meet the API, each built on those before it:
 
-- [Core concepts](concepts.md): how a cached call is answered.
-- [What to choose](guides/choosing.md): which backend, near cache, bus, codec and options for your case.
+- [Core concepts](concepts.md): how a cached call is answered, and where each feature works.
 - [Caching functions](guides/caching/decorator.md): the decorator, keys, what is stored, types, batches, values.
+- [Freshness](guides/failures/stale.md): stale results, and stampedes of callers that miss at once.
 - [Invalidation](guides/invalidation/tags.md): tags, and invalidating on a write.
-- [Backends](guides/backends/index.md): memory, Redis, a cluster, and near caches.
+- [Backends](guides/backends/index.md): memory, SQLite, Redis, a cluster, near caches, and a backend that fails.
 - [Encoding](guides/values/codecs.md): codecs and compressors.
-- [Failures and load](guides/failures/stale.md): stale results, a failing backend, stampedes.
-- [Observability](guides/observability/hooks.md): hooks, logs, OpenTelemetry and Prometheus.
-- [Locks and rate limits](guides/locks/locks.md).
+- [Locks](guides/locks/locks.md) and [rate limits](guides/locks/rate-limits.md), of calls and of HTTP requests.
+- [Observability](guides/observability/hooks.md): hooks, logs, OpenTelemetry, Prometheus and Sentry.
 - [Web](guides/web/headers.md): HTTP caching headers, whole responses, FastAPI.
-- [Recommended setup](guides/recommended-setup.md): what to install and configure for production.
+- [In production](guides/choosing.md): what to choose for each part, and the recommended setup.

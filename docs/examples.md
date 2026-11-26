@@ -5,7 +5,7 @@ examples build on each other, as the modules of one application do. Pick **Sync*
 once: every example on every page switches with it.
 
 The diagram above each example tells what it does: yellow answers from the cache, blue reaches
-the source, and a box is a process or Redis, as [Core concepts](concepts.md#processes) shows.
+the source, and a box is a process or Redis, as [Core concepts](concepts.md#where-each-feature-works) shows.
 
 ## The shop
 

@@ -4,6 +4,11 @@
 backend such as Redis. A read of a copy does not leave the process: hot keys do not load one
 Redis node, and reads go on for a while when Redis is slow.
 
+!!! info "Where it works"
+
+    The copies live in each process; the bus tells every process over the shared backend to drop
+    them. See [Where each feature works](../choosing.md#where-each-feature-works).
+
 ```mermaid
 flowchart LR
     subgraph p1["Process 1"]

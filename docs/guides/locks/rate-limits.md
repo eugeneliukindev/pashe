@@ -3,6 +3,11 @@
 `cache.rate_limit` and `@cache.rate_limited` count calls for a key in the backend, so every process that uses it shares the
 count, and refuses those over the limit with `RateLimitedError`.
 
+!!! info "Where it works"
+
+    In the backend: every process of every machine over Redis, every process of one machine over
+    SQLite, one process over memory. See [Where each feature works](../choosing.md#where-each-feature-works).
+
 === "Sync"
 
     ```python

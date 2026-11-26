@@ -3,6 +3,24 @@
 Every part of a cache has a few options. Each table below answers "which one" for one part, from
 what you have to what you take; the page of each part tells the rest.
 
+## Where each feature works
+
+A feature that lives in the backend works for every process over that backend; one that lives in
+the cache works in its process only, as [Core concepts](../concepts.md#where-each-feature-works) tells.
+
+| Feature | Lives in | Over Redis, Valkey or a cluster | Over SQLite | Over memory |
+| --- | --- | --- | --- | --- |
+| cached results | the backend | every process of every machine | every process of one machine | one process |
+| tags and `invalidate_tags` | the backend | every process of every machine | every process of one machine | one process |
+| `lock`, `try_lock` and `@locked` | the backend | every process of every machine | every process of one machine | one process |
+| `rate_limit` and `@rate_limited` | the backend | every process of every machine | every process of one machine | one process |
+| `Stampede.lock_for` | the backend | every process of every machine | every process of one machine | one process, where `single_flight` does it for less |
+| `Stampede.revalidate_before` | the backend | every process of every machine | every process of one machine | one process |
+| `Stampede.single_flight` | the cache | one process | one process | one process |
+| `Stampede.max_concurrent_loads` | the cache | one process | one process | one process |
+| the copies of a near cache | the cache | one process | one process | one process |
+| a `Fallback` | its own backend, memory as a rule | one process | one process | one process |
+
 ## Where entries live
 
 ```mermaid
@@ -83,25 +101,29 @@ flowchart LR
 
 ## How loads are shared
 
-| You have | Take | See |
-| --- | --- | --- |
-| concurrent calls of a key in one process | nothing: `Stampede(single_flight=True)` is the default | [Stampede protection](failures/stampedes.md) |
-| an expensive load, and many processes that miss the key at once | `Stampede(lock_for=...)`: one process loads, the others wait | [Locking a load across processes](failures/stampedes.md#locking-a-load-across-processes) |
-| a source that takes only so many loads at once | `Stampede(max_concurrent_loads=...)` | [Limiting loads at once](failures/stampedes.md#limiting-loads-at-once) |
-| many entries stored at once, such as after a deploy | `Stampede(jitter=0.1)`, so they do not expire together | [Stampede protection](failures/stampedes.md) |
-| "not found" asked again and again, such as for unknown ids | `Negative(on=(UserNotFoundError,), ttl=...)` | [Negative caching](caching/what-is-stored.md#negative-caching) |
+"Reaches" is where it works over Redis; [the backend decides](#where-each-feature-works) for a
+feature that lives in it.
+
+| You have | Take | Reaches | See |
+| --- | --- | --- | --- |
+| concurrent calls of a key in one process | nothing: `Stampede(single_flight=True)` is the default | one process | [Stampede protection](failures/stampedes.md) |
+| an expensive load, and many processes that miss the key at once | `Stampede(lock_for=...)`: one process loads, the others wait and take its result | every process | [Locking a load across processes](failures/stampedes.md#locking-a-load-across-processes) |
+| a source that takes only so many loads at once | `Stampede(max_concurrent_loads=...)` | one process | [Limiting loads at once](failures/stampedes.md#limiting-loads-at-once) |
+| many entries stored at once, such as after a deploy | `Stampede(jitter=0.1)`, so they do not expire together | every process | [Stampede protection](failures/stampedes.md) |
+| "not found" asked again and again, such as for unknown ids | `Negative(on=(UserNotFoundError,), ttl=...)` | every process | [Negative caching](caching/what-is-stored.md#negative-caching) |
 
 ## Locks and rate limits
 
-| You have | Take | See |
-| --- | --- | --- |
-| a block one process at a time may run | `with cache.lock(...)` | [Locks](locks/locks.md) |
-| a job that skips when another process runs it | `cache.try_lock(...)` | the same |
-| a function one process at a time may run | `@cache.locked(...)` | the same |
-| a limit such as "100 a minute", even across its windows | `SlidingWindow`, or `per_minute(100)` | [Rate limits](locks/rate-limits.md) |
-| a limit that bans for a while once it is passed, such as logins | `FixedWindow(..., ban_for=...)` | the same |
-| a limit of a whole ASGI application | `RateLimitMiddleware` of `pashe.asgi` | [Rate limits for HTTP](web/rate-limits.md) |
-| a limit of a FastAPI route, by the current user | `rate_limit` of `pashe.contrib.fastapi` | [FastAPI](web/fastapi.md) |
+| You have | Take | Reaches | See |
+| --- | --- | --- | --- |
+| a block one process at a time may run | `with cache.lock(...)` | every process | [Locks](locks/locks.md) |
+| a job that skips when another process runs it | `cache.try_lock(...)` | every process | the same |
+| a function one process at a time may run, each call doing its work | `@cache.locked(...)` | every process | the same |
+| a cached function whose load one process at a time may run, the others taking its result | `Stampede(lock_for=...)`, not `@cache.locked` | every process | [Locking a load across processes](failures/stampedes.md#locking-a-load-across-processes) |
+| a limit such as "100 a minute", even across its windows | `SlidingWindow`, or `per_minute(100)` | every process | [Rate limits](locks/rate-limits.md) |
+| a limit that bans for a while once it is passed, such as logins | `FixedWindow(..., ban_for=...)` | every process | the same |
+| a limit of a whole ASGI application | `RateLimitMiddleware` of `pashe.asgi` | every process | [Rate limits for HTTP](web/rate-limits.md) |
+| a limit of a FastAPI route, by the current user | `rate_limit` of `pashe.contrib.fastapi` | every process | [FastAPI](web/fastapi.md) |
 
 ## What the cache tells you
 

@@ -12,7 +12,6 @@ nav = [
     { "Start here" = [
         { "Getting started" = "getting-started.md" },
         { "Core concepts" = "concepts.md" },
-        { "What to choose" = "guides/choosing.md" },
     ] },
     { "Caching functions" = [
         { "Caching a function" = "guides/caching/decorator.md" },
@@ -22,6 +21,10 @@ nav = [
         { "Batches" = "guides/caching/batches.md" },
         { "Values without a loader" = "guides/caching/value.md" },
         { "Reusing options" = "guides/caching/reusing-options.md" },
+    ] },
+    { "Freshness" = [
+        { "Stale results" = "guides/failures/stale.md" },
+        { "Stampede protection" = "guides/failures/stampedes.md" },
     ] },
     { "Invalidation" = [
         { "Tags" = "guides/invalidation/tags.md" },
@@ -34,16 +37,17 @@ nav = [
         { "Redis and Valkey" = "guides/backends/redis.md" },
         { "Redis Cluster" = "guides/backends/cluster.md" },
         { "Near cache" = "guides/backends/near-cache.md" },
+        { "A failing backend" = "guides/failures/failing-backend.md" },
         { "Writing your own backend" = "guides/backends/your-own.md" },
     ] },
     { "Encoding" = [
         { "Codecs" = "guides/values/codecs.md" },
         { "Compressors" = "guides/values/compressors.md" },
     ] },
-    { "Failures and load" = [
-        { "Stale results" = "guides/failures/stale.md" },
-        { "A failing backend" = "guides/failures/failing-backend.md" },
-        { "Stampede protection" = "guides/failures/stampedes.md" },
+    { "Locks" = "guides/locks/locks.md" },
+    { "Rate limits" = [
+        { "Rate limits" = "guides/locks/rate-limits.md" },
+        { "Rate limits for HTTP" = "guides/web/rate-limits.md" },
     ] },
     { "Observability" = [
         { "How hooks work" = "guides/observability/hooks.md" },
@@ -52,18 +56,14 @@ nav = [
         { "Prometheus" = "guides/observability/prometheus.md" },
         { "Sentry" = "guides/observability/sentry.md" },
     ] },
-    { "Locks and rate limits" = [
-        { "Locks" = "guides/locks/locks.md" },
-        { "Rate limits" = "guides/locks/rate-limits.md" },
-    ] },
     { "Web" = [
         { "HTTP caching headers" = "guides/web/headers.md" },
         { "Caching an endpoint" = "guides/web/endpoint.md" },
-        { "Rate limits for HTTP" = "guides/web/rate-limits.md" },
         { "FastAPI" = "guides/web/fastapi.md" },
     ] },
     { "Testing" = "guides/testing.md" },
     { "In production" = [
+        { "What to choose" = "guides/choosing.md" },
         { "Recommended setup" = "guides/recommended-setup.md" },
         { "Examples" = "examples.md" },
         { "Troubleshooting" = "guides/troubleshooting.md" },
@@ -99,6 +99,8 @@ nav = [
         { "What is in Redis" = "deep-dive/storage.md" },
         { "What pashe does not do" = "deep-dive/non-goals.md" },
         { "Security" = "deep-dive/security.md" },
+    ] },
+    { "Project" = [
         { "Contributing" = "deep-dive/contributing.md" },
         { "Changelog" = "deep-dive/changelog.md" },
     ] },

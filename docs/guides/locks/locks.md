@@ -3,6 +3,17 @@
 `cache.lock`, `cache.try_lock` and `@cache.locked` take a lock that lives in the backend, so every
 process that uses it shares it: one holder at a time, in any process.
 
+!!! info "Where it works"
+
+    In the backend: every process of every machine over Redis, every process of one machine over
+    SQLite, one process over memory. See [Where each feature works](../choosing.md#where-each-feature-works).
+
+!!! tip "A lock for a cached function is `Stampede(lock_for=...)`"
+
+    A waiter of `@cache.locked` runs the function itself once the lock is free. To load a cached
+    result once for the whole service, with the waiters taking that result, give the cached function
+    `stampede=Stampede(lock_for=...)` instead: see [Locking a load across processes](../failures/stampedes.md#locking-a-load-across-processes).
+
 ```mermaid
 sequenceDiagram
     box rgba(43,91,132,0.14) Process 1

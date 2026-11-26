@@ -3,12 +3,12 @@
 When a popular key expires, every caller misses at once and asks the source. The options of
 `Stampede`, from `pashe.options`, share the load.
 
-| Option | Type | Where | Default | What it does |
+| Option | Type | Lives in | Default | What it does |
 | --- | --- | --- | --- | --- |
-| `single_flight` | `bool` | one process | `True` | concurrent calls of a key share one lookup and one load |
-| `lock_for` | `float | int | timedelta` | every process | `0`, off | a missing key loads under a lock in the backend: one process loads, the others wait and take its result |
-| `max_concurrent_loads` | `int` | one process | `0`, no limit | at most this many loads of the function run at once |
-| `revalidate_before` | `float | int | timedelta` | every process | `0`, off | in the last seconds of the TTL a call gets the fresh result at once, and one caller reloads it in the background |
+| `single_flight` | `bool` | the cache: one process | `True` | concurrent calls of a key share one lookup and one load |
+| `lock_for` | `float | int | timedelta` | the backend: every process over it | `0`, off | a missing key loads under a lock in the backend: one process loads, the others wait and take its result |
+| `max_concurrent_loads` | `int` | the cache: one process | `0`, no limit | at most this many loads of the function run at once |
+| `revalidate_before` | `float | int | timedelta` | the backend: every process over it | `0`, off | in the last seconds of the TTL a call gets the fresh result at once, and one caller reloads it in the background |
 
 === "Sync"
 
