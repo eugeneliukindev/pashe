@@ -26,7 +26,7 @@ _REDIS_DATABASES: Final = 16  # one per test process, so processes do not flush 
 _CONTAINER: Final = pytest.StashKey[RedisContainer]()
 
 _CLUSTER_URL: Final = "PASHE_TEST_REDIS_CLUSTER_URL"  # a cluster of your own skips the container
-_CLUSTER_IMAGE: Final = "redis:8-alpine"
+_CLUSTER_IMAGE: Final = "redis:8.12-alpine"  # exact: the option below is unknown to an older Redis, which refuses it
 _CLUSTER_PORTS: Final = (7000, 7001, 7002)  # three primaries, so keys of different slots live on different nodes
 _CLUSTER_CONTAINER: Final = pytest.StashKey[DockerContainer]()
 _URLS: Final = pytest.StashKey[dict[str, str]]()  # the URL of each server, under its variable
@@ -37,6 +37,8 @@ _PORTS: Final = " ".join(map(str, _CLUSTER_PORTS))
 _CLUSTER_SCRIPT: Final = (
     f"IP=$(hostname -i); for port in {_PORTS}; do "
     "redis-server --port $port --cluster-enabled yes --cluster-config-file /tmp/nodes-$port.conf "
+    # Redis 8.12 refuses a cluster bus with no TLS unless told it is reachable by trusted hosts only
+    "--cluster-bus-port-protected-mode no "
     '--save "" --appendonly no --daemonize yes; done; '
     # every node answers before the cluster is made of them: a fixed sleep lost the race on a busy machine
     f"for port in {_PORTS}; do until redis-cli -p $port ping > /dev/null 2>&1; do sleep 0.1; done; done; "
