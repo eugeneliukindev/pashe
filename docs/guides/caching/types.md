@@ -26,8 +26,10 @@ types come back whole: [Codecs](../values/codecs.md) tells which.
 
 A type the codec would give back as another one is refused when the function is decorated, not
 when its first result is read: a dataclass under `JsonCodec` raises `InvalidOptionsError`, which
-names the codecs that rebuild it. A function without a return annotation gets back what the
-codec reads on its own.
+names the codecs that rebuild it. A type the codec takes comes back as it went in, so a miss
+answers with the result the function returned and a hit with the same. A function without a
+return annotation, or a part of its type left as `Any`, gets on a hit what the codec reads on
+its own, such as a list for a tuple under `JsonCodec`.
 
 ## After the type changes
 

@@ -38,8 +38,8 @@ differ, as for a one-time code.
 !!! tip "When there is a source, cache the function"
 
     A value is a place to keep what your code writes. When a miss can be loaded from a source,
-    decorate the function that loads it with `@cache(...)`: it brings stale results, single
-    flight and the other answers to a source that is slow or down.
+    decorate the function that loads it with `@cache(...)`: it brings stale results, shared
+    loads and the other answers to a source that is slow or down.
 
 ---
 

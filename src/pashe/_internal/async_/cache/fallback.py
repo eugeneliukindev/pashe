@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import replace
 from typing import TYPE_CHECKING, final, override
 
-from pashe._internal.cache.entry import pack
 from pashe.errors import BackendError
 from pashe.hooks import Failure, Operation
 
 if TYPE_CHECKING:
     from pashe._internal.async_.backends.backend import AsyncBackend
-    from pashe._internal.cache.entry import Stored
     from pashe.hooks import Hook
 
 
@@ -24,9 +21,14 @@ class AsyncFallbackStore(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def set(self, key: str, stored: Stored | None) -> None:
-        # keep stored under key, untagged: no invalidation reaches it while the backend is down;
-        # None, what the policy did not store, keeps nothing
+    async def set(
+        self,
+        key: str,
+        raw: bytes,
+        *,
+        fresh_seconds: float,
+    ) -> None:
+        # keep the entry raw under key while it is fresh, or for the TTL of the fallback if that is shorter
         raise NotImplementedError
 
     @abstractmethod
@@ -58,12 +60,16 @@ class AsyncBackendFallbackStore(AsyncFallbackStore):
             return None
 
     @override
-    async def set(self, key: str, stored: Stored | None) -> None:
-        if stored is None:
-            return
-        kept_for = min(stored.fresh_seconds, self._ttl) if stored.fresh_seconds > 0 else self._ttl
+    async def set(
+        self,
+        key: str,
+        raw: bytes,
+        *,
+        fresh_seconds: float,
+    ) -> None:
+        kept_for = min(fresh_seconds, self._ttl) if fresh_seconds > 0 else self._ttl
         try:
-            await self._backend.set(key, pack(replace(stored.entry, tag_generations=())), ttl=kept_for)
+            await self._backend.set(key, raw, ttl=kept_for)
         except BackendError as error:
             self._hooks.on_error(Failure(Operation.FALLBACK_SET, key, error))
 
@@ -82,7 +88,13 @@ class AsyncNoOpFallbackStore(AsyncFallbackStore):
         """Find nothing: the cache has no fallback."""
 
     @override
-    async def set(self, key: str, stored: Stored | None) -> None:
+    async def set(
+        self,
+        key: str,
+        raw: bytes,
+        *,
+        fresh_seconds: float,
+    ) -> None:
         """Keep nothing: the cache has no fallback."""
 
     @override

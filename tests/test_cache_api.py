@@ -21,7 +21,7 @@ from tests.harness.helpers import LOOP_BLOCK_SECONDS, RecordingHook, call, run_b
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from tests.harness.helpers import Clock, NewCache
+    from tests.harness.helpers import Clock, NewCache, Side
 
 
 class _ExtensionsFail(MemoryBackend):
@@ -97,6 +97,47 @@ def test_a_cache_closes_what_it_was_given() -> None:
 
     assert backend.closed
     assert fallback.closed
+
+
+# What the objects show
+
+
+def test_a_cache_shows_its_backend_and_prefix(side: Side) -> None:
+    cache = side.new_cache(prefix="app:")
+
+    shown = repr(cache)
+
+    assert shown == f"{type(cache).__name__}({side.memory.__name__}(entries=0, max_entries=1000), prefix='app:')"
+
+
+def test_a_cached_function_shows_its_function(side: Side) -> None:
+    def get_user(user_id: int) -> int:
+        return user_id
+
+    get_user_cached = side.new_cache()(ttl=60)(side.function(get_user))
+
+    shown = repr(get_user_cached)
+
+    assert shown == f"{type(get_user_cached).__name__}({get_user.__qualname__})"
+
+
+def test_a_cached_batch_function_shows_its_function(side: Side) -> None:
+    def get_users(user_ids: list[int]) -> dict[int, int]:
+        return {user_id: user_id for user_id in user_ids}
+
+    get_users_cached = side.new_cache().batch(ttl=60)(side.function(get_users))
+
+    shown = repr(get_users_cached)
+
+    assert shown == f"{type(get_users_cached).__name__}({get_users.__qualname__})"
+
+
+def test_a_lock_shows_its_key_and_options(side: Side) -> None:
+    lock = side.new_cache().lock("report", ttl=30, holders=2)
+
+    shown = repr(lock)
+
+    assert shown == f"{type(lock).__name__}('report', ttl=30.0, timeout=None, holders=2)"
 
 
 # Locks

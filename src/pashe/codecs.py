@@ -96,7 +96,8 @@ class Codec(ABC):
 
         The cache calls it once with the return type, when it decorates the function: a type the
         codec would read back as another one, such as a dataclass as a dict, fails at once instead
-        of every result being lost.
+        of every result being lost. A type it takes must come back from decode as encode got it:
+        the cache then answers a miss with the result itself, as the hits after it read it.
 
         Args:
             type_: the return type of the cached function, or of an item of a batch.

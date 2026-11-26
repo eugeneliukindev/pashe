@@ -3,15 +3,15 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import time
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final, final
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING, Final, Self, final
 
 from pashe.hooks import CacheStatus, Hook, Outcome
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
 
-    from pashe._internal.cache.entry import Generations
+    from pashe._internal.cache.entry import Stored
 
 
 _NO_CACHE: Final = contextvars.ContextVar("pashe_no_cache", default=False)
@@ -55,24 +55,52 @@ def in_no_cache() -> bool:
 
 
 @final
-@dataclass(slots=True)
-class CallState:
+class Stopwatch:
+    # the seconds the function ran for one call, a failed load included: what its Outcome reports
+    __slots__ = ("seconds",)
+
+    def __init__(self) -> None:
+        self.seconds: float = 0
+
+    @contextlib.contextmanager
+    def running(self) -> Generator[None]:
+        start = time.perf_counter()
+        try:
+            yield
+        finally:
+            self.seconds += time.perf_counter() - start
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class Call:
     # one call of a cached function, as it goes from the read to the store
     key: str
     tags: tuple[str, ...] = ()
-    tag_generations: Generations = ()  # read before the load: a tag invalidated during it makes the entry a miss
-    load_seconds: float = 0
-    has_stale_answer: bool = False  # a stale result can answer if the load fails or waits for a slot
     changes_at_start: int = 0  # the sets and deletes by hand of its function cache when it started
+    stopwatch: Stopwatch = field(default_factory=Stopwatch)
+
+    def restarted(self) -> Call:
+        # the same call for a load apart from it, which times itself
+        return replace(self, stopwatch=Stopwatch())
 
 
 @final
 @dataclass(frozen=True, slots=True)
 class Answer:
-    value: object  # decoded as the return type
+    result: object  # decoded as the return type
     status: CacheStatus
     load_seconds: float = 0
     stale_at: float | None = None  # when the result stops being fresh; None if it was not stored
+
+    @classmethod
+    def of(
+        cls,
+        stored: Stored,
+        status: CacheStatus,
+        load_seconds: float = 0,
+    ) -> Self:
+        return cls(stored.result, status, load_seconds, stored.entry.stale_at)
 
 
 @final
@@ -103,12 +131,3 @@ class CallReporter:
     ) -> None:
         left = None if stale_at is None else stale_at - self._clock()
         self._hooks.on_call(Outcome(self._function, self._full_key(key), status, load_seconds, left))
-
-
-@contextlib.contextmanager
-def timed(state: CallState) -> Generator[None]:
-    start = time.perf_counter()
-    try:
-        yield
-    finally:
-        state.load_seconds += time.perf_counter() - start

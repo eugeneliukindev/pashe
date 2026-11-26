@@ -161,6 +161,20 @@ async def test_refresh_loads_and_stores_whatever_is_stored(new_process_cache: Ne
     assert source.calls == 2
 
 
+async def test_a_refresh_after_a_change_by_hand_stores_what_it_loaded(new_process_cache: NewCache) -> None:
+    cache = new_process_cache()
+    source = Source()
+    get_user = cached_function(cache, source, ttl=60)
+    await call(get_user, 1)
+    await call(get_user.invalidate, 2)
+    source.version = 3
+
+    await call(get_user.refresh, 1)
+
+    assert await call(get_user, 1) == {"id": 1, "version": 3}
+    assert source.calls == 2
+
+
 async def test_a_refresh_the_policy_does_not_store_drops_the_old_result(new_process_cache: NewCache) -> None:
     cache = new_process_cache()
     source = Source()
@@ -725,9 +739,9 @@ async def test_a_waiter_loads_when_the_caller_it_waited_for_is_cancelled(new_pro
         return loads
 
     first = asyncio.create_task(get_user(1))
-    await loading.wait()  # it leads the flight, past the read of the store
+    await loading.wait()  # it leads the shared load, past the read of the store
     waiter = asyncio.create_task(get_user(1))
-    await asyncio.sleep(0)  # the waiter joins the flight
+    await asyncio.sleep(0)  # the waiter joins the shared load
 
     first.cancel()
     loaded = await waiter
@@ -1069,8 +1083,24 @@ async def test_a_function_without_a_return_annotation_is_cached(side: Side, new_
 
     users = [await call(cached, 1), await call(cached, 1)]
 
-    assert users == [{"id": 1}] * 2  # decoded as the codec reads it back on its own
+    assert users == [{"id": 1}] * 2  # a hit as the codec reads it back on its own
     assert calls == 1
+
+
+async def test_a_miss_answers_with_the_result_itself(side: Side, new_process_cache: NewCache) -> None:
+    cache = new_process_cache()
+    user = {"id": 1}
+    users = {1: user}
+
+    def get_user(user_id: int) -> dict[str, int]:
+        return users[user_id]
+
+    cached = cache(ttl=60)(side.function(get_user))
+
+    first, second = await call(cached, 1), await call(cached, 1)
+
+    assert first is user
+    assert second == user
 
 
 async def test_a_compressor_shrinks_what_is_stored() -> None:

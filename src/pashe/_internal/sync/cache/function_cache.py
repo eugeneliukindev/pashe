@@ -2,14 +2,15 @@
 # src/pashe/_internal/async_/cache/function_cache.py
 from __future__ import annotations
 
+import dataclasses
 import functools
 from typing import TYPE_CHECKING, final
 
-from pashe._internal.cache.call import Answer, CallState, in_no_cache, timed
+from pashe._internal.cache.call import Answer, Call, in_no_cache
 from pashe._internal.cache.keys import KeyPrefix
-from pashe._internal.sync.cache.revalidation import Revalidation
-from pashe._internal.sync.locks.locking import acquire, release
-from pashe._internal.sync.threads import ConcurrencyLimit, SingleFlight
+from pashe._internal.sync.cache.reload import Reload
+from pashe._internal.sync.locks.locking import take
+from pashe._internal.sync.threads import LoadLimit, SharedLoads
 from pashe.errors import BackendError, NotFoundError
 from pashe.hooks import CacheStatus, Failure, Operation
 
@@ -17,11 +18,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from pashe._internal.cache.call import CallReporter
-    from pashe._internal.cache.entry import Stored
-    from pashe._internal.cache.entry_codec import EntryCodec
+    from pashe._internal.cache.entry import EntryFormat, Lookup, Stored
     from pashe._internal.cache.policy import Policy
     from pashe._internal.sync.backends.prefixed import PrefixedBackend
-    from pashe._internal.sync.cache.fallback import FallbackStore
+    from pashe._internal.sync.cache.storage import Storage
     from pashe._internal.sync.cache.tags import Tags
     from pashe._internal.sync.threads import BackgroundTasks
     from pashe.hooks import Hook
@@ -31,19 +31,19 @@ type Load[V] = Callable[[], V]  # a call of the cached function with its argumen
 
 @final
 class FunctionCache[V]:
-    # The cache of one function: reads an entry, answers from it, or loads and stores. Its policy
-    # decides, its codec encodes, and it tells the hooks of what it works around.
+    # The cache of one function: answers from what its storage finds, or loads and keeps. Its
+    # policy decides, its format encodes, and it tells the hooks of what it works around.
     __slots__ = (
         "_backend",
         "_changes",
-        "_codec",
-        "_concurrency",
-        "_fallback",
+        "_format",
         "_hooks",
+        "_load_limit",
         "_policy",
+        "_reload",
         "_reporter",
-        "_revalidation",
-        "_single_flight",
+        "_shared_loads",
+        "_storage",
         "_tags",
     )
 
@@ -51,31 +51,28 @@ class FunctionCache[V]:
         self,
         policy: Policy,
         *,
-        codec: EntryCodec,
+        storage: Storage,
+        entry_format: EntryFormat,
+        tags: Tags,
+        backend: PrefixedBackend,
+        background: BackgroundTasks,
         reporter: CallReporter,
         hooks: Hook,
-        backend: PrefixedBackend,
-        tags: Tags,
-        fallback: FallbackStore,
-        background: BackgroundTasks,
     ) -> None:
         self._policy = policy
-        self._codec = codec
+        self._storage = storage
+        self._format = entry_format
+        self._tags = tags  # its invalidations in this process end the sharing of a load
+        self._backend = backend  # for the Stampede.lock_for lock
         self._reporter = reporter
         self._hooks = hooks
-
-        self._backend = backend
-        self._tags = tags
-        self._fallback = fallback
 
         # the sets and deletes by hand in this process: a load that started before one stores
         # nothing, and is shared with no call after it
         self._changes = 0
-        self._single_flight = SingleFlight()
-        self._revalidation = Revalidation(
-            backend=backend, background=background, hooks=hooks, slow_after=policy.stale.slow_after
-        )
-        self._concurrency = ConcurrencyLimit(policy.stampede.max_loads)
+        self._shared_loads = SharedLoads()
+        self._reload = Reload(backend=backend, background=background, slow_after=policy.stale.slow_after, hooks=hooks)
+        self._load_limit = LoadLimit(policy.stampede.max_loads)
 
     def get_or_load(
         self,
@@ -83,21 +80,21 @@ class FunctionCache[V]:
         tags: tuple[str, ...],
         load: Load[V],
     ) -> V:
-        state = CallState(key, tags, changes_at_start=self._changes)
+        call = Call(key, tags, changes_at_start=self._changes)
         try:
             if in_no_cache():  # it shares no answer: another call may answer from the backend
-                answer = self._bypass(state, load)
+                answer = self._load_and_store(call, self._storage.open(key, tags), load)
             elif self._policy.stampede.share_loads:
-                flight_key = (
+                share_key = (
                     key,
                     self._tags.invalidation_count,
                     self._changes,
                 )  # no load started before a change is shared
-                answer = self._single_flight.share(flight_key, functools.partial(self._serve, state, load))
+                answer = self._shared_loads.share(share_key, functools.partial(self._serve, call, load))
             else:
-                answer = self._serve(state, load)
+                answer = self._serve(call, load)
         except Exception:
-            self._reporter.report(key, CacheStatus.MISS, load_seconds=state.load_seconds)
+            self._reporter.report(key, CacheStatus.MISS, load_seconds=call.stopwatch.seconds)
             raise
         return self._result(key, answer)
 
@@ -107,29 +104,22 @@ class FunctionCache[V]:
         tags: tuple[str, ...],
         load: Load[V],
     ) -> V:
-        state = CallState(key, tags)
-        try:
-            state.tag_generations = self._tags.generations(tags)
-        except BackendError as error:
-            self._hooks.on_error(Failure(Operation.READ_TAGS, key, error))
-            value = self._run(state, load)
-            self._fallback.set(key, self._codec.encode_loaded(state, value))
-            return value
-
-        value = self._run(state, load)
-        stored = self._codec.encode_loaded(state, value)
-        if stored is None:
-            self._backend.delete(key)  # the old result must not answer after a refresh
-            return value
-        self._store(state, stored)
-        return stored.value  # type: ignore[return-value]  # decoded as the return type
+        call = Call(key, tags, changes_at_start=self._changes)
+        lookup = self._storage.open(key, tags)
+        result = self._run(call, load, has_stale_answer=False)
+        stored = self._format.encode_loaded(result, load_seconds=call.stopwatch.seconds, key=key)
+        if stored is None and not lookup.from_fallback:
+            self._storage.delete(key)  # the old result must not answer after a refresh
+            return result
+        self._keep_unless_changed(call, lookup, stored)
+        return result if stored is None or lookup.from_fallback else stored.result  # type: ignore[return-value]  # decoded as the return type
 
     def get(self, key: str, tags: tuple[str, ...]) -> V | None:
         # The fresh result alone, loading nothing: a failing backend raises, as there is no load to answer with.
         if in_no_cache():
             self._reporter.report(key, CacheStatus.MISS)
             return None
-        _, answer = self._read(CallState(key, tags))
+        answer = self._policy.answer_for(self._format.decode(self._storage.get(key, tags)))
         if answer is None or answer.status is CacheStatus.STALE_WHILE_REVALIDATE:
             self._reporter.report(key, CacheStatus.MISS)
             return None
@@ -139,150 +129,146 @@ class FunctionCache[V]:
         self,
         key: str,
         tags: tuple[str, ...],
-        value: V,
+        result: V,
     ) -> None:
         self._changes += 1  # before the write: a load that ends after it must not overwrite it
-        state = CallState(key, tags, self._tags.generations(tags))
-        stored = self._codec.encode(state, value)
-        if stored is None:
-            self._backend.delete(key)
-        else:
-            self._backend.set(key, stored.raw, ttl=self._policy.storage_lifetime(stored))
+        self._storage.set(key, tags, self._format.encode(result, key=key))
 
     def delete(self, key: str) -> bool:
         self._changes += 1  # before the delete, as in set
-        return self._backend.delete(key)
+        return self._storage.delete(key)
 
     def _result(self, key: str, answer: Answer) -> V:
         self._reporter.report(key, answer.status, load_seconds=answer.load_seconds, stale_at=answer.stale_at)
         if answer.status is CacheStatus.NOT_FOUND:
             raise NotFoundError(key)  # kept by an earlier call, as Negative says
-        return answer.value  # type: ignore[return-value]  # decoded as the return type
+        return answer.result  # type: ignore[return-value]  # decoded as the return type
 
-    def _bypass(self, state: CallState, load: Load[V]) -> Answer:
-        # no stored result answers: load, and store for the calls after it
-        try:
-            state.tag_generations = self._tags.generations(state.tags)
-        except BackendError as error:  # stored untagged, it is a miss for the calls after it
-            self._hooks.on_error(Failure(Operation.READ_TAGS, state.key, error))
-        return self._load_and_store(state, load)
+    def _serve(self, call: Call, load: Load[V]) -> Answer:  # noqa: WPS212 - one return for each way a call is answered
+        lookup = self._storage.find(call.key, call.tags)
+        stored = self._format.decode(lookup)
+        if (
+            lookup.from_fallback
+        ):  # the backend fails: what the fallback kept answers, untagged, or the load is kept there
+            if stored is None:
+                return self._load_and_store(call, lookup, load)
+            return (
+                Answer(None, CacheStatus.NOT_FOUND)
+                if stored.entry.negative
+                else Answer.of(stored, CacheStatus.FALLBACK)
+            )
 
-    def _serve(self, state: CallState, load: Load[V]) -> Answer:
-        try:
-            stored, answer = self._read(state)
-        except BackendError as error:
-            self._hooks.on_error(Failure(Operation.GET, state.key, error))
-            return self._serve_from_fallback(state, load)
+        answer = self._policy.answer_for(stored)
         if answer is not None:
             if self._policy.should_revalidate(answer):
-                self._revalidation.start(state, functools.partial(self._load_and_store, load=load))
+                load_and_store = functools.partial(
+                    self._load_and_store, lookup=lookup, load=load, has_stale_answer=True
+                )
+                self._reload.start(call, load_and_store)  # the old result answered: a full limit skips it
             return answer
 
         if stored is not None and not stored.entry.negative:
-            return self._serve_stale_or_load(state, stored, load)
+            return self._serve_stale_or_load(call, lookup, load, stored=stored)
         if self._policy.stampede.lock_for > 0:
-            return self._load_under_lock(state, load)
-        return self._load_and_store(state, load)
+            return self._load_under_lock(call, lookup, load)
+        return self._load_and_store(call, lookup, load)
 
-    def _read(self, state: CallState) -> tuple[Stored | None, Answer | None]:
-        # The entry and how it answers. A load after it stores with the generations read here, so
-        # a tag invalidated during the load makes what it stores a miss.
-        raw, generations = self._tags.read(state.key, state.tags)
-        state.tag_generations = generations
-        stored = self._codec.decode(state.key, raw, generations)
-        return stored, self._policy.answer_for(stored)
-
-    def _run(self, state: CallState, load: Load[V]) -> V:
-        with self._concurrency.slot(has_stale_answer=state.has_stale_answer), timed(state):
+    def _run(
+        self,
+        call: Call,
+        load: Load[V],
+        *,
+        has_stale_answer: bool,
+    ) -> V:
+        # a stale result that can answer skips a full limit of loads
+        with self._load_limit.slot(wait=not has_stale_answer), call.stopwatch.running():
             return load()
 
-    def _load_or_not_found(
+    def _load_and_store(
         self,
-        state: CallState,
+        call: Call,
+        lookup: Lookup,
         load: Load[V],
-        keep: Callable[[Stored], None],
-    ) -> V:
-        # an error Negative names is kept by keep as the answer of the calls after it
+        *,
+        has_stale_answer: bool = False,
+    ) -> Answer:
         try:
-            return self._run(state, load)
+            result = self._run(call, load, has_stale_answer=has_stale_answer)
         except Exception as error:
             if not self._policy.is_negative(error):
                 raise
-            stored = self._codec.encode_negative(state)
-            if stored is not None:
-                keep(stored)
-            raise NotFoundError(state.key) from error
+            self._keep_unless_changed(call, lookup, self._format.encode_not_found())  # the answer of the calls after it
+            raise NotFoundError(call.key) from error
 
-    def _load_and_store(self, state: CallState, load: Load[V]) -> Answer:
-        value = self._load_or_not_found(state, load, functools.partial(self._store, state))
-        stored = self._codec.encode_loaded(state, value)
-        if stored is None:
-            return Answer(value, CacheStatus.MISS, state.load_seconds)
-        self._store(state, stored)
-        return Answer(stored.value, CacheStatus.MISS, state.load_seconds, stored.entry.stale_at)
+        stored = self._format.encode_loaded(result, load_seconds=call.stopwatch.seconds, key=call.key)
+        self._keep_unless_changed(call, lookup, stored)
+        if stored is None or lookup.from_fallback:
+            return Answer(result, CacheStatus.MISS, call.stopwatch.seconds)
+        return Answer.of(stored, CacheStatus.MISS, call.stopwatch.seconds)
 
-    def _store(self, state: CallState, stored: Stored) -> None:
-        if state.changes_at_start != self._changes:  # set or deleted by hand while it loaded: what it loaded is old
+    def _keep_unless_changed(
+        self,
+        call: Call,
+        lookup: Lookup,
+        stored: Stored | None,
+    ) -> None:
+        if call.changes_at_start != self._changes:  # set or deleted by hand while it loaded: what it loaded is old
             return
-        try:
-            self._backend.set(state.key, stored.raw, ttl=self._policy.storage_lifetime(stored))
-        except BackendError as error:
-            self._hooks.on_error(Failure(Operation.SET, state.key, error))
-            self._fallback.set(state.key, stored)  # kept in the fallback while the backend fails
+        self._storage.keep(lookup, stored)
 
-    def _load_under_lock(self, state: CallState, load: Load[V]) -> Answer:
-        lock_key = KeyPrefix.STAMPEDE_LOCK + state.key
+    def _load_under_lock(  # noqa: WPS231 - the lock, the read after it and the load in one place
+        self,
+        call: Call,
+        lookup: Lookup,
+        load: Load[V],
+    ) -> Answer:
+        lock_key = KeyPrefix.STAMPEDE_LOCK + call.key
         try:
-            owner = acquire(self._backend, lock_key, self._policy.stampede.lock_for)
+            lease = take(self._backend, (lock_key,), self._policy.stampede.lock_for, name=lock_key, hooks=self._hooks)
         except BackendError as error:
-            self._hooks.on_error(Failure(Operation.STAMPEDE_LOCK, state.key, error))
-            return self._load_and_store(state, load)
+            self._hooks.on_error(Failure(Operation.STAMPEDE_LOCK, call.key, error))
+            return self._load_and_store(call, lookup, load)
         try:
-            return self._read_after_lock(state) or self._load_and_store(state, load)
+            # The load before this one may have stored it. A load after this read stores with its
+            # generations; with the backend failing, with those of the read before the lock.
+            try:  # noqa: WPS505 - a read that fails loads all the same, and the lock is released either way
+                lookup = self._storage.get(call.key, call.tags)
+            except BackendError as error:
+                self._hooks.on_error(Failure(Operation.GET, call.key, error))
+            else:
+                answer = self._policy.answer_for(self._format.decode(lookup))
+                if answer is not None:  # a "not found" the load before this one kept answers as it is
+                    hit = answer.status is not CacheStatus.NOT_FOUND
+                    return dataclasses.replace(answer, status=CacheStatus.HIT) if hit else answer
+            return self._load_and_store(call, lookup, load)
         finally:
-            release(self._backend, lock_key, owner, hooks=self._hooks)
-
-    def _read_after_lock(self, state: CallState) -> Answer | None:
-        try:
-            _, answer = self._read(state)
-        except BackendError as error:
-            self._hooks.on_error(Failure(Operation.GET, state.key, error))
-            return None
-        if answer is None or answer.status is CacheStatus.NOT_FOUND:
-            return answer  # the load before this one kept a "not found"
-        return Answer(answer.value, CacheStatus.HIT, stale_at=answer.stale_at)
+            if lease is not None:  # with no timeout it waits until it takes the lock
+                lease.release()
 
     def _serve_stale_or_load(
         self,
-        state: CallState,
-        stored: Stored,
+        call: Call,
+        lookup: Lookup,
         load: Load[V],
+        *,
+        stored: Stored,
     ) -> Answer:
+        # a result past its TTL that a window of Stale keeps: it answers if the load fails or is slow
         if_error, if_slow = self._policy.stale_windows(stored)
-        state.has_stale_answer = if_error or if_slow
+        has_stale_answer = if_error or if_slow
+        load_and_store = functools.partial(
+            self._load_and_store, lookup=lookup, load=load, has_stale_answer=has_stale_answer
+        )
         try:
-            if if_slow:
-                loaded = self._revalidation.wait_at_most_slow_after(
-                    state, functools.partial(self._load_and_store, load=load)
-                )
-            else:
-                loaded = self._load_and_store(state, load)
+            loaded = self._reload.wait_at_most_slow_after(call, load_and_store) if if_slow else load_and_store(call)
         except Exception as error:
-            stale = self._policy.stale_answer(state, stored, error)
-            if stale is None:
+            stale_answer = self._policy.stale_answer(
+                stored, error, load_seconds=call.stopwatch.seconds, has_stale_answer=has_stale_answer
+            )
+            if stale_answer is None:
                 raise
-            self._hooks.on_error(Failure(Operation.LOAD, state.key, error))
-            return stale
+            self._hooks.on_error(Failure(Operation.LOAD, call.key, error))
+            return stale_answer
         if loaded is None:  # too slow to wait for
-            return Answer(stored.value, CacheStatus.STALE_IF_SLOW, state.load_seconds, stored.entry.stale_at)
+            return Answer.of(stored, CacheStatus.STALE_IF_SLOW, call.stopwatch.seconds)
         return loaded
-
-    def _serve_from_fallback(self, state: CallState, load: Load[V]) -> Answer:
-        kept = self._codec.decode(state.key, self._fallback.get(state.key), ())  # the fallback keeps no tags
-        if kept is not None:
-            if kept.entry.negative:
-                return Answer(None, CacheStatus.NOT_FOUND)
-            return Answer(kept.value, CacheStatus.FALLBACK, stale_at=kept.entry.stale_at)
-        value = self._load_or_not_found(state, load, functools.partial(self._fallback.set, state.key))
-        self._fallback.set(state.key, self._codec.encode_loaded(state, value))
-        return Answer(value, CacheStatus.MISS, state.load_seconds)

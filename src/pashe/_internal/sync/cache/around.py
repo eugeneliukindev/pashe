@@ -6,16 +6,18 @@ import functools
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, final, override
 
-from pashe._internal.cache.keys import KeyBuilder, KeyTemplate, key_name
-from pashe._internal.sync.threads import check_side
+from pashe._internal.cache.keys import CallKeys, KeyTemplate, key_name
+from pashe._internal.sync.locks.lock import Lock
+from pashe._internal.sync.threads import expect_side
 from pashe.errors import BackendError
 from pashe.hooks import Failure, Operation
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from pashe._internal.sync.cache.cache import Cache
+    from pashe._internal.sync.backends.prefixed import PrefixedBackend
     from pashe._internal.sync.cache.tags import Tags
+    from pashe._internal.sync.limiter import RateLimiter
     from pashe.hooks import Hook
     from pashe.ratelimit import Limit
 
@@ -23,16 +25,10 @@ if TYPE_CHECKING:
 class KeyedDecorator(ABC):
     """What the decorators of a lock and of a rate limit share: every call runs under its key."""
 
-    __slots__ = ("_cache", "_key", "_key_secret")
+    __slots__ = ("_key_secret", "_key_template")
 
-    def __init__(
-        self,
-        cache: Cache,
-        key: KeyTemplate | None,
-        key_secret: bytes | None,
-    ) -> None:
-        self._cache = cache
-        self._key = key
+    def __init__(self, key_template: KeyTemplate | None, key_secret: bytes | None) -> None:
+        self._key_template = key_template
         self._key_secret = key_secret  # for the default key: the name of the function
 
     def __call__[**P, R](self, function: Callable[P, R]) -> Callable[P, R]:
@@ -44,8 +40,8 @@ class KeyedDecorator(ABC):
         Returns:
             function, run under its key.
         """
-        check_side(function, "decorate")
-        keys = KeyBuilder(function, self._key or KeyTemplate(key_name(function), secret=self._key_secret), ())
+        expect_side(function, "decorate")
+        keys = CallKeys(function, self._key_template or KeyTemplate(key_name(function), secret=self._key_secret), ())
 
         @functools.wraps(function)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
@@ -62,27 +58,33 @@ class KeyedDecorator(ABC):
 class LockedDecorator(KeyedDecorator):
     """What ``@cache.locked(...)`` returns: a decorator that runs every call under the lock of its key."""
 
-    __slots__ = ("_holders", "_timeout", "_ttl")
+    __slots__ = ("_backend", "_holders", "_hooks", "_timeout", "_ttl")
 
     def __init__(
         self,
-        cache: Cache,
-        key: KeyTemplate | None,
+        key_template: KeyTemplate | None,
         key_secret: bytes | None,
         *,
         ttl: float,
         timeout: float | None,
         holders: int,
+        backend: PrefixedBackend,
+        hooks: Hook,
     ) -> None:
-        super().__init__(cache, key, key_secret)
+        super().__init__(key_template, key_secret)
 
         self._ttl = ttl
         self._timeout = timeout
         self._holders = holders
+        self._backend = backend  # the backend of the locks of the cache
+        self._hooks = hooks
 
     @override
     def _run[R](self, key: str, call: Callable[[], R]) -> R:
-        with self._cache.lock(key, ttl=self._ttl, timeout=self._timeout, holders=self._holders):
+        lock = Lock(
+            self._backend, key=key, ttl=self._ttl, timeout=self._timeout, holders=self._holders, hooks=self._hooks
+        )
+        with lock:
             return call()
 
 
@@ -90,23 +92,24 @@ class LockedDecorator(KeyedDecorator):
 class RateLimitedDecorator(KeyedDecorator):
     """What ``@cache.rate_limited(...)`` returns: a decorator that counts every call before it runs."""
 
-    __slots__ = ("_limit",)
+    __slots__ = ("_limit", "_limiter")
 
     def __init__(
         self,
-        cache: Cache,
-        key: KeyTemplate | None,
+        key_template: KeyTemplate | None,
         key_secret: bytes | None,
         *,
         limit: Limit,
+        limiter: RateLimiter,
     ) -> None:
-        super().__init__(cache, key, key_secret)
+        super().__init__(key_template, key_secret)
 
         self._limit = limit
+        self._limiter = limiter
 
     @override
     def _run[R](self, key: str, call: Callable[[], R]) -> R:
-        self._cache.rate_limit(key, self._limit)  # over the limit it raises RateLimitedError
+        self._limiter.count(key, self._limit, cost=1, fail_open=True)  # as rate_limit counts by default
         return call()
 
 
@@ -114,16 +117,16 @@ class RateLimitedDecorator(KeyedDecorator):
 class InvalidatingDecorator:
     """What ``@cache.invalidates(...)`` returns: a decorator that invalidates the tags of every call after it ran, even one that raised."""
 
-    __slots__ = ("_hooks", "_tags", "_templates")
+    __slots__ = ("_hooks", "_tag_templates", "_tags")
 
     def __init__(
         self,
-        templates: tuple[KeyTemplate, ...],
+        tag_templates: tuple[KeyTemplate, ...],
         tags: Tags,
         *,
         hooks: Hook,
     ) -> None:
-        self._templates = templates
+        self._tag_templates = tag_templates
         self._tags = tags
         self._hooks = hooks
 
@@ -136,8 +139,8 @@ class InvalidatingDecorator:
         Returns:
             function, invalidating its tags.
         """
-        check_side(function, "decorate")
-        keys = KeyBuilder(function, None, self._templates)
+        expect_side(function, "decorate")
+        keys = CallKeys(function, None, self._tag_templates)
 
         @functools.wraps(function)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:

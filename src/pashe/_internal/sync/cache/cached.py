@@ -7,22 +7,22 @@ from typing import TYPE_CHECKING, Concatenate, Self, final, overload, override
 
 from pashe._internal.cache.call import CallReporter
 from pashe._internal.cache.entry import EntryFormat
-from pashe._internal.cache.entry_codec import EntryCodec
-from pashe._internal.cache.keys import KeyBuilder, key_name, qualified_name
+from pashe._internal.cache.keys import CallKeys, key_name, qualified_name
 from pashe._internal.cache.value_types import return_type
 from pashe._internal.sync.cache.function_cache import FunctionCache
-from pashe._internal.sync.threads import BackgroundTasks, check_side
+from pashe._internal.sync.threads import BackgroundTasks, expect_side
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
-    from pashe._internal.cache.entry import Serializer
     from pashe._internal.cache.keys import KeyTemplate
     from pashe._internal.cache.policy import Policy
     from pashe._internal.sync.backends.prefixed import PrefixedBackend
-    from pashe._internal.sync.cache.fallback import FallbackStore
     from pashe._internal.sync.cache.function_cache import Load
+    from pashe._internal.sync.cache.storage import Storage
     from pashe._internal.sync.cache.tags import Tags
+    from pashe.codecs import Codec
+    from pashe.compressors import Compressor
     from pashe.hooks import Hook
 
 
@@ -50,7 +50,7 @@ class CachedValue[**P, R]:
     def __init__(
         self,
         function: Callable[P, R],
-        keys: KeyBuilder,
+        keys: CallKeys,
         function_cache: FunctionCache[R],
         *,
         instance: object | None = None,
@@ -153,6 +153,11 @@ class CachedValue[**P, R]:
         """
         return self._function_cache.delete(self._bind(args, kwargs)[0])
 
+    @override
+    def __repr__(self) -> str:
+        """Show the function, by its qualified name."""
+        return f"{type(self).__name__}({getattr(self._function, '__qualname__', self._function)})"
+
     @overload
     def __get__(self, instance: None, owner: type[object]) -> Self: ...
 
@@ -176,9 +181,9 @@ class CachedValue[**P, R]:
     ) -> tuple[str, tuple[str, ...], Load[R]]:
         full = tuple(args) if self._instance is None else (self._instance, *args)
         function: Callable[..., R] = self._function  # bound to the instance of a method
-        bound = functools.partial(function, *full, **kwargs)
+        load = functools.partial(function, *full, **kwargs)
         key, tags = self._keys.key_and_tags(full, kwargs)
-        return key, tags, bound
+        return key, tags, load
 
 
 @final
@@ -282,12 +287,13 @@ class CachedFunctionDecorator:
     __slots__ = (
         "_backend",
         "_background",
-        "_fallback",
+        "_codec",
+        "_compressor",
         "_hooks",
-        "_key",
+        "_key_template",
         "_policy",
-        "_serializer",
-        "_tag_store",
+        "_storage",
+        "_tag_templates",
         "_tags",
     )
 
@@ -296,23 +302,25 @@ class CachedFunctionDecorator:
         policy: Policy,
         /,
         *,
-        key: KeyTemplate | None,
-        tags: tuple[KeyTemplate, ...],
-        serializer: Serializer,
+        key_template: KeyTemplate | None,
+        tag_templates: tuple[KeyTemplate, ...],
+        codec: Codec,
+        compressor: Compressor,
+        storage: Storage,
+        tags: Tags,
         backend: PrefixedBackend,
-        tag_store: Tags,
-        fallback: FallbackStore,
         background: BackgroundTasks,
         hooks: Hook,
     ) -> None:
         self._policy = policy
-        self._key = key
-        self._tags = tags
+        self._key_template = key_template
+        self._tag_templates = tag_templates
 
-        self._serializer = serializer
+        self._codec = codec
+        self._compressor = compressor
+        self._storage = storage
+        self._tags = tags
         self._backend = backend
-        self._tag_store = tag_store
-        self._fallback = fallback
         self._background = background
         self._hooks = hooks
 
@@ -338,25 +346,26 @@ class CachedFunctionDecorator:
         """
         return CachedValue(function, *self._keys_and_cache(function))
 
-    def _keys_and_cache[T](self, function: Callable[..., T]) -> tuple[KeyBuilder, FunctionCache[T]]:
-        check_side(function, "cache")
-        if self._key is None:
+    def _keys_and_cache[T](self, function: Callable[..., T]) -> tuple[CallKeys, FunctionCache[T]]:
+        expect_side(function, "cache")
+        if self._key_template is None:
             key_name(function)  # refuses a lambda, whose name is no key of its own
-        keys = KeyBuilder(function, self._key, self._tags)
+        keys = CallKeys(function, self._key_template, self._tag_templates)
 
-        value_type = return_type(function)
-        self._serializer.check(value_type)  # a type the codec gives back as another one is refused here
+        entry_format = EntryFormat(
+            self._policy, return_type(function), codec=self._codec, compressor=self._compressor, hooks=self._hooks
+        )
         function_cache = FunctionCache[T](
             self._policy,
-            codec=EntryCodec(self._policy, EntryFormat(self._serializer, value_type), self._hooks),
+            storage=self._storage,
+            entry_format=entry_format,
+            tags=self._tags,
+            backend=self._backend,
+            background=self._background,
             reporter=CallReporter(
                 qualified_name(function), self._backend.full_key, hooks=self._hooks, clock=self._policy.clock
             ),
             hooks=self._hooks,
-            backend=self._backend,
-            tags=self._tag_store,
-            fallback=self._fallback,
-            background=self._background,
         )
         return keys, function_cache
 

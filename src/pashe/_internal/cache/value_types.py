@@ -3,6 +3,7 @@ from __future__ import annotations
 import enum
 import functools
 import hashlib
+import inspect
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, ClassVar, Final, NewType, TypeAliasType, get_args, get_origin, get_type_hints
 
@@ -55,7 +56,7 @@ def _name(form: object) -> str:
     return getattr(form, "__qualname__", repr(form)) if get_origin(form) is None else repr(form)
 
 
-def _describe(form: object, seen: frozenset[object]) -> str:
+def _describe(form: object, seen: frozenset[object]) -> str:  # noqa: PLR0911, WPS212 - one return for each kind of type
     # what a type alias or a NewType stands for counts: a value of the alias changed is another shape
     if isinstance(form, TypeAliasType):
         return form.__name__ if form in seen else _describe(form.__value__, seen | {form})
@@ -65,12 +66,9 @@ def _describe(form: object, seen: frozenset[object]) -> str:
     if origin is not None:
         arguments = ",".join(_describe(argument, seen) for argument in get_args(form))
         return f"{_describe(origin, seen)}[{arguments}]"
-    if not isinstance(form, type):
+    if not inspect.isclass(form):
         return repr(form)  # a Literal value, a TypeVar
-    return _describe_class(form, seen)
 
-
-def _describe_class(form: type[object], seen: frozenset[object]) -> str:
     name = f"{form.__module__}.{form.__qualname__}"
     if form in seen:
         return name

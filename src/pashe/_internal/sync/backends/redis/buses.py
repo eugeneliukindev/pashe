@@ -18,7 +18,7 @@ import redis.cluster
 
 from pashe._internal.breakers import Breaker, NoOpBreaker
 from pashe._internal.checks import expect_type
-from pashe._internal.hooks import AllHooks
+from pashe._internal.hooks import Hooks
 from pashe._internal.redis.clients import translated_errors
 from pashe._internal.redis.messages import encode_message
 from pashe._internal.sync.backends.near import InvalidationBus
@@ -77,7 +77,7 @@ class RedisPubSubBus(InvalidationBus):
         self._client = client
         self._channel = channel
         self._breaker = breaker
-        self._hooks = AllHooks(hooks)
+        self._hooks = Hooks(hooks)
 
     @override
     def publish(self, keys: Sequence[str] | None, /) -> None:
@@ -129,7 +129,7 @@ class RedisTrackingBus(InvalidationBus):
 
         self._client = client
         self._prefix = prefix
-        self._hooks = AllHooks(hooks)
+        self._hooks = Hooks(hooks)
 
     @override
     def publish(self, keys: Sequence[str] | None, /) -> None:

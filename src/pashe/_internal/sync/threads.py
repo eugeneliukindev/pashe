@@ -16,41 +16,41 @@ _THREAD_PREFIX: Final = "pashe"
 
 
 @final
-class SingleFlight:
-    __slots__ = ("_calls", "_lock")
+class SharedLoads:
+    __slots__ = ("_loads", "_lock")
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._calls: dict[Hashable, _Shared[Any]] = {}
+        self._loads: dict[Hashable, _SharedLoad[Any]] = {}
 
     def share[T](self, key: Hashable, run: Callable[[], T]) -> T:
         with self._lock:
-            call: _Shared[T] | None = self._calls.get(key)
-            leading = call is None
-            if call is None:
-                call = _Shared()
-                self._calls[key] = call
+            load: _SharedLoad[T] | None = self._loads.get(key)
+            leading = load is None
+            if load is None:
+                load = _SharedLoad()
+                self._loads[key] = load
         if not leading:
-            return call.wait()  # what run returned; raises what it raised
+            return load.wait()  # what run returned; raises what it raised
         try:
-            call.value = run()
+            load.result = run()
         except BaseException as error:
-            call.error = error
+            load.error = error
             raise
         else:
-            return call.value
+            return load.result
         finally:
             with self._lock:
-                self._calls.pop(key)
-            call.done.release()
+                self._loads.pop(key)
+            load.done.release()
 
 
 @final
-class _Shared[T]:
-    # the load of a leader its waiters take: lighter than a Future, which makes a Condition per call
-    __slots__ = ("done", "error", "value")
+class _SharedLoad[T]:
+    # the load of a leader its waiters take: lighter than a Future, which makes a Condition per load
+    __slots__ = ("done", "error", "result")
 
-    value: T  # set by the leader before it releases done, unless it raised
+    result: T  # set by the leader before it releases done, unless it raised
 
     def __init__(self) -> None:
         self.done = threading.Lock()
@@ -62,11 +62,11 @@ class _Shared[T]:
         self.done.release()  # for the other waiters
         if self.error is not None:
             raise self.error
-        return self.value
+        return self.result
 
 
 @final
-class ConcurrencyLimit:
+class LoadLimit:
     __slots__ = ("_held", "_semaphore")
 
     def __init__(self, limit: int) -> None:
@@ -75,11 +75,13 @@ class ConcurrencyLimit:
         self._held = contextvars.ContextVar(f"pashe_slot_{id(self)}", default=False)
 
     @contextlib.contextmanager
-    def slot(self, *, has_stale_answer: bool) -> Generator[None]:
+    def slot(self, *, wait: bool) -> Generator[None]:
+        # with no limit, or inside a load of the same slots, it does nothing; with every slot
+        # taken, it waits, or raises OverloadedError if not wait
         if self._semaphore is None or self._held.get():
             yield
             return
-        if not self._semaphore.acquire(blocking=not has_stale_answer):  # a call a stale result answers waits for none
+        if not self._semaphore.acquire(blocking=wait):
             raise OverloadedError
         token = self._held.set(True)
         try:
@@ -119,7 +121,7 @@ class BackgroundTasks:
             executor.shutdown(wait=True)
 
 
-def check_side(function: Callable[..., object], action: Literal["decorate", "cache"]) -> None:
+def expect_side(function: Callable[..., object], action: Literal["decorate", "cache"]) -> None:
     if is_async(function):
         msg = f"{getattr(function, '__qualname__', function)} is async: {action} it with an AsyncCache"
         raise TypeError(msg)

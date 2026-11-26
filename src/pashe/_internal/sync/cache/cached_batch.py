@@ -3,26 +3,25 @@
 from __future__ import annotations
 
 import functools
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, final, override
 
 from pashe._internal.cache.call import CallReporter
 from pashe._internal.cache.entry import EntryFormat
-from pashe._internal.cache.entry_codec import EntryCodec
-from pashe._internal.cache.keys import KeyAndTags, item_key, key_name, qualified_name
+from pashe._internal.cache.keys import ItemKeys, qualified_name
 from pashe._internal.cache.value_types import item_type
-from pashe._internal.sync.cache.batch_function_cache import BatchFunctionCache
-from pashe._internal.sync.threads import check_side
+from pashe._internal.sync.cache.batch_cache import BatchCache
+from pashe._internal.sync.threads import expect_side
 
 if TYPE_CHECKING:
     from collections.abc import Hashable, Iterable
 
-    from pashe._internal.cache.entry import Serializer
     from pashe._internal.cache.keys import KeyTemplate
     from pashe._internal.cache.policy import Policy
     from pashe._internal.sync.backends.prefixed import PrefixedBackend
-    from pashe._internal.sync.cache.batch_function_cache import BatchFunction
-    from pashe._internal.sync.cache.fallback import FallbackStore
-    from pashe._internal.sync.cache.tags import Tags
+    from pashe._internal.sync.cache.batch_cache import BatchFunction
+    from pashe._internal.sync.cache.storage import Storage
+    from pashe.codecs import Codec
+    from pashe.compressors import Compressor
     from pashe.hooks import Hook
 
 
@@ -43,30 +42,25 @@ class CachedBatchFunction[K: Hashable, V]:
         {1: {'id': 1}, 2: {'id': 2}}
     """
 
-    __slots__ = ("__dict__", "_batch", "_function", "_key", "_name", "_tags")
+    __slots__ = ("__dict__", "_batch_cache", "_function", "_keys")
 
     def __init__(
         self,
         function: BatchFunction[K, V],
-        batch: BatchFunctionCache[K, V],
-        *,
-        key: KeyTemplate | None,
-        tags: tuple[KeyTemplate, ...],
+        keys: ItemKeys,
+        batch_cache: BatchCache[K, V],
     ) -> None:
         """Made by the batch decorator of a cache, not by hand.
 
         Args:
             function: the batch function whose results are cached per item.
-            batch: answers the items from the backend or by calling the function.
-            key: the template of the key of an item.
-            tags: the templates of the tags of an item.
+            keys: builds the key and the tags of an item.
+            batch_cache: answers the items from the backend or by calling the function.
         """
         self._function = function
-        self._batch = batch
-        self._key = key
-        self._tags = tags
+        self._keys = keys
+        self._batch_cache = batch_cache
 
-        self._name = key_name(function) if key is None else qualified_name(function)
         functools.update_wrapper(self, function)
 
     def __call__(self, items: Iterable[K], /) -> dict[K, V]:
@@ -92,13 +86,8 @@ class CachedBatchFunction[K: Hashable, V]:
             >>> get_users([0, 1])
             {1: {'id': 1}}
         """
-        calls = {
-            item: KeyAndTags(
-                item_key(self._name, self._key, item), tuple(tag.render((item,), {}) for tag in self._tags)
-            )
-            for item in items
-        }
-        return self._batch.get_or_load_many(calls, self._function)
+        calls = {item: self._keys.key_and_tags(item) for item in items}
+        return self._batch_cache.get_or_load_many(calls, self._function)
 
     def invalidate(self, item: K, /) -> bool:
         """Drop the cached result of item.
@@ -121,36 +110,50 @@ class CachedBatchFunction[K: Hashable, V]:
             >>> get_users.invalidate(1)
             True
         """
-        return self._batch.delete(item_key(self._name, self._key, item))
+        return self._batch_cache.delete(self._keys.key(item))
+
+    @override
+    def __repr__(self) -> str:
+        """Show the batch function, by its qualified name."""
+        return f"{type(self).__name__}({getattr(self._function, '__qualname__', self._function)})"
 
 
 @final
 class CachedBatchFunctionDecorator:
     """What ``@cache.batch(...)`` returns: a decorator that caches every item of a batch function on its own."""
 
-    __slots__ = ("_backend", "_fallback", "_hooks", "_key", "_policy", "_serializer", "_tag_store", "_tags")
+    __slots__ = (
+        "_backend",
+        "_codec",
+        "_compressor",
+        "_hooks",
+        "_key_template",
+        "_policy",
+        "_storage",
+        "_tag_templates",
+    )
 
     def __init__(
         self,
         policy: Policy,
         /,
         *,
-        key: KeyTemplate | None,
-        tags: tuple[KeyTemplate, ...],
-        serializer: Serializer,
+        key_template: KeyTemplate | None,
+        tag_templates: tuple[KeyTemplate, ...],
+        codec: Codec,
+        compressor: Compressor,
+        storage: Storage,
         backend: PrefixedBackend,
-        tag_store: Tags,
-        fallback: FallbackStore,
         hooks: Hook,
     ) -> None:
         self._policy = policy
-        self._key = key
-        self._tags = tags
+        self._key_template = key_template
+        self._tag_templates = tag_templates
 
-        self._serializer = serializer
-        self._backend = backend
-        self._tag_store = tag_store
-        self._fallback = fallback
+        self._codec = codec
+        self._compressor = compressor
+        self._storage = storage
+        self._backend = backend  # for the full keys the hooks are told
         self._hooks = hooks
 
     def __call__[K: Hashable, V](self, function: BatchFunction[K, V]) -> CachedBatchFunction[K, V]:
@@ -162,18 +165,19 @@ class CachedBatchFunctionDecorator:
         Returns:
             The cached batch function.
         """
-        check_side(function, "cache")
-        value_type = item_type(function)
-        self._serializer.check(value_type)  # a type the codec gives back as another one is refused here
-        batch = BatchFunctionCache[K, V](
+        expect_side(function, "cache")
+        entry_format = EntryFormat(
+            self._policy, item_type(function), codec=self._codec, compressor=self._compressor, hooks=self._hooks
+        )
+        keys = ItemKeys(function, self._key_template, self._tag_templates)
+
+        batch_cache = BatchCache[K, V](
             self._policy,
-            codec=EntryCodec(self._policy, EntryFormat(self._serializer, value_type), self._hooks),
+            storage=self._storage,
+            entry_format=entry_format,
             reporter=CallReporter(
                 qualified_name(function), self._backend.full_key, hooks=self._hooks, clock=self._policy.clock
             ),
             hooks=self._hooks,
-            backend=self._backend,
-            tags=self._tag_store,
-            fallback=self._fallback,
         )
-        return CachedBatchFunction(function, batch, key=self._key, tags=self._tags)
+        return CachedBatchFunction(function, keys, batch_cache)

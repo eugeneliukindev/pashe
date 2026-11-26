@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Final, final, override
 
 from pashe._internal.checks import expect_type, parse_seconds
-from pashe._internal.hooks import AllHooks
+from pashe._internal.hooks import Hooks
 from pashe._internal.sync.backends.backend import Backend
 from pashe._internal.sync.backends.memory import MemoryBackend
 from pashe.errors import BackendError, ValueTooLargeError
@@ -166,7 +166,7 @@ class NearCacheBackend(Backend):
         self._shared = shared
         self._local_ttl = local_ttl
         self._bus = bus
-        self._hooks = AllHooks(hooks)
+        self._hooks = Hooks(hooks)
 
         self._drops = _DropVersions()
         self._listen_lock = threading.Lock()  # one listener, also when threads read at once

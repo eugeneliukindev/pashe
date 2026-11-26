@@ -12,9 +12,9 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from pashe._internal.cache.entry import Generations
+    from pashe._internal.cache.keys import KeyAndTags
     from pashe._internal.sync.backends.backend import Backend
 
-type _Call = tuple[str, Sequence[str]]  # the key of an entry, and its tags
 type _Read = tuple[bytes | None, Generations]  # an entry as the backend keeps it, and the generations of its tags
 
 _GENERATION_BITS: Final = 62  # leaves room for invalidation_count to count up within 64 bits
@@ -40,14 +40,14 @@ class Tags:
         raws = self._backend.get_many([key, *counters])
         return raws[0], self._generations(counters, raws[1:])
 
-    def read_many(self, calls: Sequence[_Call]) -> list[_Read]:
+    def read_many(self, keys_and_tags: Sequence[KeyAndTags]) -> list[_Read]:
         # the entries of a batch and the generations of their tags, in one call to the backend
-        counters = list(dict.fromkeys(counter for _, tags in calls for counter in _counters(tags)))
-        raws = self._backend.get_many([*(key for key, _ in calls), *counters])
-        generations = dict(zip(counters, self._generations(counters, raws[len(calls) :]), strict=True))
+        counters = list(dict.fromkeys(counter for _, tags in keys_and_tags for counter in _counters(tags)))
+        raws = self._backend.get_many([*(key for key, _ in keys_and_tags), *counters])
+        generations = dict(zip(counters, self._generations(counters, raws[len(keys_and_tags) :]), strict=True))
         return [
             (raw, tuple(generations[counter] for counter in _counters(tags)))
-            for (_, tags), raw in zip(calls, raws, strict=False)  # raws: the entries, then the counters
+            for (_, tags), raw in zip(keys_and_tags, raws, strict=False)  # raws: the entries, then the counters
         ]
 
     def generations(self, tags: Sequence[str]) -> Generations:

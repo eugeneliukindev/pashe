@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 
 @final
-class AllHooks(Hook):
+class Hooks(Hook):
     __slots__ = ("_hooks",)
 
     def __init__(self, hooks: list[Hook] | tuple[Hook, ...]) -> None:

@@ -1,26 +1,25 @@
 from __future__ import annotations
 
 import functools
-from typing import TYPE_CHECKING, final
+from typing import TYPE_CHECKING, final, override
 
-from pashe._internal.async_.cache.batch_function_cache import AsyncBatchFunctionCache
-from pashe._internal.async_.tasks import acheck_side
+from pashe._internal.async_.cache.batch_cache import AsyncBatchCache
+from pashe._internal.async_.tasks import aexpect_side
 from pashe._internal.cache.call import CallReporter
 from pashe._internal.cache.entry import EntryFormat
-from pashe._internal.cache.entry_codec import EntryCodec
-from pashe._internal.cache.keys import KeyAndTags, item_key, key_name, qualified_name
+from pashe._internal.cache.keys import ItemKeys, qualified_name
 from pashe._internal.cache.value_types import item_type
 
 if TYPE_CHECKING:
     from collections.abc import Hashable, Iterable
 
     from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend
-    from pashe._internal.async_.cache.batch_function_cache import AsyncBatchFunction
-    from pashe._internal.async_.cache.fallback import AsyncFallbackStore
-    from pashe._internal.async_.cache.tags import AsyncTags
-    from pashe._internal.cache.entry import Serializer
+    from pashe._internal.async_.cache.batch_cache import AsyncBatchFunction
+    from pashe._internal.async_.cache.storage import AsyncStorage
     from pashe._internal.cache.keys import KeyTemplate
     from pashe._internal.cache.policy import Policy
+    from pashe.codecs import Codec
+    from pashe.compressors import Compressor
     from pashe.hooks import Hook
 
 
@@ -41,30 +40,25 @@ class AsyncCachedBatchFunction[K: Hashable, V]:
         {1: {'id': 1}, 2: {'id': 2}}
     """
 
-    __slots__ = ("__dict__", "_batch", "_function", "_key", "_name", "_tags")
+    __slots__ = ("__dict__", "_batch_cache", "_function", "_keys")
 
     def __init__(
         self,
         function: AsyncBatchFunction[K, V],
-        batch: AsyncBatchFunctionCache[K, V],
-        *,
-        key: KeyTemplate | None,
-        tags: tuple[KeyTemplate, ...],
+        keys: ItemKeys,
+        batch_cache: AsyncBatchCache[K, V],
     ) -> None:
         """Made by the batch decorator of a cache, not by hand.
 
         Args:
             function: the batch function whose results are cached per item.
-            batch: answers the items from the backend or by calling the function.
-            key: the template of the key of an item.
-            tags: the templates of the tags of an item.
+            keys: builds the key and the tags of an item.
+            batch_cache: answers the items from the backend or by calling the function.
         """
         self._function = function
-        self._batch = batch
-        self._key = key
-        self._tags = tags
+        self._keys = keys
+        self._batch_cache = batch_cache
 
-        self._name = key_name(function) if key is None else qualified_name(function)
         functools.update_wrapper(self, function)
 
     async def __call__(self, items: Iterable[K], /) -> dict[K, V]:
@@ -90,13 +84,8 @@ class AsyncCachedBatchFunction[K: Hashable, V]:
             >>> await get_users([0, 1])
             {1: {'id': 1}}
         """
-        calls = {
-            item: KeyAndTags(
-                item_key(self._name, self._key, item), tuple(tag.render((item,), {}) for tag in self._tags)
-            )
-            for item in items
-        }
-        return await self._batch.get_or_load_many(calls, self._function)
+        calls = {item: self._keys.key_and_tags(item) for item in items}
+        return await self._batch_cache.get_or_load_many(calls, self._function)
 
     async def invalidate(self, item: K, /) -> bool:
         """Drop the cached result of item.
@@ -119,36 +108,50 @@ class AsyncCachedBatchFunction[K: Hashable, V]:
             >>> await get_users.invalidate(1)
             True
         """
-        return await self._batch.delete(item_key(self._name, self._key, item))
+        return await self._batch_cache.delete(self._keys.key(item))
+
+    @override
+    def __repr__(self) -> str:
+        """Show the batch function, by its qualified name."""
+        return f"{type(self).__name__}({getattr(self._function, '__qualname__', self._function)})"
 
 
 @final
 class AsyncCachedBatchFunctionDecorator:
     """What ``@cache.batch(...)`` returns: a decorator that caches every item of a batch function on its own."""
 
-    __slots__ = ("_backend", "_fallback", "_hooks", "_key", "_policy", "_serializer", "_tag_store", "_tags")
+    __slots__ = (
+        "_backend",
+        "_codec",
+        "_compressor",
+        "_hooks",
+        "_key_template",
+        "_policy",
+        "_storage",
+        "_tag_templates",
+    )
 
     def __init__(
         self,
         policy: Policy,
         /,
         *,
-        key: KeyTemplate | None,
-        tags: tuple[KeyTemplate, ...],
-        serializer: Serializer,
+        key_template: KeyTemplate | None,
+        tag_templates: tuple[KeyTemplate, ...],
+        codec: Codec,
+        compressor: Compressor,
+        storage: AsyncStorage,
         backend: AsyncPrefixedBackend,
-        tag_store: AsyncTags,
-        fallback: AsyncFallbackStore,
         hooks: Hook,
     ) -> None:
         self._policy = policy
-        self._key = key
-        self._tags = tags
+        self._key_template = key_template
+        self._tag_templates = tag_templates
 
-        self._serializer = serializer
-        self._backend = backend
-        self._tag_store = tag_store
-        self._fallback = fallback
+        self._codec = codec
+        self._compressor = compressor
+        self._storage = storage
+        self._backend = backend  # for the full keys the hooks are told
         self._hooks = hooks
 
     def __call__[K: Hashable, V](self, function: AsyncBatchFunction[K, V]) -> AsyncCachedBatchFunction[K, V]:
@@ -160,18 +163,19 @@ class AsyncCachedBatchFunctionDecorator:
         Returns:
             The cached batch function.
         """
-        acheck_side(function, "cache")
-        value_type = item_type(function)
-        self._serializer.check(value_type)  # a type the codec gives back as another one is refused here
-        batch = AsyncBatchFunctionCache[K, V](
+        aexpect_side(function, "cache")
+        entry_format = EntryFormat(
+            self._policy, item_type(function), codec=self._codec, compressor=self._compressor, hooks=self._hooks
+        )
+        keys = ItemKeys(function, self._key_template, self._tag_templates)
+
+        batch_cache = AsyncBatchCache[K, V](
             self._policy,
-            codec=EntryCodec(self._policy, EntryFormat(self._serializer, value_type), self._hooks),
+            storage=self._storage,
+            entry_format=entry_format,
             reporter=CallReporter(
                 qualified_name(function), self._backend.full_key, hooks=self._hooks, clock=self._policy.clock
             ),
             hooks=self._hooks,
-            backend=self._backend,
-            tags=self._tag_store,
-            fallback=self._fallback,
         )
-        return AsyncCachedBatchFunction(function, batch, key=self._key, tags=self._tags)
+        return AsyncCachedBatchFunction(function, keys, batch_cache)

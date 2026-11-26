@@ -35,14 +35,14 @@ type _Parsed = tuple[str, str | None, str | None, str | None]  # what Formatter.
 
 
 @final
-class KeyBuilder:
-    __slots__ = ("_bound", "_name", "_positional", "_signature", "_tags", "_template")
+class CallKeys:
+    __slots__ = ("_bound", "_key_template", "_name", "_positional", "_signature", "_tag_templates")
 
     def __init__(
         self,
         function: Callable[..., object],
-        template: KeyTemplate | None,
-        tags: Sequence[KeyTemplate],
+        key_template: KeyTemplate | None,
+        tag_templates: Sequence[KeyTemplate],
     ) -> None:
         self._signature = inspect.signature(function)
 
@@ -52,7 +52,7 @@ class KeyBuilder:
         # the names of the parameters when a call that gives each by position binds them in order
         self._positional = tuple(self._signature.parameters) if plain else None
         self._name = qualified_name(function)
-        for checked in (*tags, *(() if template is None else (template,))):
+        for checked in (*tag_templates, *(() if key_template is None else (key_template,))):
             unknown = sorted(checked.names - self._signature.parameters.keys())
             if unknown:
                 msg = f"{checked} names {{{unknown[0]}}}: {self._name} has no such parameter"
@@ -65,8 +65,8 @@ class KeyBuilder:
 
         self._bound = first if in_class and first in _BOUND_NAMES else None
 
-        self._template = template
-        self._tags = tuple(tags)
+        self._key_template = key_template
+        self._tag_templates = tuple(tag_templates)
 
     def key(self, args: Sequence[object], kwargs: Mapping[str, object]) -> str:
         return self._key(self._arguments(args, kwargs))
@@ -79,13 +79,13 @@ class KeyBuilder:
         return self._tags_of(self._arguments(args, kwargs))
 
     def _key(self, arguments: Mapping[str, object]) -> str:
-        if self._template is not None:
-            return self._template.render((), arguments)
+        if self._key_template is not None:
+            return self._key_template.render((), arguments)
         parts = [_part(name, value) for name, value in arguments.items() if name != self._bound]
         return ":".join([self._name, *parts])
 
     def _tags_of(self, arguments: Mapping[str, object]) -> tuple[str, ...]:
-        return tuple(tag.render((), arguments) for tag in self._tags)
+        return tuple(tag.render((), arguments) for tag in self._tag_templates)
 
     def _arguments(self, args: Sequence[object], kwargs: Mapping[str, object]) -> dict[str, object]:
         if self._positional is not None and not kwargs and len(args) == len(self._positional):
@@ -93,6 +93,33 @@ class KeyBuilder:
         bound = self._signature.bind(*args, **kwargs)
         bound.apply_defaults()
         return bound.arguments
+
+
+@final
+class ItemKeys:
+    # the key and the tags of an item of a batch function
+    __slots__ = ("_key_template", "_name", "_tag_templates")
+
+    def __init__(
+        self,
+        function: Callable[..., object],
+        key_template: KeyTemplate | None,
+        tag_templates: Sequence[KeyTemplate],
+    ) -> None:
+        self._key_template = key_template
+        self._tag_templates = tuple(tag_templates)
+
+        self._name = (
+            key_name(function) if key_template is None else qualified_name(function)
+        )  # key_name refuses a lambda
+
+    def key(self, item: object) -> str:
+        if self._key_template is not None:
+            return self._key_template.render((item,), {})
+        return f"{self._name}:{_part('item', item)}"
+
+    def key_and_tags(self, item: object) -> KeyAndTags:
+        return KeyAndTags(self.key(item), tuple(tag.render((item,), {}) for tag in self._tag_templates))
 
 
 @final
@@ -118,34 +145,36 @@ def parse_tags(tags: list[str] | tuple[str, ...], *, secret: bytes | None) -> tu
 @final
 class KeyTemplate:
     # a str.format template of a key or a tag, checked when it is made: only a checked one renders
-    __slots__ = ("_fields", "_parts", "_text", "names")
+    __slots__ = ("_formatter", "_parts", "_text", "names")
 
     def __init__(self, text: str, *, secret: bytes | None) -> None:
         # secret: the key_secret of the cache, for {name:hmac}
-        fields = _KeyFormatter(secret)
+        formatter = _KeyFormatter(secret)
         names: set[str] = set()
-        parsed = list(fields.parse(text))
+        parsed = list(formatter.parse(text))
         for _, field, spec, _ in parsed:
             if field is None:
                 continue
             names.add(field.partition(".")[0].partition("[")[0])  # {user.id} names user
             if spec:
-                fields.check_spec(text, spec)
+                formatter.check_spec(text, spec)
         self._text = text
 
-        self._fields = fields
+        self._formatter = formatter
         self._parts = self._precompile(parsed)
         self.names: frozenset[str] = frozenset(names)
 
     def render(self, args: Sequence[object], kwargs: Mapping[str, object]) -> str:
         if self._parts is None:
-            return self._fields.vformat(self._text, args, kwargs)
+            return self._formatter.vformat(self._text, args, kwargs)
         rendered: list[str] = []
         for literal, field, spec, conversion in self._parts:
             rendered.append(literal)
             if field is not None:
-                value = self._fields.get_field(field, args, kwargs)[0]
-                rendered.append(self._fields.format_field(self._fields.convert_field(value, conversion), spec or ""))
+                value = self._formatter.get_field(field, args, kwargs)[0]
+                rendered.append(
+                    self._formatter.format_field(self._formatter.convert_field(value, conversion), spec or "")
+                )
         return "".join(rendered)
 
     @override
@@ -179,16 +208,6 @@ class KeyPrefix(enum.StrEnum):
     LOCK = "__lock:"  # a lock of cache.lock, try_lock and locked
     SLIDING_WINDOW = "__rate:sliding:"  # the counters of a SlidingWindow
     FIXED_WINDOW = "__rate:fixed:"  # the counter of a FixedWindow
-
-
-def item_key(
-    name: str,
-    template: KeyTemplate | None,
-    item: object,
-) -> str:
-    if template is not None:
-        return template.render((item,), {})
-    return f"{name}:{_part('item', item)}"
 
 
 def qualified_name(function: Callable[..., object]) -> str:

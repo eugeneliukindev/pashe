@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, final, override
 
 from pashe._internal.checks import FUNCTION, expect_type, parse_int, parse_seconds
-from pashe._internal.hooks import AllHooks
+from pashe._internal.hooks import Hooks
 from pashe.errors import BackendError, CircuitOpenError
 from pashe.hooks import Circuit, Hook
 
@@ -161,7 +161,7 @@ class CircuitBreaker(Breaker):
 
         expect_type("clock", clock, FUNCTION)
 
-        self._hooks = AllHooks(hooks)
+        self._hooks = Hooks(hooks)
         self._clock = clock
 
         self._lock = threading.Lock()  # the calls of threads and of tasks change it at once

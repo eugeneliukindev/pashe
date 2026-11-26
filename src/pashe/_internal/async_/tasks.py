@@ -15,41 +15,41 @@ ashield: Final = asyncio.shield  # a cancelled caller still releases what it hol
 
 
 @final
-class AsyncSingleFlight:
-    __slots__ = ("_calls",)
+class AsyncSharedLoads:
+    __slots__ = ("_loads",)
 
     def __init__(self) -> None:
-        self._calls: dict[Hashable, asyncio.Future[Any]] = {}
+        self._loads: dict[Hashable, asyncio.Future[Any]] = {}
 
     async def share[T](self, key: Hashable, run: Callable[[], Awaitable[T]]) -> T:
-        call = self._calls.get(key)
-        while call is not None:
+        load = self._loads.get(key)
+        while load is not None:
             try:
-                shared: T = await asyncio.shield(call)  # a waiter that is cancelled leaves alone
+                shared: T = await asyncio.shield(load)  # a waiter that is cancelled leaves alone
             except _LeaderLeft:
-                call = self._calls.get(key)
+                load = self._loads.get(key)
             else:
                 return shared
 
-        call = asyncio.get_running_loop().create_future()
-        self._calls[key] = call
+        load = asyncio.get_running_loop().create_future()
+        self._loads[key] = load
         try:
-            value = await run()
+            result = await run()
         except asyncio.CancelledError:
-            _fail(call, _LeaderLeft())
+            _fail(load, _LeaderLeft())
             raise
         except BaseException as error:
-            _fail(call, error)
+            _fail(load, error)
             raise
         finally:
-            del self._calls[key]  # noqa: WPS420 - the waiters hold the future; pop would return one nobody awaits
+            del self._loads[key]  # noqa: WPS420 - the waiters hold the future; pop would return one nobody awaits
 
-        call.set_result(value)
-        return value
+        load.set_result(result)
+        return result
 
 
 @final
-class AsyncConcurrencyLimit:
+class AsyncLoadLimit:
     __slots__ = ("_held", "_semaphore")
 
     def __init__(self, limit: int) -> None:
@@ -57,11 +57,12 @@ class AsyncConcurrencyLimit:
         # whether the task loads in a slot already: a function that calls itself waits for no second one
         self._held = contextvars.ContextVar(f"pashe_slot_{id(self)}", default=False)
 
-    def slot(self, *, has_stale_answer: bool) -> contextlib.AbstractAsyncContextManager[object]:
-        # with no limit, or inside a load of the same slots, a context that does nothing
+    def slot(self, *, wait: bool) -> contextlib.AbstractAsyncContextManager[object]:
+        # with no limit, or inside a load of the same slots, a context that does nothing; with every
+        # slot taken, one that waits, or OverloadedError if not wait
         if self._semaphore is None or self._held.get():
             return contextlib.nullcontext()
-        if self._semaphore.locked() and has_stale_answer:
+        if self._semaphore.locked() and not wait:
             raise OverloadedError
         return self._taken(self._semaphore)
 
@@ -101,7 +102,7 @@ class AsyncBackgroundTasks:
         await asyncio.gather(*self._tasks, return_exceptions=True)
 
 
-def acheck_side(function: Callable[..., object], action: Literal["decorate", "cache"]) -> None:
+def aexpect_side(function: Callable[..., object], action: Literal["decorate", "cache"]) -> None:
     if not is_async(function):
         msg = f"{getattr(function, '__qualname__', function)} is not async: {action} it with a Cache"
         raise TypeError(msg)
@@ -111,6 +112,6 @@ class _LeaderLeft(Exception):  # noqa: N818 - not an error: tells a waiter to lo
     """The caller that loaded was cancelled: a caller that waited for it loads instead."""
 
 
-def _fail(call: asyncio.Future[Any], error: BaseException) -> None:
-    call.set_exception(error)
-    call.exception()  # retrieved, so a call nobody waited for logs no "never retrieved"
+def _fail(load: asyncio.Future[Any], error: BaseException) -> None:
+    load.set_exception(error)
+    load.exception()  # retrieved, so a shared load nobody waited for logs no "never retrieved"

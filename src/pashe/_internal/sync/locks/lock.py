@@ -4,13 +4,14 @@ import threading
 from typing import TYPE_CHECKING, Self, final
 
 from pashe._internal.locks.lock import BaseLock
-from pashe._internal.sync.locks.locking import acquire_slot
+from pashe._internal.sync.locks.locking import take
 from pashe.errors import BackendError, LockLostError, LockTimeoutError
 
 if TYPE_CHECKING:
     from types import TracebackType
 
     from pashe._internal.sync.backends.prefixed import PrefixedBackend
+    from pashe._internal.sync.locks.locking import Lease
     from pashe.hooks import Hook
 
 
@@ -33,35 +34,34 @@ class Lock(BaseLock):
         'report'
     """
 
-    __slots__ = ("_backend", "_extender", "_stop")
+    __slots__ = ("_backend", "_extender", "_lease", "_stop")
 
     def __init__(
         self,
         backend: PrefixedBackend,
-        hooks: Hook,
         *,
         key: str,
         ttl: float,
         timeout: float | None = None,
         holders: int = 1,
-        owner: bytes | None = None,
-        slot: str | None = None,
+        lease: Lease | None = None,
+        hooks: Hook,
     ) -> None:
         """Made by the lock methods of a cache, not by hand.
 
         Args:
             backend: the backend of the cache, seen through its prefix.
-            hooks: the hooks of the cache: a failed release of the lock goes to their on_error.
             key: the name of the lock.
             ttl: how long the lock lives without an extension, in seconds, more than 0.
             timeout: the most entering waits, in seconds, 0 or more; None waits as long as it takes.
             holders: how many may hold the lock at once, 1 or more.
-            owner: the owner token of a lock try_lock already took; None takes it on entering.
-            slot: the key in the backend of the place try_lock took, with owner.
+            lease: the place try_lock already took; None takes one on entering.
+            hooks: the hooks of the cache: a failed release of the lock goes to their on_error.
         """
-        super().__init__(hooks, key=key, ttl=ttl, timeout=timeout, holders=holders, owner=owner, slot=slot)
+        super().__init__(key=key, ttl=ttl, timeout=timeout, holders=holders, hooks=hooks)
 
         self._backend = backend
+        self._lease = lease
 
         self._stop = threading.Event()
         self._extender: threading.Thread | None = None
@@ -80,18 +80,19 @@ class Lock(BaseLock):
             msg = f"the lock {self._key!r} is entered inside its own block; take another lock object"
             raise RuntimeError(msg)
 
-        if self._owner is None:
-            taken = acquire_slot(self._backend, self._slots, self._ttl, timeout=self._timeout)
-            if taken is None:
+        if self._lease is None:
+            self._lease = take(
+                self._backend, self._slots, self._ttl, timeout=self._timeout, name=self._key, hooks=self._hooks
+            )
+            if self._lease is None:
                 raise LockTimeoutError(self._key, self._timeout)
-            slot, owner = taken
-            self._slot = slot
-            self._owner = owner
 
         self._lost = None
 
         self._stop = threading.Event()  # the last block set the one before, and a lock may be entered again
-        self._extender = threading.Thread(target=self._keep_extending, name=f"pashe-lock-{self._key}", daemon=True)
+        self._extender = threading.Thread(
+            target=self._keep_extending, args=(self._lease,), name=f"pashe-lock-{self._key}", daemon=True
+        )
         self._extender.start()
         return self
 
@@ -121,20 +122,15 @@ class Lock(BaseLock):
             raise LockLostError(self._key) from self._lost
 
     def _release(self) -> None:
-        if self._owner is None:
+        if self._lease is None:
             return
-        try:
-            self._backend.delete_if_equals(self._slot, self._owner)
-        except BackendError as error:
-            self._report_release_error(error)
-        self._owner = None
+        self._lease.release()
+        self._lease = None
 
-    def _keep_extending(self) -> None:
+    def _keep_extending(self, lease: Lease) -> None:
         while not self._stop.wait(self._extend_interval):
-            if self._owner is None:
-                return
             try:
-                extended = self._backend.expire_if_equals(self._slot, self._owner, self._ttl)
+                extended = lease.extend(self._ttl)
             except BackendError as error:
                 self._lost = error
                 return

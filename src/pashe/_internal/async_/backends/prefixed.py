@@ -16,6 +16,15 @@ class AsyncPrefixedBackend(AsyncBackend):
         self._backend = backend
         self._prefix = prefix
 
+    @property
+    def backend(self) -> AsyncBackend:
+        # the backend under the prefix, as the user gave it
+        return self._backend
+
+    @property
+    def prefix(self) -> str:
+        return self._prefix
+
     def full_key(self, key: str) -> str:
         return self._prefix + key
 

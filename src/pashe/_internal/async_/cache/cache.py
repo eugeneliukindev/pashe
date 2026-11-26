@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import time
-from typing import TYPE_CHECKING, Self, final
+from typing import TYPE_CHECKING, Self, final, override
 
 from pashe._internal.async_.backends.backend import AsyncBackend
 from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend
@@ -14,21 +14,20 @@ from pashe._internal.async_.cache.around import (
 from pashe._internal.async_.cache.cached import AsyncCachedFunctionDecorator, AsyncCachedValueDecorator
 from pashe._internal.async_.cache.cached_batch import AsyncCachedBatchFunctionDecorator
 from pashe._internal.async_.cache.fallback import AsyncBackendFallbackStore, AsyncFallbackStore, AsyncNoOpFallbackStore
+from pashe._internal.async_.cache.storage import AsyncStorage
 from pashe._internal.async_.cache.tags import AsyncTags
 from pashe._internal.async_.limiter import AsyncRateLimiter
 from pashe._internal.async_.locks.lock import AsyncLock
-from pashe._internal.async_.locks.locking import atry_acquire_slot
+from pashe._internal.async_.locks.locking import atry_take
 from pashe._internal.async_.tasks import AsyncBackgroundTasks
-from pashe._internal.cache.entry import Serializer
 from pashe._internal.cache.keys import KeyPrefix, KeyTemplate, parse_key, parse_tags
 from pashe._internal.cache.policy import Policy
 from pashe._internal.checks import FUNCTION, duration_seconds, expect_item_types, expect_type, parse_secret
-from pashe._internal.hooks import AllHooks
+from pashe._internal.hooks import Hooks
 from pashe._internal.limits import LIMIT, parse_cost
 from pashe._internal.locks.lock import lock_slots, parse_lock_holders, parse_lock_timeout, parse_lock_ttl
 from pashe.codecs import Codec, JsonCodec
 from pashe.compressors import Compressor, NoOpCompressor
-from pashe.errors import InvalidOptionsError
 from pashe.options import Fallback, Negative, Stale, Stampede, Store
 
 if TYPE_CHECKING:
@@ -44,8 +43,8 @@ if TYPE_CHECKING:
 class AsyncCache:
     """Caches the results of functions in a backend and guards calls with locks and rate limits.
 
-    Entries, tags, locks and limits live in the backend, shared by every cache over it; single
-    flights live in memory. The cache of the other side, for the functions of that side over its
+    Entries, tags, locks and limits live in the backend, shared by every cache over it; shared
+    loads live in memory. The cache of the other side, for the functions of that side over its
     backends, has the same methods: on the async side they are awaited.
 
     Examples:
@@ -64,12 +63,14 @@ class AsyncCache:
         "_backend",
         "_background",
         "_clock",
+        "_codec",
+        "_compressor",
         "_fallback",
         "_hooks",
         "_key_secret",
         "_limiter",
-        "_locks",
-        "_serializer",
+        "_lock_backend",
+        "_storage",
         "_tags",
     )
 
@@ -137,7 +138,8 @@ class AsyncCache:
         expect_type("clock", clock, FUNCTION)
 
         self._backend = AsyncPrefixedBackend(backend, prefix)
-        self._hooks = AllHooks(hooks)
+        self._codec = codec
+        self._hooks = Hooks(hooks)
         self._fallback: AsyncFallbackStore = (
             AsyncNoOpFallbackStore()
             if fallback is None
@@ -147,13 +149,14 @@ class AsyncCache:
                 hooks=self._hooks,
             )
         )
+        self._compressor = compressor
         self._key_secret = None if key_secret is None else parse_secret("key_secret", key_secret)
         self._clock = clock
 
-        self._serializer = Serializer(codec, compressor)
-        self._locks = AsyncPrefixedBackend(backend, prefix + KeyPrefix.LOCK)  # apart from the keys of results
+        self._lock_backend = AsyncPrefixedBackend(backend, prefix + KeyPrefix.LOCK)  # apart from the keys of results
         self._background = AsyncBackgroundTasks()
         self._tags = AsyncTags(self._backend)
+        self._storage = AsyncStorage(self._backend, tags=self._tags, fallback=self._fallback, hooks=self._hooks)
         self._limiter = AsyncRateLimiter(self._backend, self._hooks, self._clock)
 
     def __call__(
@@ -220,12 +223,13 @@ class AsyncCache:
         )
         return AsyncCachedFunctionDecorator(
             policy,
-            key=parse_key(key, secret=self._key_secret),
-            tags=parse_tags(tags, secret=self._key_secret),
-            serializer=self._serializer,
+            key_template=parse_key(key, secret=self._key_secret),
+            tag_templates=parse_tags(tags, secret=self._key_secret),
+            codec=self._codec,
+            compressor=self._compressor,
+            storage=self._storage,
+            tags=self._tags,
             backend=self._backend,
-            tag_store=self._tags,
-            fallback=self._fallback,
             background=self._background,
             hooks=self._hooks,
         )
@@ -314,36 +318,21 @@ class AsyncCache:
             >>> await get_users([1, 2])
             {1: {'id': 1}, 2: {'id': 2}}
         """
-        policy = Policy.of(
+        policy = Policy.of_batch(
             ttl=ttl,
             stale=stale,
             stampede=stampede,
-            negative=Negative(),
             store=store,
             clock=self._clock,
         )
-        refused = [
-            name
-            for name, given in (
-                ("Stampede.lock_for", policy.stampede.lock_for),
-                ("Stampede.revalidate_before", policy.stampede.revalidate_before),
-                ("Stale.while_revalidate", policy.stale.while_revalidate),
-                ("Stale.if_slow", policy.stale.slow_after),
-            )
-            if given
-        ]
-        if refused:
-            names = ", ".join(refused)
-            msg = f"a batch shares no loads, waits for its load and reloads nothing in the background: it takes no {names}"
-            raise InvalidOptionsError(msg)
         return AsyncCachedBatchFunctionDecorator(
             policy,
-            key=parse_key(key, secret=self._key_secret),
-            tags=parse_tags(tags, secret=self._key_secret),
-            serializer=self._serializer,
+            key_template=parse_key(key, secret=self._key_secret),
+            tag_templates=parse_tags(tags, secret=self._key_secret),
+            codec=self._codec,
+            compressor=self._compressor,
+            storage=self._storage,
             backend=self._backend,
-            tag_store=self._tags,
-            fallback=self._fallback,
             hooks=self._hooks,
         )
 
@@ -482,12 +471,12 @@ class AsyncCache:
         """
         expect_type("key", key, str)
         return AsyncLock(
-            self._locks,
-            self._hooks,
+            self._lock_backend,
             key=key,
             ttl=parse_lock_ttl(ttl),
             timeout=parse_lock_timeout(timeout),
             holders=parse_lock_holders(holders),
+            hooks=self._hooks,
         )
 
     async def try_lock(
@@ -528,11 +517,10 @@ class AsyncCache:
         ttl = parse_lock_ttl(ttl)
         holders = parse_lock_holders(holders)
 
-        taken = await atry_acquire_slot(self._locks, lock_slots(key, holders), ttl)
-        if taken is None:
+        lease = await atry_take(self._lock_backend, lock_slots(key, holders), ttl, name=key, hooks=self._hooks)
+        if lease is None:
             return None
-        slot, owner = taken
-        return AsyncLock(self._locks, self._hooks, key=key, ttl=ttl, holders=holders, owner=owner, slot=slot)
+        return AsyncLock(self._lock_backend, key=key, ttl=ttl, holders=holders, lease=lease, hooks=self._hooks)
 
     def locked(
         self,
@@ -569,12 +557,13 @@ class AsyncCache:
             1
         """
         return AsyncLockedDecorator(
-            self,
             parse_key(key, secret=self._key_secret),
             self._key_secret,
             ttl=parse_lock_ttl(ttl),
             timeout=parse_lock_timeout(timeout),
             holders=parse_lock_holders(holders),
+            backend=self._lock_backend,
+            hooks=self._hooks,
         )
 
     async def rate_limit(
@@ -650,7 +639,9 @@ class AsyncCache:
             1
         """
         expect_type("limit", limit, LIMIT)
-        return AsyncRateLimitedDecorator(self, parse_key(key, secret=self._key_secret), self._key_secret, limit=limit)
+        return AsyncRateLimitedDecorator(
+            parse_key(key, secret=self._key_secret), self._key_secret, limit=limit, limiter=self._limiter
+        )
 
     async def ping(self) -> None:
         """Check that the backend is reachable.
@@ -682,6 +673,12 @@ class AsyncCache:
             closing.push_async_callback(self._fallback.aclose)
             closing.push_async_callback(self._backend.aclose)
             closing.push_async_callback(self._background.aclose)
+
+    @override
+    def __repr__(self) -> str:
+        """Show the backend and the prefix of the cache."""
+        backend, prefix = self._backend.backend, self._backend.prefix
+        return f"{type(self).__name__}({backend!r}, prefix={prefix!r})"
 
     async def __aenter__(self) -> Self:
         """Return the cache."""

@@ -28,7 +28,7 @@ class UserNotFoundError(LookupError):
     pass
 
 
-# EntryCodec
+# Entries
 
 
 async def test_a_second_call_is_answered_from_the_cache(new_process_cache: NewCache) -> None:

@@ -52,7 +52,7 @@ In `async_`:
 - every import is absolute and names the object, as
   `from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend`;
 - a name of the async side differs from its sync twin, as the public `AsyncCache` and `Cache` do:
-  `AsyncPrefixedBackend` and `PrefixedBackend`, `atry_acquire` and `try_acquire`, `AsyncSingleFlight` and `SingleFlight`.
+  `AsyncPrefixedBackend` and `PrefixedBackend`, `atry_take` and `try_take`, `AsyncSharedLoads` and `SharedLoads`.
   It is listed in `[tool.unasyncd.add_replacements]` of `pyproject.toml`, bare and by its full
   name.
 

@@ -23,71 +23,76 @@ _PAUSES_PER_TTL: Final = 10  # a waiter checks at least this often within the tt
 _JITTER: Final = 0.5  # a pause is cut by up to this share, so waiters do not check together
 
 
-async def aacquire(
-    backend: AsyncBackend,
-    key: str,
-    ttl: float,
-    *,
-    timeout: float | None = None,  # noqa: ASYNC109 - bounds the wait, not the block that holds the lock
-) -> bytes | None:
-    taken = await aacquire_slot(backend, (key,), ttl, timeout=timeout)
-    return None if taken is None else taken[1]
+@final
+class AsyncLease:
+    # A lock taken in the backend: only its holder, by the owner token, extends and releases it.
+    __slots__ = ("_backend", "_hooks", "_name", "_owner", "_slot")
+
+    def __init__(
+        self,
+        backend: AsyncBackend,
+        slot: str,
+        owner: bytes,
+        *,
+        name: str,
+        hooks: Hook,
+    ) -> None:
+        self._backend = backend
+        self._slot = slot  # the key in the backend of the place it holds
+        self._owner = owner
+        self._name = name  # what a failure of its release names
+        self._hooks = hooks
+
+    async def extend(self, ttl: float) -> bool:
+        # False if the lock expired and may be someone else's now; a failing backend raises
+        return await self._backend.expire_if_equals(self._slot, self._owner, ttl)
+
+    async def release(self) -> None:
+        # no caller waits for an error of a release: it goes to on_error
+        try:
+            await ashield(
+                self._backend.delete_if_equals(self._slot, self._owner)
+            )  # a cancelled caller still releases it
+        except BackendError as error:
+            self._hooks.on_error(Failure(Operation.RELEASE_LOCK, self._name, error))
 
 
-async def aacquire_slot(
+async def atake(
     backend: AsyncBackend,
     slots: Sequence[str],
     ttl: float,
     *,
     timeout: float | None = None,  # noqa: ASYNC109 - bounds the wait, not the block that holds the lock
-) -> tuple[str, bytes] | None:
-    pauses = _Backoff(ttl, timeout)
-    taken = await atry_acquire_slot(backend, slots, ttl)
-    while taken is None:
-        pause = pauses.next_delay()
+    name: str,
+    hooks: Hook,
+) -> AsyncLease | None:
+    # a place of the lock, waiting while each is taken; None after timeout
+    backoff = _Backoff(ttl, timeout)
+    lease = await atry_take(backend, slots, ttl, name=name, hooks=hooks)
+    while lease is None:
+        pause = backoff.next_pause()
         if pause is None:
             return None
         await asyncio.sleep(pause)
-        taken = await atry_acquire_slot(backend, slots, ttl)
-    return taken
+        lease = await atry_take(backend, slots, ttl, name=name, hooks=hooks)
+    return lease
 
 
-async def atry_acquire(
-    backend: AsyncBackend,
-    key: str,
-    ttl: float,
-) -> bytes | None:
-    owner = secrets.token_hex(_OWNER_BYTES).encode()  # only its holder releases or extends the lock
-    return owner if await backend.set_if_absent(key, owner, ttl=ttl) else None
-
-
-async def atry_acquire_slot(
+async def atry_take(
     backend: AsyncBackend,
     slots: Sequence[str],
     ttl: float,
-) -> tuple[str, bytes] | None:
+    *,
+    name: str,
+    hooks: Hook,
+) -> AsyncLease | None:
+    # a place of the lock if one is free now
     first = random.randrange(len(slots))  # noqa: S311 - spreads the holders over the slots, not a secret
     for slot in (*slots[first:], *slots[:first]):
-        owner = await atry_acquire(backend, slot, ttl)  # noqa: WPS476 - the next place only if this one is taken
-        if owner is not None:
-            return slot, owner
+        owner = secrets.token_hex(_OWNER_BYTES).encode()
+        if await backend.set_if_absent(slot, owner, ttl=ttl):  # noqa: WPS476 - the next place only if this one is taken
+            return AsyncLease(backend, slot, owner, name=name, hooks=hooks)
     return None
-
-
-async def arelease(
-    backend: AsyncBackend,
-    key: str,
-    owner: bytes | None,
-    *,
-    hooks: Hook,
-) -> None:
-    # a lock the cache took for itself, as a load does: no caller waits for an error, so it goes to on_error
-    if owner is None:
-        return
-    try:
-        await ashield(backend.delete_if_equals(key, owner))  # a cancelled caller still releases it
-    except BackendError as error:
-        hooks.on_error(Failure(Operation.RELEASE_LOCK, key, error))
 
 
 @final
@@ -99,7 +104,7 @@ class _Backoff:
         self._longest = max(_FIRST_PAUSE, min(_LONGEST_PAUSE, ttl / _PAUSES_PER_TTL))
         self._deadline = None if timeout is None else time.monotonic() + timeout
 
-    def next_delay(self) -> float | None:
+    def next_pause(self) -> float | None:
         pause = self._pause * random.uniform(1 - _JITTER, 1)  # noqa: S311 - jitter, not a secret
         self._pause = min(self._pause * 2, self._longest)
         if self._deadline is None:

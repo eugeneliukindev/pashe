@@ -1,0 +1,141 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, final
+
+from pashe._internal.async_.tasks import AsyncLoadLimit
+from pashe._internal.cache.call import Stopwatch, in_no_cache
+from pashe.hooks import CacheStatus, Failure, Operation
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable, Hashable, Mapping
+
+    from pashe._internal.async_.cache.storage import AsyncStorage
+    from pashe._internal.cache.call import Answer, CallReporter
+    from pashe._internal.cache.entry import EntryFormat, Lookup, Stored
+    from pashe._internal.cache.keys import KeyAndTags
+    from pashe._internal.cache.policy import Policy
+    from pashe.hooks import Hook
+
+type AsyncBatchFunction[K: Hashable, V] = Callable[[list[K]], Awaitable[Mapping[K, V]]]
+
+
+@final
+@dataclass(slots=True)
+class _Pending[K: Hashable]:
+    # an item of a batch call and what the call learns of it, from the read to the keep
+    item: K
+    lookup: Lookup  # what the read found under its key, and where a load keeps it
+    answered: bool = False
+    result: object = None  # decoded as the type of the results, once answered
+    stored: Stored | None = None  # what the backend kept past its TTL: it may answer if the load fails
+
+    def answer(self, result: object) -> None:
+        self.answered = True
+        self.result = result
+
+
+@final
+class AsyncBatchCache[K: Hashable, V]:
+    # The cache of one batch function: reads every item at once, loads the missing ones in one call.
+    __slots__ = ("_format", "_hooks", "_load_limit", "_policy", "_reporter", "_storage")
+
+    def __init__(
+        self,
+        policy: Policy,
+        *,
+        storage: AsyncStorage,
+        entry_format: EntryFormat,
+        reporter: CallReporter,
+        hooks: Hook,
+    ) -> None:
+        self._policy = policy
+        self._storage = storage
+        self._format = entry_format
+        self._reporter = reporter
+        self._hooks = hooks
+
+        self._load_limit = AsyncLoadLimit(policy.stampede.max_loads)
+
+    async def get_or_load_many(  # noqa: WPS231 - the read of every item, then one load of the missing ones
+        self, keys_and_tags: Mapping[K, KeyAndTags], load: AsyncBatchFunction[K, V]
+    ) -> dict[K, V]:
+        if in_no_cache():  # no entry answers: every item loads, and is kept for the calls after it
+            lookups = await self._storage.open_many(list(keys_and_tags.values()))
+        else:
+            lookups = await self._storage.find_many(list(keys_and_tags.values()))
+        batch: list[_Pending[K]] = []
+        for item, lookup in zip(keys_and_tags, lookups, strict=True):
+            pending = _Pending(item, lookup)
+            stored = self._format.decode(lookup)
+            answer = self._policy.answer_for(stored)
+            if answer is not None and answer.status is not CacheStatus.NOT_FOUND:  # a batch keeps no "not found"
+                pending.answer(answer.result)
+                status = CacheStatus.FALLBACK if lookup.from_fallback else CacheStatus.HIT
+                self._reporter.report(lookup.key, status, stale_at=answer.stale_at)
+            elif stored is not None and not stored.entry.negative:
+                pending.stored = stored
+            batch.append(pending)
+
+        missing = [pending for pending in batch if not pending.answered]
+        await self._storage.keep_many(await self._load(missing, load))
+        return {pending.item: pending.result for pending in batch if pending.answered}  # type: ignore[misc]  # decoded as the type of the results
+
+    async def delete(self, key: str) -> bool:
+        return await self._storage.delete(key)
+
+    async def _load(  # noqa: WPS231 - one call of the function, then what it gave each item
+        self,
+        missing: list[_Pending[K]],
+        load: AsyncBatchFunction[K, V],
+    ) -> list[tuple[Lookup, Stored]]:
+        # Loads the missing items in one call and answers them with what it returned, which every
+        # item took whole; what is to be kept.
+        if not missing:
+            return []
+
+        stopwatch = Stopwatch()
+        try:
+            async with self._load_limit.slot(wait=True):
+                with stopwatch.running():
+                    loaded = await load([pending.item for pending in missing])
+        except Exception as error:
+            if not self._answer_stale(missing, error):
+                raise
+            return []
+
+        to_keep: list[tuple[Lookup, Stored]] = []
+        for pending in missing:
+            key = pending.lookup.key
+            if pending.item not in loaded:  # the function left it out: absent from the result, not kept
+                self._reporter.report(key, CacheStatus.MISS, load_seconds=stopwatch.seconds)
+                continue
+            result = loaded[pending.item]
+            stored = self._format.encode_loaded(result, load_seconds=stopwatch.seconds, key=key)
+            pending.answer(result if stored is None else stored.result)
+            self._reporter.report(
+                key, CacheStatus.MISS, load_seconds=stopwatch.seconds, stale_at=stored and stored.entry.stale_at
+            )
+            if stored is not None:
+                to_keep.append((pending.lookup, stored))
+        return to_keep
+
+    def _answer_stale(self, missing: list[_Pending[K]], error: Exception) -> bool:
+        # The load failed: stale results answer, if each item it was for has one in Stale.if_error;
+        # the items are one call, so with one of them missing the error goes to the caller.
+        answers: list[Answer] = []
+        for pending in missing:
+            answer = (
+                None
+                if pending.stored is None
+                else self._policy.stale_answer(pending.stored, error, load_seconds=0, has_stale_answer=False)
+            )
+            if answer is None:
+                return False
+            answers.append(answer)
+
+        self._hooks.on_error(Failure(Operation.LOAD, "", error))
+        for pending, stale in zip(missing, answers, strict=True):
+            pending.answer(stale.result)
+            self._reporter.report(pending.lookup.key, stale.status, stale_at=stale.stale_at)
+        return True

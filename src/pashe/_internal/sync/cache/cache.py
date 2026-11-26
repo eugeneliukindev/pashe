@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import contextlib
 import time
-from typing import TYPE_CHECKING, Self, final
+from typing import TYPE_CHECKING, Self, final, override
 
-from pashe._internal.cache.entry import Serializer
 from pashe._internal.cache.keys import KeyPrefix, KeyTemplate, parse_key, parse_tags
 from pashe._internal.cache.policy import Policy
 from pashe._internal.checks import FUNCTION, duration_seconds, expect_item_types, expect_type, parse_secret
-from pashe._internal.hooks import AllHooks
+from pashe._internal.hooks import Hooks
 from pashe._internal.limits import LIMIT, parse_cost
 from pashe._internal.locks.lock import lock_slots, parse_lock_holders, parse_lock_timeout, parse_lock_ttl
 from pashe._internal.sync.backends.backend import Backend
@@ -19,14 +18,14 @@ from pashe._internal.sync.cache.around import InvalidatingDecorator, LockedDecor
 from pashe._internal.sync.cache.cached import CachedFunctionDecorator, CachedValueDecorator
 from pashe._internal.sync.cache.cached_batch import CachedBatchFunctionDecorator
 from pashe._internal.sync.cache.fallback import BackendFallbackStore, FallbackStore, NoOpFallbackStore
+from pashe._internal.sync.cache.storage import Storage
 from pashe._internal.sync.cache.tags import Tags
 from pashe._internal.sync.limiter import RateLimiter
 from pashe._internal.sync.locks.lock import Lock
-from pashe._internal.sync.locks.locking import try_acquire_slot
+from pashe._internal.sync.locks.locking import try_take
 from pashe._internal.sync.threads import BackgroundTasks
 from pashe.codecs import Codec, JsonCodec
 from pashe.compressors import Compressor, NoOpCompressor
-from pashe.errors import InvalidOptionsError
 from pashe.options import Fallback, Negative, Stale, Stampede, Store
 
 if TYPE_CHECKING:
@@ -42,8 +41,8 @@ if TYPE_CHECKING:
 class Cache:
     """Caches the results of functions in a backend and guards calls with locks and rate limits.
 
-    Entries, tags, locks and limits live in the backend, shared by every cache over it; single
-    flights live in memory. The cache of the other side, for the functions of that side over its
+    Entries, tags, locks and limits live in the backend, shared by every cache over it; shared
+    loads live in memory. The cache of the other side, for the functions of that side over its
     backends, has the same methods: on the async side they are awaited.
 
     Examples:
@@ -62,12 +61,14 @@ class Cache:
         "_backend",
         "_background",
         "_clock",
+        "_codec",
+        "_compressor",
         "_fallback",
         "_hooks",
         "_key_secret",
         "_limiter",
-        "_locks",
-        "_serializer",
+        "_lock_backend",
+        "_storage",
         "_tags",
     )
 
@@ -135,7 +136,8 @@ class Cache:
         expect_type("clock", clock, FUNCTION)
 
         self._backend = PrefixedBackend(backend, prefix)
-        self._hooks = AllHooks(hooks)
+        self._codec = codec
+        self._hooks = Hooks(hooks)
         self._fallback: FallbackStore = (
             NoOpFallbackStore()
             if fallback is None
@@ -145,13 +147,14 @@ class Cache:
                 hooks=self._hooks,
             )
         )
+        self._compressor = compressor
         self._key_secret = None if key_secret is None else parse_secret("key_secret", key_secret)
         self._clock = clock
 
-        self._serializer = Serializer(codec, compressor)
-        self._locks = PrefixedBackend(backend, prefix + KeyPrefix.LOCK)  # apart from the keys of results
+        self._lock_backend = PrefixedBackend(backend, prefix + KeyPrefix.LOCK)  # apart from the keys of results
         self._background = BackgroundTasks()
         self._tags = Tags(self._backend)
+        self._storage = Storage(self._backend, tags=self._tags, fallback=self._fallback, hooks=self._hooks)
         self._limiter = RateLimiter(self._backend, self._hooks, self._clock)
 
     def __call__(
@@ -218,12 +221,13 @@ class Cache:
         )
         return CachedFunctionDecorator(
             policy,
-            key=parse_key(key, secret=self._key_secret),
-            tags=parse_tags(tags, secret=self._key_secret),
-            serializer=self._serializer,
+            key_template=parse_key(key, secret=self._key_secret),
+            tag_templates=parse_tags(tags, secret=self._key_secret),
+            codec=self._codec,
+            compressor=self._compressor,
+            storage=self._storage,
+            tags=self._tags,
             backend=self._backend,
-            tag_store=self._tags,
-            fallback=self._fallback,
             background=self._background,
             hooks=self._hooks,
         )
@@ -312,36 +316,21 @@ class Cache:
             >>> get_users([1, 2])
             {1: {'id': 1}, 2: {'id': 2}}
         """
-        policy = Policy.of(
+        policy = Policy.of_batch(
             ttl=ttl,
             stale=stale,
             stampede=stampede,
-            negative=Negative(),
             store=store,
             clock=self._clock,
         )
-        refused = [
-            name
-            for name, given in (
-                ("Stampede.lock_for", policy.stampede.lock_for),
-                ("Stampede.revalidate_before", policy.stampede.revalidate_before),
-                ("Stale.while_revalidate", policy.stale.while_revalidate),
-                ("Stale.if_slow", policy.stale.slow_after),
-            )
-            if given
-        ]
-        if refused:
-            names = ", ".join(refused)
-            msg = f"a batch shares no loads, waits for its load and reloads nothing in the background: it takes no {names}"
-            raise InvalidOptionsError(msg)
         return CachedBatchFunctionDecorator(
             policy,
-            key=parse_key(key, secret=self._key_secret),
-            tags=parse_tags(tags, secret=self._key_secret),
-            serializer=self._serializer,
+            key_template=parse_key(key, secret=self._key_secret),
+            tag_templates=parse_tags(tags, secret=self._key_secret),
+            codec=self._codec,
+            compressor=self._compressor,
+            storage=self._storage,
             backend=self._backend,
-            tag_store=self._tags,
-            fallback=self._fallback,
             hooks=self._hooks,
         )
 
@@ -480,12 +469,12 @@ class Cache:
         """
         expect_type("key", key, str)
         return Lock(
-            self._locks,
-            self._hooks,
+            self._lock_backend,
             key=key,
             ttl=parse_lock_ttl(ttl),
             timeout=parse_lock_timeout(timeout),
             holders=parse_lock_holders(holders),
+            hooks=self._hooks,
         )
 
     def try_lock(
@@ -526,11 +515,10 @@ class Cache:
         ttl = parse_lock_ttl(ttl)
         holders = parse_lock_holders(holders)
 
-        taken = try_acquire_slot(self._locks, lock_slots(key, holders), ttl)
-        if taken is None:
+        lease = try_take(self._lock_backend, lock_slots(key, holders), ttl, name=key, hooks=self._hooks)
+        if lease is None:
             return None
-        slot, owner = taken
-        return Lock(self._locks, self._hooks, key=key, ttl=ttl, holders=holders, owner=owner, slot=slot)
+        return Lock(self._lock_backend, key=key, ttl=ttl, holders=holders, lease=lease, hooks=self._hooks)
 
     def locked(
         self,
@@ -567,12 +555,13 @@ class Cache:
             1
         """
         return LockedDecorator(
-            self,
             parse_key(key, secret=self._key_secret),
             self._key_secret,
             ttl=parse_lock_ttl(ttl),
             timeout=parse_lock_timeout(timeout),
             holders=parse_lock_holders(holders),
+            backend=self._lock_backend,
+            hooks=self._hooks,
         )
 
     def rate_limit(
@@ -648,7 +637,9 @@ class Cache:
             1
         """
         expect_type("limit", limit, LIMIT)
-        return RateLimitedDecorator(self, parse_key(key, secret=self._key_secret), self._key_secret, limit=limit)
+        return RateLimitedDecorator(
+            parse_key(key, secret=self._key_secret), self._key_secret, limit=limit, limiter=self._limiter
+        )
 
     def ping(self) -> None:
         """Check that the backend is reachable.
@@ -680,6 +671,12 @@ class Cache:
             closing.callback(self._fallback.close)
             closing.callback(self._backend.close)
             closing.callback(self._background.close)
+
+    @override
+    def __repr__(self) -> str:
+        """Show the backend and the prefix of the cache."""
+        backend, prefix = self._backend.backend, self._backend.prefix
+        return f"{type(self).__name__}({backend!r}, prefix={prefix!r})"
 
     def __enter__(self) -> Self:
         """Return the cache."""
