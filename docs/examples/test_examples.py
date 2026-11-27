@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import importlib.util
 import inspect
 from pathlib import Path
 
@@ -13,7 +14,13 @@ from tests.harness.helpers import call
 from pashe import AsyncCache, AsyncLocks, AsyncRateLimiter, Cache, Locks, RateLimiter
 
 _ROOT = Path(__file__).parent
-_EXAMPLES = sorted(path for path in _ROOT.glob("*/*.py") if not path.name.startswith(("test_", "_")))
+_EXAMPLES = sorted(
+    path
+    for path in _ROOT.glob("*/*.py")
+    if not path.name.startswith(("test_", "_"))
+    # orjson has no build for a Python without the GIL, so the tests run there without it
+    and (path.stem.partition("_")[0] != "orjson" or importlib.util.find_spec("orjson") is not None)
+)
 # Their calls reach Redis at the address the page gives: they import, and the type checkers read the calls.
 _REACH_REDIS = frozenset(
     ("backends/cluster_sync", "backends/cluster_async", "index/quick_start_sync", "index/quick_start_async")

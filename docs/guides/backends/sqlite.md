@@ -6,13 +6,13 @@ server and no extra.
 === "Sync"
 
     ```python
-    --8<-- "backends/sqlite_sync.py"
+    --8<-- "backends/sqlite_sync.py:show"
     ```
 
 === "Async"
 
     ```python
-    --8<-- "backends/sqlite_async.py"
+    --8<-- "backends/sqlite_async.py:show"
     ```
 
 The entries outlive a restart, and every process that opens the file shares them: the workers of
