@@ -3,11 +3,13 @@
 # redis-py is typed in part: what its untyped methods return is unknown to pyright, as to mypy.
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import inspect
 import math
 from typing import TYPE_CHECKING, Final
 
+import redis.asyncio  # noqa: WPS301 - it names redis and its asyncio package too
 from redis.connection import AbstractConnection
 from redis.exceptions import RedisError, ResponseError
 
@@ -16,7 +18,6 @@ from pashe.errors import BackendError, InvalidOptionsError, WrongTypeError
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    import redis.asyncio  # noqa: WPS301 - it names redis and its asyncio package too
 
 _MILLISECONDS: Final = 1000
 _NO_KEY: Final = -2  # what PTTL answers for a missing key
@@ -77,6 +78,30 @@ def check_client(client: redis.Redis | redis.RedisCluster | redis.asyncio.Redis 
     if settings.get("socket_timeout", _DEFAULT_TIMEOUT) is None:
         msg = "redis: a backend needs a client with socket_timeout, such as Redis.from_url(url, socket_timeout=1)"
         raise InvalidOptionsError(msg)
+
+
+def disconnect_cluster_pools(
+    client: redis.Redis | redis.RedisCluster | redis.asyncio.Redis | redis.asyncio.RedisCluster,
+) -> None:
+    """Close the sockets of every node of a sync cluster; any other client closes its own.
+
+    RedisCluster.from_url builds the client of each node over a pool its close does not close, so
+    the sockets would stay open until the garbage collector finds them.
+    """
+    if isinstance(client, redis.RedisCluster):
+        client.disconnect_connection_pools()  # type: ignore[no-untyped-call]  # redis-py leaves it untyped
+
+
+async def adisconnect_cluster_pools(
+    client: redis.Redis | redis.RedisCluster | redis.asyncio.Redis | redis.asyncio.RedisCluster,
+) -> None:
+    """Close the sockets of every node of an async cluster; any other client closes its own.
+
+    redis.asyncio.RedisCluster.aclose disconnects its nodes already: this says so on the async side
+    as disconnect_cluster_pools does on the sync one, and holds should redis-py stop doing it.
+    """
+    if isinstance(client, redis.asyncio.RedisCluster):
+        await asyncio.gather(*(node.disconnect() for node in client.get_nodes()))
 
 
 def px(ttl: float | None) -> int | None:

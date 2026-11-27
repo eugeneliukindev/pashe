@@ -21,6 +21,7 @@ from pashe._internal.redis.clients import (  # noqa: WPS235 - what both sides sh
     EXPIRE_IF_EQUALS,
     INCR_WITH_TTL,
     SET_IF_ABSENT,
+    adisconnect_cluster_pools,
     check_client,
     milliseconds,
     px,
@@ -186,3 +187,4 @@ class AsyncRedisBackend(AsyncBackend):
     @override
     async def aclose(self) -> None:
         await self._client.aclose()
+        await adisconnect_cluster_pools(self._client)

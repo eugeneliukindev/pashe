@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+import pathlib
+import sys
 from typing import TYPE_CHECKING
 
 import pytest
@@ -11,6 +13,7 @@ from redis import Redis
 from pashe.backends import Backend
 from pashe.contrib.redis import RedisBackend
 from pashe.errors import InvalidOptionsError, WrongTypeError
+from tests.harness.helpers import call, close
 from tests.harness.stores import SERVED, STORE_PARAMS, STORES
 
 if TYPE_CHECKING:
@@ -80,6 +83,32 @@ def test_redis_needs_bytes() -> None:
 def test_redis_needs_a_timeout() -> None:
     with pytest.raises(InvalidOptionsError, match="socket_timeout"):
         RedisBackend(Redis(socket_timeout=None))  # as every client before redis-py 8 has by default
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="counts the open sockets of the process in /proc")
+async def test_closing_a_backend_over_a_cluster_closes_its_sockets(
+    side: Side,
+    redis_cluster_url: str,
+    key_prefix: str,
+) -> None:
+    before = _open_sockets()
+    backend = side.redis_cluster(redis_cluster_url)
+    await call(backend.get, f"{key_prefix}k")  # a connection to the node of the key
+
+    await close(backend)
+
+    assert _open_sockets() == before  # the sync RedisCluster of from_url leaves the sockets of its nodes open
+
+
+def _open_sockets() -> int:
+    """The sockets the process holds open: a socket left open is only found by the garbage collector."""
+    sockets = 0
+    for fd in pathlib.Path("/proc/self/fd").iterdir():
+        try:
+            sockets += str(fd.readlink()).startswith("socket:")
+        except FileNotFoundError:  # the descriptor of the listing itself, closed once it is read
+            continue
+    return sockets
 
 
 async def test_get_set(backend: AsyncBackend) -> None:

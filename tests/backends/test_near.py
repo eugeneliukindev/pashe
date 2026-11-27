@@ -197,6 +197,7 @@ def test_a_tracking_bus_refuses_a_cluster(redis_cluster_url: str) -> None:
     with pytest.raises(TypeError, match="client must be Redis, not RedisCluster"):
         RedisTrackingBus(client)  # type: ignore[arg-type]  # as a caller without types
     client.close()
+    client.disconnect_connection_pools()  # type: ignore[no-untyped-call]  # redis-py leaves the sockets of its nodes open on close
     with pytest.raises(TypeError, match="client must be Redis, not RedisCluster"):
         AsyncRedisTrackingBus(redis.asyncio.RedisCluster.from_url(redis_cluster_url, socket_timeout=1))  # type: ignore[arg-type]  # as above
 

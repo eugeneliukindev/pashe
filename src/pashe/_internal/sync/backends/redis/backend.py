@@ -26,6 +26,7 @@ from pashe._internal.redis.clients import (  # noqa: WPS235 - what both sides sh
     INCR_WITH_TTL,
     SET_IF_ABSENT,
     check_client,
+    disconnect_cluster_pools,
     milliseconds,
     px,
     seconds_left,
@@ -189,3 +190,4 @@ class RedisBackend(Backend):
     @override
     def close(self) -> None:
         self._client.close()
+        disconnect_cluster_pools(self._client)
