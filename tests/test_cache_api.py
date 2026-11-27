@@ -324,13 +324,17 @@ async def test_locked_runs_as_many_calls_at_once_as_it_has_holders(new_process_l
     locks = new_process_locks()
     assert isinstance(locks, AsyncLocks)
     running = peak = 0
+    both_in = asyncio.Event()
 
     @locks.locked(ttl=10, holders=2)
     async def export(report_id: int) -> int:
         nonlocal running, peak
         running += 1
         peak = max(peak, running)
-        await asyncio.sleep(0.05)
+        if running == 2:
+            both_in.set()
+        await asyncio.wait_for(both_in.wait(), timeout=5)  # the second holder, however slow the backend
+        await asyncio.sleep(0.05)  # a third one inside, if the lock let it in, is counted meanwhile
         running -= 1
         return report_id
 
