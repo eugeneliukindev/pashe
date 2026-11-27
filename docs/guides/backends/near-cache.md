@@ -24,7 +24,7 @@ Redis node, and reads go on for a while when Redis is slow.
 ```mermaid
 flowchart LR
     subgraph p1["Process 1"]
-        request(["get_user(1)"]) --> local1["local copy"]
+        request(["a call"]) --> local1["local copy, 5 s"]
     end
     subgraph p2["Process 2"]
         local2["local copy"]

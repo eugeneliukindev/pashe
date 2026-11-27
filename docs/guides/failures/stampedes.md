@@ -51,116 +51,61 @@ Every option at once, as the [example of every option](../caching/decorator.md#e
 
 Calls of one key at the same time in one process share one load. It is on by default.
 
-=== "Without"
-
-    ```mermaid
-    sequenceDiagram
-        box rgba(43,91,132,0.14) Process 1
-            participant A as Call 1
-            participant B as Call 2
-        end
-        participant DB as Source
-        A->>DB: miss, load
-        B->>DB: miss, load
-        Note over DB: two loads of one key
-    ```
-
-=== "With"
-
-    ```mermaid
-    sequenceDiagram
-        box rgba(43,91,132,0.14) Process 1
-            participant A as Call 1
-            participant B as Call 2
-        end
-        participant DB as Source
-        A->>DB: miss, load
-        B->>A: miss, wait for its load
-        DB-->>A: result
-        A-->>B: the same result
-        Note over DB: one load
-    ```
+```mermaid
+sequenceDiagram
+    box rgba(43,91,132,0.14) Process 1
+        participant A as Call 1
+        participant B as Call 2
+    end
+    participant DB as Source
+    A->>DB: miss, load
+    B->>A: miss, wait for its load
+    DB-->>A: result
+    A-->>B: the same result
+    Note over DB: one load
+```
 
 ## Locking a load across processes
 
 `share_loads` leaves one load per process; with ten processes that is ten loads. A load lock
 in Redis leaves one for all of them.
 
-=== "Without"
-
-    ```mermaid
-    sequenceDiagram
-        box rgba(43,91,132,0.14) Process 1
-            participant A as Calls
-        end
-        box rgba(0,150,136,0.14) Process 2
-            participant B as Calls
-        end
-        box rgba(247,181,0,0.18) Redis: every process
-            participant R as Redis
-        end
-        participant DB as Source
-        A->>R: miss
-        B->>R: miss
-        A->>DB: load
-        B->>DB: load
-        Note over DB: one load per process
-    ```
-
-=== "With"
-
-    ```mermaid
-    sequenceDiagram
-        box rgba(43,91,132,0.14) Process 1
-            participant A as Calls
-        end
-        box rgba(0,150,136,0.14) Process 2
-            participant B as Calls
-        end
-        box rgba(247,181,0,0.18) Redis: every process
-            participant R as Redis
-        end
-        participant DB as Source
-        A->>R: miss, take the lock, held at most lock_for
-        B->>R: miss, the lock is taken: wait
-        A->>DB: load
-        A->>R: store, release the lock
-        R-->>B: the stored result
-        Note over DB: one load for every process
-    ```
+```mermaid
+sequenceDiagram
+    box rgba(43,91,132,0.14) Process 1
+        participant A as Calls
+    end
+    box rgba(0,150,136,0.14) Process 2
+        participant B as Calls
+    end
+    box rgba(247,181,0,0.18) Redis: every process
+        participant R as Redis
+    end
+    participant DB as Source
+    A->>R: miss, take the lock, held at most lock_for
+    B->>R: miss, the lock is taken: wait
+    A->>DB: load
+    A->>R: store, release the lock
+    R-->>B: the stored result
+    Note over DB: one load for every process
+```
 
 ## Limiting loads at once
 
 A limit of loads of one function in one process, whatever their keys: here, `max_loads=2`.
 
-=== "Without"
-
-    ```mermaid
-    sequenceDiagram
-        box rgba(43,91,132,0.14) Process 1
-            participant C as get_report(1), (2), (3)
-        end
-        participant DB as Source
-        C->>DB: load 1
-        C->>DB: load 2
-        C->>DB: load 3
-        Note over DB: three heavy loads at once
-    ```
-
-=== "With"
-
-    ```mermaid
-    sequenceDiagram
-        box rgba(43,91,132,0.14) Process 1
-            participant C as get_report(1), (2), (3)
-        end
-        participant DB as Source
-        C->>DB: load 1
-        C->>DB: load 2
-        Note over C: 3 waits for a slot, or a stale result answers it
-        DB-->>C: report 1
-        C->>DB: load 3, in the freed slot
-    ```
+```mermaid
+sequenceDiagram
+    box rgba(43,91,132,0.14) Process 1
+        participant C as get_report(1), (2), (3)
+    end
+    participant DB as Source
+    C->>DB: load 1
+    C->>DB: load 2
+    Note over C: 3 waits for a slot, or a stale result answers it
+    DB-->>C: report 1
+    C->>DB: load 3, in the freed slot
+```
 
 ## Reload before the TTL
 

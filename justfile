@@ -230,9 +230,9 @@ docs:
 [doc('Test the examples of the docs: each imports, and what a page says of it holds')]
 [group('docs')]
 docs-check:
-    # what a page shows and no test runs is a line missed; the run is at 93.55 and the bar may only go up
+    # what a page shows and no test runs is a line missed; the run is at 95.85 and the bar may only go up
     COVERAGE_FILE=coverage/.coverage.examples uv run pytest -n 0 --cov=examples --cov-report=term-missing:skip-covered \
-        --cov-fail-under=93 docs/examples
+        --cov-fail-under=95 docs/examples
 
 [doc('Serve the documentation with live reload')]
 [group('docs')]

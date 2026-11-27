@@ -31,19 +31,6 @@ default `JsonCodec` would hand back a `dict`.
 
 A product page reads its product from the database on every request. Cache it for five minutes:
 
-```mermaid
-sequenceDiagram
-    participant Page
-    participant Cache
-    participant DB as Database
-    Page->>Cache: get_product(1)
-    Cache->>DB: miss, query
-    DB-->>Cache: product, stored for 300 s
-    Cache-->>Page: product
-    Page->>Cache: get_product(1)
-    Cache-->>Page: hit, the database is not asked
-```
-
 === "Sync"
 
     ```python
@@ -66,18 +53,9 @@ get_product(1)  0 queries
 ## 2. Data that changes
 
 A new price must show at once, on the product page and on every list of its category. Tag what
-depends on what, and tell the cache when you write:
-
-```mermaid
-flowchart LR
-    write(["change_price(1, 990)"]) --> set["get_product.set: product:1 holds the new price"]
-    write --> tags["invalidate_tags: every list tagged category:coffee is dropped"]
-    tags --> next["the next list_category reloads"]
-    classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
-    classDef fromSource fill:#2b5b84,color:#ffffff,stroke:#1f4466
-    class set fromCache
-    class next fromSource
-```
+depends on what, and tell the cache when you write: `change_price` stores the new price with
+`get_product.set` and drops every list tagged `category:coffee`, which the next `list_category`
+reloads.
 
 === "Sync"
 
@@ -179,19 +157,6 @@ sequenceDiagram
 The home page shows fifty prices. Fifty cached calls are fifty round trips to the cache; a batch
 function reads them in one and queries only the missing ones:
 
-```mermaid
-flowchart LR
-    call(["get_prices([1, 2, 3])"]) --> read["one read of price:1, price:2 and price:3"]
-    read -- "1, 2 stored" --> hit["from the cache"]
-    read -- "3 missing" --> load["one query for 3"]
-    load --> answer(["the three prices"])
-    hit --> answer
-    classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
-    classDef fromSource fill:#2b5b84,color:#ffffff,stroke:#1f4466
-    class hit fromCache
-    class load fromSource
-```
-
 === "Sync"
 
     ```python
@@ -216,17 +181,6 @@ get_prices([1, 2, 3])  1 query
 The payment provider hands out access tokens and says how long each is valid. Keep each that
 long, less a minute of margin:
 
-```mermaid
-flowchart LR
-    provider["the provider: expires_in = 3600"] --> ttl["ttl = expires_in - 60"]
-    ttl --> stored["the token is reused for 3540 s"]
-    stored -- "then" --> renewed["a new token, before the old one expires"]
-    classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
-    classDef fromSource fill:#2b5b84,color:#ffffff,stroke:#1f4466
-    class stored fromCache
-    class provider,renewed fromSource
-```
-
 === "Sync"
 
     ```python
@@ -245,19 +199,9 @@ flowchart LR
 
 ## 7. Logins, quotas and a nightly job
 
-Every process of the shop shares the limits and the locks, as they live in the backend:
-
-```mermaid
-flowchart LR
-    backend[("the backend, shared by every process")]
-    login["5 failed logins in 15 min"] -- "6th" --> ban["RateLimitedError, retry_after = 1 h"]
-    partner["a partner over 100 searches a minute"] --> limited["RateLimitedError"]
-    job["the nightly export on every server"] -- "try_lock" --> one["one runs it, the others skip"]
-    ban & limited & one -.- backend
-    classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
-    classDef fromSource fill:#2b5b84,color:#ffffff,stroke:#1f4466
-    class ban,limited,one fromCache
-```
+Every process of the shop shares the limits and the locks, as they live in the backend: five
+failed logins of an email in 15 minutes ban it for an hour, a partner gets 100 searches a minute, and the nightly export
+runs on one server while the others skip it.
 
 === "Sync"
 

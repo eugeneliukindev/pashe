@@ -56,26 +56,12 @@ reaches: over memory, a lock keeps apart the threads and tasks of one process, n
 
 [What to choose](guides/choosing.md#where-each-feature-works) lists where every feature lives.
 
+| In the memory of each process | In Redis, shared by every process |
+| --- | --- |
+| `Stampede(share_loads=..., max_loads=...)`, the copies of a near cache, the fallback | the entries, the tag counters, the locks of `Stampede(lock_for=...)`, locks, the counters of rate limits |
+
 In the diagrams of these docs a box is where something lives: blue and green boxes are
 processes, each with its own memory; the yellow box is Redis, shared by every process.
-
-```mermaid
-flowchart LR
-    subgraph p1["Process 1"]
-        one["Stampede: share_loads, max_loads; near cache copies; fallback"]
-    end
-    subgraph p2["Process 2"]
-        two["the same, of its own"]
-    end
-    subgraph shared["Redis: every process"]
-        redis[("entries, tag counters, Stampede.lock_for locks, locks, rate limit counters")]
-    end
-    one --> redis
-    two --> redis
-    style p1 fill:#2b5b8424,stroke:#2b5b84
-    style p2 fill:#00968824,stroke:#009688
-    style shared fill:#f7b5002e,stroke:#c98f00
-```
 
 ## Sync and async
 

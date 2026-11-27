@@ -19,8 +19,8 @@ the source gets one load per key and process instead of one per call:
 ```mermaid
 flowchart LR
     subgraph p1["Process 1"]
-        request(["get_user(1)"])
-        fallback["fallback: memory of the process, up to Fallback.ttl"]
+        request(["a call"])
+        fallback["fallback: the memory of the process, 30 s"]
     end
     subgraph shared["Redis: every process"]
         redis[("entries")]

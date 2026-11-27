@@ -59,7 +59,7 @@ limiter closes nothing: the backend belongs to whoever made it.
 
     ```mermaid
     flowchart LR
-        window["0 to 60 s<br/>calls 1 to 5 pass"] -- "call 6" --> ban["the next 300 s<br/>every call raises RateLimitedError, retry_after says how long is left"]
+        window["0 to 60 s<br/>calls 1 to 5 pass"] -- "call 6" --> ban["the next 300 s<br/>every call raises RateLimitedError"]
         ban --> next["after the ban<br/>the next call starts a new window"]
         window -. "60 s pass" .-> next
         classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00

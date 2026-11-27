@@ -37,13 +37,14 @@ API reference: [`Stale`](../../reference/options.md#pashe.options.Stale).
     ```
 
 ```mermaid
-flowchart LR
-    fresh["0 to 60 s<br/>fresh: HIT"] --> stale["60 to 90 s<br/>the old result at once, a reload in the background: STALE_WHILE_REVALIDATE"]
-    stale --> gone["after 90 s<br/>the call waits for the load: MISS"]
-    classDef fromCache fill:#f7b500,color:#000000,stroke:#c98f00
-    classDef fromSource fill:#2b5b84,color:#ffffff,stroke:#1f4466
-    class fresh,stale fromCache
-    class gone fromSource
+gantt
+    title get_prices(): ttl=60, while_revalidate=30
+    dateFormat X
+    axisFormat %M:%S
+    section a call
+    HIT, fresh :done, fresh, 0, 60s
+    STALE_WHILE_REVALIDATE, a reload in the background :active, stale, after fresh, 30s
+    MISS, the call waits for the load :milestone, after stale, 0s
 ```
 
 For 30 seconds after the TTL a call is answered at once with the stale result, and one caller

@@ -12,12 +12,17 @@ social:
 
 <p class="pashe-hero__tagline">Caching for Python services that run as many processes.</p>
 
+[![Tests](https://github.com/eugeneliukindev/pashe/actions/workflows/test.yml/badge.svg)](https://github.com/eugeneliukindev/pashe/actions/workflows/test.yml)
+[![Docs](https://github.com/eugeneliukindev/pashe/actions/workflows/docs.yml/badge.svg)](https://github.com/eugeneliukindev/pashe/actions/workflows/docs.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-2b5b84?logo=python&logoColor=white)](https://www.python.org)
-[![License: MIT](https://img.shields.io/badge/license-MIT-f7b500)](https://opensource.org/license/mit)
 [![Typed: mypy strict](https://img.shields.io/badge/typed-mypy%20strict-2b5b84)](https://mypy-lang.org)
+[![Typed: pyright strict](https://img.shields.io/badge/typed-pyright%20strict-2b5b84)](https://microsoft.github.io/pyright)
+[![Lint: ruff](https://img.shields.io/badge/lint-ruff-2b5b84)](https://docs.astral.sh/ruff)
+[![Format: ruff format](https://img.shields.io/badge/format-ruff%20format-2b5b84)](https://docs.astral.sh/ruff/formatter)
+[![License: MIT](https://img.shields.io/badge/license-MIT-f7b500)](https://opensource.org/license/mit)
 
 ```sh
-uv add "pashe[redis]"
+pip install "pashe[redis]"
 ```
 
 [Get started](getting-started.md){ .md-button .md-button--primary }

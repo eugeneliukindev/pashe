@@ -11,6 +11,9 @@
   <a href="https://eugeneliukindev.github.io/pashe/"><img src="https://github.com/eugeneliukindev/pashe/actions/workflows/docs.yml/badge.svg" alt="Docs"></a>
   <a href="https://www.python.org"><img src="https://img.shields.io/badge/python-3.12%2B-2b5b84?logo=python&logoColor=white" alt="Python 3.12+"></a>
   <a href="https://mypy-lang.org"><img src="https://img.shields.io/badge/typed-mypy%20strict-2b5b84" alt="Typed: mypy strict"></a>
+  <a href="https://microsoft.github.io/pyright"><img src="https://img.shields.io/badge/typed-pyright%20strict-2b5b84" alt="Typed: pyright strict"></a>
+  <a href="https://docs.astral.sh/ruff"><img src="https://img.shields.io/badge/lint-ruff-2b5b84" alt="Lint: ruff"></a>
+  <a href="https://docs.astral.sh/ruff/formatter"><img src="https://img.shields.io/badge/format-ruff%20format-2b5b84" alt="Format: ruff format"></a>
   <a href="https://opensource.org/license/mit"><img src="https://img.shields.io/badge/license-MIT-f7b500" alt="License: MIT"></a>
 </p>
 
@@ -20,7 +23,7 @@ source does not take the service down: callers share one load, stale results ans
 source is slow or failing, and a fallback keeps working while Redis is down.
 
 ```sh
-uv add "pashe[redis]"
+pip install "pashe[redis]"
 ```
 
 ```python
