@@ -12,6 +12,14 @@ if TYPE_CHECKING:
     from pashe._internal.sync.cache.batch_cache import BatchCache, BatchFunction
 
 
+class CachedBatchFunctionDecorator(Protocol):
+    """What ``@cache.batch(...)`` returns: a decorator that caches every item of a batch function on its own."""
+
+    def __call__[K: Hashable, V](self, function: BatchFunction[K, V], /) -> CachedBatchFunction[K, V]:
+        """Cache the items function loads: it takes a list of items and returns a dict of those it found."""
+        ...
+
+
 @final
 class CachedBatchFunction[K: Hashable, V]:
     """A function of a batch, ``f(items) -> {item: value}``, whose results are cached per item.
@@ -103,11 +111,3 @@ class CachedBatchFunction[K: Hashable, V]:
     def __repr__(self) -> str:
         """Show the batch function, by its qualified name."""
         return f"{type(self).__name__}({getattr(self._function, '__qualname__', self._function)})"
-
-
-class CachedBatchFunctionDecorator(Protocol):
-    """What ``@cache.batch(...)`` returns: a decorator that caches every item of a batch function on its own."""
-
-    def __call__[K: Hashable, V](self, function: BatchFunction[K, V], /) -> CachedBatchFunction[K, V]:
-        """Cache the items function loads: it takes a list of items and returns a dict of those it found."""
-        ...

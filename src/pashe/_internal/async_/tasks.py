@@ -14,6 +14,14 @@ if TYPE_CHECKING:
 ashield: Final = asyncio.shield  # a cancelled caller still releases what it holds
 
 
+class AsyncDecorator(Protocol):
+    """A decorator of an ``async def`` function that keeps its signature, as locked, limited and invalidates return."""
+
+    def __call__[**P, R](self, function: Callable[P, Awaitable[R]], /) -> Callable[P, Awaitable[R]]:
+        """Return function, run as the decorator says."""
+        ...
+
+
 @final
 class AsyncSharedLoads:
     __slots__ = ("_loads",)
@@ -105,14 +113,6 @@ class AsyncBackgroundTasks:
     async def aclose(self) -> None:
         self._stopped = True
         await asyncio.gather(*self._tasks, return_exceptions=True)
-
-
-class AsyncDecorator(Protocol):
-    """A decorator of an ``async def`` function that keeps its signature, as locked, limited and invalidates return."""
-
-    def __call__[**P, R](self, function: Callable[P, Awaitable[R]], /) -> Callable[P, Awaitable[R]]:
-        """Return function, run as the decorator says."""
-        ...
 
 
 def aexpect_side(

@@ -12,6 +12,22 @@ if TYPE_CHECKING:
     from pashe._internal.sync.cache.function_cache import FunctionCache, Load
 
 
+class CachedFunctionDecorator(Protocol):
+    """What ``@cache(...)`` returns: a decorator that caches the results of a function."""
+
+    def __call__[**Q, T](self, function: Callable[Q, T], /) -> CachedFunction[Q, T]:
+        """Cache the results of function, of the side of the cache."""
+        ...
+
+
+class CachedValueDecorator(Protocol):
+    """What ``@cache.value(...)`` returns: a decorator that makes a value set by hand of a function."""
+
+    def __call__[**Q, T](self, function: Callable[Q, T], /) -> CachedValue[Q, T]:
+        """Make function a value: its signature gives the key, its body never runs."""
+        ...
+
+
 class CachedValue[**P, R]:
     """A place in the cache for values of yours, found by the arguments of a function that never runs.
 
@@ -264,19 +280,3 @@ class CachedFunction[**P, R](CachedValue[P, R]):
         if instance is None:
             return self
         return CachedFunction(self._function, self._keys, self._function_cache, instance=instance)
-
-
-class CachedFunctionDecorator(Protocol):
-    """What ``@cache(...)`` returns: a decorator that caches the results of a function."""
-
-    def __call__[**Q, T](self, function: Callable[Q, T], /) -> CachedFunction[Q, T]:
-        """Cache the results of function, of the side of the cache."""
-        ...
-
-
-class CachedValueDecorator(Protocol):
-    """What ``@cache.value(...)`` returns: a decorator that makes a value set by hand of a function."""
-
-    def __call__[**Q, T](self, function: Callable[Q, T], /) -> CachedValue[Q, T]:
-        """Make function a value: its signature gives the key, its body never runs."""
-        ...

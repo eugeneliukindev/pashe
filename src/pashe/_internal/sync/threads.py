@@ -15,6 +15,14 @@ if TYPE_CHECKING:
 _THREAD_PREFIX: Final = "pashe"
 
 
+class Decorator(Protocol):
+    """A decorator of a ``def`` function that keeps its signature, as locked, limited and invalidates return."""
+
+    def __call__[**P, R](self, function: Callable[P, R], /) -> Callable[P, R]:
+        """Return function, run as the decorator says."""
+        ...
+
+
 @final
 class SharedLoads:
     __slots__ = ("_loads", "_lock")
@@ -122,14 +130,6 @@ class BackgroundTasks:
             executor = self._executor
         if executor is not None:
             executor.shutdown(wait=True)
-
-
-class Decorator(Protocol):
-    """A decorator of a ``def`` function that keeps its signature, as locked, limited and invalidates return."""
-
-    def __call__[**P, R](self, function: Callable[P, R], /) -> Callable[P, R]:
-        """Return function, run as the decorator says."""
-        ...
 
 
 def expect_side(

@@ -10,6 +10,14 @@ if TYPE_CHECKING:
     from pashe._internal.cache.keys import ItemKeys
 
 
+class AsyncCachedBatchFunctionDecorator(Protocol):
+    """What ``@cache.batch(...)`` returns: a decorator that caches every item of a batch function on its own."""
+
+    def __call__[K: Hashable, V](self, function: AsyncBatchFunction[K, V], /) -> AsyncCachedBatchFunction[K, V]:
+        """Cache the items function loads: it takes a list of items and returns a dict of those it found."""
+        ...
+
+
 @final
 class AsyncCachedBatchFunction[K: Hashable, V]:
     """A function of a batch, ``f(items) -> {item: value}``, whose results are cached per item.
@@ -101,11 +109,3 @@ class AsyncCachedBatchFunction[K: Hashable, V]:
     def __repr__(self) -> str:
         """Show the batch function, by its qualified name."""
         return f"{type(self).__name__}({getattr(self._function, '__qualname__', self._function)})"
-
-
-class AsyncCachedBatchFunctionDecorator(Protocol):
-    """What ``@cache.batch(...)`` returns: a decorator that caches every item of a batch function on its own."""
-
-    def __call__[K: Hashable, V](self, function: AsyncBatchFunction[K, V], /) -> AsyncCachedBatchFunction[K, V]:
-        """Cache the items function loads: it takes a list of items and returns a dict of those it found."""
-        ...
