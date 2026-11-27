@@ -1,6 +1,6 @@
-"""The Redis and the Redis Cluster of the tests, in Docker: a pytest plugin that conftest loads.
+"""The Redis, the Redis Cluster and the memcached of the tests, in Docker: a pytest plugin that conftest loads.
 
-Each test process starts its own Redis and cluster when its first test asks for one. ``pytest --help``
+Each test process starts its own of each when its first test asks for one. ``pytest --help``
 lists the options under "redis".
 """
 
@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Final, Literal, get_args
 import pytest
 from testcontainers.community.redis import RedisContainer
 from testcontainers.core.container import DockerContainer
-from testcontainers.core.wait_strategies import ExecWaitStrategy
+from testcontainers.core.wait_strategies import ExecWaitStrategy, PortWaitStrategy
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -39,6 +39,7 @@ _SERVERS: Final = {name: _Server(**server) for name, server in _CATALOG["servers
 _DEFAULT_SERVER: Final[str] = _CATALOG["default"]
 
 _CLUSTER_PORTS: Final = (7000, 7001, 7002)
+_MEMCACHED_PORT: Final = 11211
 _CLUSTER_SCRIPT: Final = Path(__file__).with_name("cluster.sh")
 
 
@@ -50,17 +51,27 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=_DEFAULT_SERVER,
         help="the server the tests run against, and its cluster (default: %(default)s)",
     )
+    group.addoption(
+        "--memcached-image",
+        default="memcached:1.6-alpine",
+        help="the image of the memcached the tests run against, 1.6.13 or later (default: %(default)s)",
+    )
 
 
 def pytest_report_header(config: pytest.Config) -> str:
     server = _SERVERS[config.option.redis_server]
-    return f"server: {server.image}, cluster: {server.cluster_image}, one of each per test process"
+    memcached = config.option.memcached_image
+    return (
+        f"server: {server.image}, cluster: {server.cluster_image}, memcached: {memcached}, one of each per test process"
+    )
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     for item in items:
         if isinstance(item, pytest.Function) and {"redis_url", "redis_cluster_url"} & set(item.fixturenames):
             item.add_marker(pytest.mark.redis)
+        if isinstance(item, pytest.Function) and "memcached_address" in item.fixturenames:
+            item.add_marker(pytest.mark.memcached)
 
 
 @pytest.fixture(scope="session")
@@ -87,3 +98,15 @@ def redis_cluster_url(pytestconfig: pytest.Config) -> Iterator[str]:
         wrapped.reload()
         host = next(iter(wrapped.attrs["NetworkSettings"]["Networks"].values()))["IPAddress"]
         yield f"redis://{host}:{_CLUSTER_PORTS[0]}"
+
+
+@pytest.fixture(scope="session")
+def memcached_address(pytestconfig: pytest.Config) -> Iterator[tuple[str, int]]:
+    """The host and the port of the memcached of this test process."""
+    memcached = (
+        DockerContainer(pytestconfig.option.memcached_image)
+        .with_exposed_ports(_MEMCACHED_PORT)
+        .waiting_for(PortWaitStrategy(_MEMCACHED_PORT))
+    )
+    with memcached as container:
+        yield container.get_container_host_ip(), container.get_exposed_port(_MEMCACHED_PORT)

@@ -24,7 +24,7 @@ codespell and tombi.
 | `just doctest` | the docstring examples |
 | `just bench` | the benchmarks in `benchmarks/`: the codecs, the compressors and a cache call over each backend, with Redis in Docker |
 | `just test-flaky` | the race and timing tests, 100 times each over xdist; run it after you change them |
-| `just test-lowest` | the tests with the lowest versions that the floors in `pyproject.toml` allow, on Python 3.12 over Redis 6.2, in `.nox` |
+| `just test-lowest` | the tests with the lowest versions that the floors in `pyproject.toml` allow, on Python 3.12 over Redis 6.2 and memcached 1.6.13, in `.nox` |
 | `just test-highest` | the tests with the newest versions the upper bounds allow, past `uv.lock`, on Python 3.15, in `.nox` |
 | `just test-servers [server]` | the tests over Redis 6.2 and 7.4, Valkey 8 and 9, and Dragonfly, each with a cluster, or over one, such as `valkey-9`, in `.nox` |
 | `just test-free-threaded [python]` | the tests on Python without the GIL, 3.14t or 3.15t or both, with the locked versions, in `.nox`; orjson has no build there |

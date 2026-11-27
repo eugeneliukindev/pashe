@@ -7,29 +7,34 @@ always use the shared backend. A bus of pashe.invalidation tells the other near 
 changed.
 
 SQLiteBackend keeps entries in a file: they outlive a restart, and every process on the machine
-shares them, with no server.
+shares them, with no server. MemcachedBackend keeps them in a memcached, which pashe speaks to
+itself, with no extra.
 
 A breaker decides whether a call may reach the server of a backend: CircuitBreaker skips it for a
 while after it failed several times in a row, so a server that is down costs no wait per call.
 """
 
 from pashe._internal.async_.backends.backend import AsyncBackend
+from pashe._internal.async_.backends.memcached.backend import AsyncMemcachedBackend
 from pashe._internal.async_.backends.memory import AsyncMemoryBackend
 from pashe._internal.async_.backends.near import AsyncNearCacheBackend
 from pashe._internal.breakers import Breaker, CircuitBreaker, NoOpBreaker
 from pashe._internal.sqlite import AsyncSQLiteBackend, SQLiteBackend
 from pashe._internal.sync.backends.backend import Backend
+from pashe._internal.sync.backends.memcached.backend import MemcachedBackend
 from pashe._internal.sync.backends.memory import MemoryBackend
 from pashe._internal.sync.backends.near import NearCacheBackend
 
 __all__ = [
     "AsyncBackend",
+    "AsyncMemcachedBackend",
     "AsyncMemoryBackend",
     "AsyncNearCacheBackend",
     "AsyncSQLiteBackend",
     "Backend",
     "Breaker",
     "CircuitBreaker",
+    "MemcachedBackend",
     "MemoryBackend",
     "NearCacheBackend",
     "NoOpBreaker",

@@ -40,13 +40,19 @@ def _cluster(request: pytest.FixtureRequest, side: Side) -> Connect:
     return lambda: side.redis_cluster(url)
 
 
+def _memcached(request: pytest.FixtureRequest, side: Side) -> Connect:
+    host, port = request.getfixturevalue("memcached_address")
+    return lambda: side.memcached(host, port)
+
+
 IN_PROCESS: Final[dict[str, Store]] = {"memory": _memory, "sqlite": _sqlite}
 SERVED: Final[dict[str, Store]] = {
     "redis": _redis,
     "cluster": _cluster,
-}  # each needs its server, so -m "not redis" leaves it out
+    "memcached": _memcached,
+}  # each needs its server, so -m "not redis and not memcached" leaves it out
 STORES: Final = IN_PROCESS | SERVED
 STORE_PARAMS: Final = [
     *(pytest.param(name) for name in IN_PROCESS),
-    *(pytest.param(name, marks=pytest.mark.redis) for name in SERVED),
+    *(pytest.param(name, marks=pytest.mark.memcached if name == "memcached" else pytest.mark.redis) for name in SERVED),
 ]

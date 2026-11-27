@@ -49,7 +49,7 @@ ruff:
 [doc('Run wemake-python-styleguide and the plugins of flake8 that ruff has no rules for')]
 [group('lint')]
 flake8:
-    uv run flake8 src src/pashe/_internal/sync/threads.py src/pashe/_internal/sync/locks/lock.py src/pashe/_internal/sync/backends/redis/listeners.py
+    uv run flake8 src src/pashe/_internal/sync/threads.py src/pashe/_internal/sync/locks/lock.py src/pashe/_internal/sync/backends/redis/listeners.py src/pashe/_internal/sync/backends/memcached/connections.py
 
 [doc('Check that the docstrings match the signatures')]
 [group('lint')]
@@ -163,7 +163,7 @@ test *args='':
 [group('testing')]
 [no-exit-message]
 test-fast *args='':
-    uv run pytest -n 0 --no-cov -m 'not redis' {{ args }}
+    uv run pytest -n 0 --no-cov -m 'not redis and not memcached' {{ args }}
 
 [doc('Run the examples of the docstrings; the async side is generated into the sync one and checked there')]
 [group('testing')]
@@ -185,7 +185,7 @@ bench *args='':
     uv run pytest -n 0 --no-cov -p no:randomly --benchmark-enable --benchmark-columns=median,iqr,rounds \
         --benchmark-sort=name benchmarks {{ args }}
 
-[doc('Run the tests with the lowest versions the dependencies allow, on Python 3.12 over Redis 6.2, in .nox: .venv and uv.lock stay')]
+[doc('Run the tests with the lowest versions the dependencies allow, on Python 3.12 over Redis 6.2 and memcached 1.6.13, in .nox: .venv and uv.lock stay')]
 [group('testing')]
 test-lowest *args='':
     uv run nox -s lowest -- {{ args }}

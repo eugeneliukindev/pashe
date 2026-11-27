@@ -8,6 +8,7 @@ from __future__ import annotations
 import functools
 import importlib.util
 import inspect
+import pathlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final, overload, override
 
@@ -20,10 +21,12 @@ from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend
 from pashe._internal.sync.backends.prefixed import PrefixedBackend
 from pashe.backends import (
     AsyncBackend,
+    AsyncMemcachedBackend,
     AsyncMemoryBackend,
     AsyncNearCacheBackend,
     AsyncSQLiteBackend,
     Backend,
+    MemcachedBackend,
     MemoryBackend,
     NearCacheBackend,
     SQLiteBackend,
@@ -261,6 +264,12 @@ class Side:
             return AsyncRedisBackend(redis.asyncio.RedisCluster.from_url(url, socket_timeout=1))
         return RedisBackend(RedisCluster.from_url(url, socket_timeout=1))
 
+    def memcached(self, host: str, port: int) -> MemcachedBackend | AsyncMemcachedBackend:
+        """Return a memcached backend of the side, with connections of its own to the server at host and port."""
+        if self.is_async:
+            return AsyncMemcachedBackend(host, port=port)
+        return MemcachedBackend(host, port=port)
+
     def near(self) -> NearCacheBackend | AsyncNearCacheBackend:
         """Return a near cache of the side, with a memory backend as the near store and another as the shared one."""
         if self.is_async:
@@ -332,6 +341,17 @@ async def call(
     """Call a function of either side and return its result."""
     result = function(*args, **kwargs)
     return await result if inspect.isawaitable(result) else result
+
+
+def open_sockets() -> int:
+    """The sockets the process holds open: a socket left open is only found by the garbage collector."""
+    sockets = 0
+    for fd in pathlib.Path("/proc/self/fd").iterdir():
+        try:
+            sockets += str(fd.readlink()).startswith("socket:")
+        except FileNotFoundError:  # the descriptor of the listing itself, closed once it is read
+            continue
+    return sockets
 
 
 async def run_block(lock: Lock | AsyncLock) -> None:

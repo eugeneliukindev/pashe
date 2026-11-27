@@ -198,6 +198,8 @@ per-file-ignores = [
     # NoOpBreaker() as the default of breaker has no state, safe to share
     "src/pashe/_internal/async_/backends/redis/backend.py: WPS404",
     "src/pashe/_internal/async_/backends/redis/buses.py: WPS404",
+    # each turn of a CAS loop reads the token the next write takes: one await after another
+    "src/pashe/_internal/async_/backends/memcached/backend.py: WPS404, WPS476",
     "src/pashe/_internal/async_/cache/function_cache.py: WPS201",  # get-or-load decides with every part a cached call is made of
     "src/pashe/_internal/async_/limiter.py: WPS201",  # it checks what it is given, counts in both windows, and decorates
     "src/pashe/errors.py: WPS202",  # every error of pashe in the one module users import them from
@@ -227,7 +229,7 @@ layers = [
     "pashe.asgi | pashe.backends | pashe.invalidation | pashe.locks | pashe.wsgi",
     "pashe._internal.sqlite",  # both sides of one backend: the async one runs the sync one in threads
     # the engine, apart from its checks, which the public types below take too
-    "pashe._internal.async_ : pashe._internal.sync : pashe._internal.breakers : pashe._internal.cache : pashe._internal.hooks : pashe._internal.limits : pashe._internal.locks : pashe._internal.redis : pashe._internal.web",
+    "pashe._internal.async_ : pashe._internal.sync : pashe._internal.breakers : pashe._internal.cache : pashe._internal.hooks : pashe._internal.limits : pashe._internal.locks : pashe._internal.memcached : pashe._internal.redis : pashe._internal.web",
     "pashe.codecs | pashe.compressors | pashe.hooks | pashe.options | pashe.ratelimit",
     "pashe._internal.checks",
     "pashe.errors",
@@ -370,6 +372,7 @@ addopts = [
 doctest_optionflags = ["ELLIPSIS"]  # an example shows a digest as "..."
 filterwarnings = ["error"]  # a warning is a bug the tests found
 markers = [
+    "memcached: takes the memcached of the run, started in Docker",
     "no_leaks: pyleak fails the test on a task it leaves running or a loop it blocks",
     "redis: takes the Redis server or cluster of the run, started in Docker",
 ]
@@ -510,8 +513,8 @@ ruff_fix = true  # drops the imports of the async side that the renames left beh
 ruff_format = true
 
 # Every module of the async side but those written by hand for each side, tasks.py (threads.py on the
-# sync side), locks/lock.py and backends/redis/listeners.py: they do what asyncio and threads do their own ways. A new
-# module of the async side goes here.
+# sync side), locks/lock.py, backends/redis/listeners.py and backends/memcached/connections.py: they do what
+# asyncio and threads do their own ways. A new module of the async side goes here.
 [tool.unasyncd.files]
 "src/pashe/_internal/async_/__init__.py" = "src/pashe/_internal/sync/__init__.py"
 "src/pashe/_internal/async_/backends/__init__.py" = "src/pashe/_internal/sync/backends/__init__.py"
@@ -534,6 +537,8 @@ ruff_format = true
 "src/pashe/_internal/async_/backends/prefixed.py" = "src/pashe/_internal/sync/backends/prefixed.py"
 "src/pashe/_internal/async_/backends/redis/backend.py" = "src/pashe/_internal/sync/backends/redis/backend.py"
 "src/pashe/_internal/async_/backends/redis/buses.py" = "src/pashe/_internal/sync/backends/redis/buses.py"
+"src/pashe/_internal/async_/backends/memcached/__init__.py" = "src/pashe/_internal/sync/backends/memcached/__init__.py"
+"src/pashe/_internal/async_/backends/memcached/backend.py" = "src/pashe/_internal/sync/backends/memcached/backend.py"
 
 [tool.unasyncd.add_replacements]
 # A sibling has a name of its own on each side, as the public classes do: unasyncd renames it bare
@@ -602,6 +607,10 @@ AsyncInvalidationHandler = "InvalidationHandler"
 "pashe._internal.async_.backends.near.AsyncInvalidationHandler" = "pashe._internal.sync.backends.near.InvalidationHandler"
 AsyncNearCacheBackend = "NearCacheBackend"
 "pashe._internal.async_.backends.near.AsyncNearCacheBackend" = "pashe._internal.sync.backends.near.NearCacheBackend"
+AsyncMemcachedBackend = "MemcachedBackend"
+"pashe._internal.async_.backends.memcached.backend.AsyncMemcachedBackend" = "pashe._internal.sync.backends.memcached.backend.MemcachedBackend"
+AsyncMemcachedConnections = "MemcachedConnections"
+"pashe._internal.async_.backends.memcached.connections.AsyncMemcachedConnections" = "pashe._internal.sync.backends.memcached.connections.MemcachedConnections"
 AsyncRedisBackend = "RedisBackend"
 "pashe._internal.async_.backends.redis.backend.AsyncRedisBackend" = "pashe._internal.sync.backends.redis.backend.RedisBackend"
 AsyncRedisPubSubBus = "RedisPubSubBus"

@@ -45,8 +45,8 @@ def _test(
 # an old redis-py meets an old server at a user who upgrades neither: the floors run on the oldest of both
 @nox.session(python=_PYTHONS[0])
 def lowest(session: nox.Session) -> None:
-    """Run the tests with the lowest versions the floors of the dependencies allow, over Redis 6.2 and its cluster."""
-    _test(session, "lowest-direct", "--redis-server", "redis-6.2")
+    """Run the tests with the lowest versions the floors of the dependencies allow, over the oldest servers."""
+    _test(session, "lowest-direct", "--redis-server", "redis-6.2", "--memcached-image", "memcached:1.6.13-alpine")
 
 
 @nox.session(python=_PYTHONS[-1])
