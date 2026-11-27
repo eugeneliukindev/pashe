@@ -2,43 +2,47 @@
 
 ## Pickle
 
-Unpickling runs code chosen by the bytes, so whoever can write to Redis could run code in every
-process that reads it. `PickleCodec` therefore signs every value with HMAC-SHA256 under its
-secret, and a value whose signature does not match is a `CodecError`, never unpickled. Keep the
-secret out of Redis and the same in every process.
+Unpickling runs code that the bytes choose. So anyone who can write to Redis could run code in
+every process that reads from it.
 
-The signature is checked after the compressor decompressed the value, and decompression has no
-limit: whoever can write to Redis can still make a reader decompress a few kilobytes into
-gigabytes. Let only your services write to it.
+That's why `PickleCodec` signs every value with HMAC-SHA256 under its secret. If a value's
+signature doesn't match, you get a `CodecError`, and the value is never unpickled. Keep the
+secret out of Redis, and use the same one in every process.
+
+The signature is checked after the compressor has decompressed the value, and decompression has
+no limit. So anyone who can write to Redis can still make a reader decompress a few kilobytes
+into gigabytes. Let only your own services write to it.
 
 ## Personal data in keys
 
-Keys are visible to whoever can run `SCAN` or `MONITOR` on Redis, and they end up in its logs.
-An email, a phone number or a token in a key is personal data stored in the clear. Put it in a
-template as `{email:hmac}`: the key then holds an HMAC-SHA256 under `key_secret`, which, unlike a
-plain digest, cannot be found again by hashing a list of guesses. Keep the secret out of Redis
-and the same in every process; changing it makes every such key a miss, which is safe.
+Anyone who can run `SCAN` or `MONITOR` on Redis sees your keys, and keys end up in Redis logs. An
+email, a phone number or a token in a key is personal data stored in the clear.
+
+Put it in a template as `{email:hmac}` instead. The key then holds an HMAC-SHA256 under
+`key_secret`. Unlike a plain digest, nobody can find the original by hashing a list of guesses.
+Keep the secret out of Redis, and use the same one in every process. If you change it, every
+such key becomes a miss, which is safe.
 
 ## HTTP caching
 
-`CacheHeadersMiddleware` sends `Cache-Control: private` by default: cached data may belong to
-one user, and `public` would let shared caches and proxies hand it to another. Use `public` only
+`CacheHeadersMiddleware` sends `Cache-Control: private` by default. Cached data can belong to one
+user, and `public` would let shared caches and proxies hand it to someone else. Use `public` only
 for responses that are the same for everyone.
 
-The ETag is a hash of the response body, so a `304` is right whatever else the response holds;
-it never tells two users apart by itself, as the body of each user differs.
+The ETag is a hash of the response body, so a `304` is correct whatever else the response holds.
+It never mixes up two users on its own, since each user's body differs.
 
 ## Rate limits
 
-A failing backend lets a rate-limited call through by default, so an outage of Redis does not
-take the service down. For limits that guard against abuse, such as logins, pass
-`fail_open=False`: the call then raises `BackendError`.
+By default, a failing backend lets a rate-limited call through, so a Redis outage doesn't take
+your service down. For limits that guard against abuse, such as logins, pass `fail_open=False`:
+the call then raises `BackendError`.
 
-The key of a limit is yours to choose. Behind a proxy, the address of the connection is the
-address of the proxy: take the client from a header your proxy sets.
+You choose the key of a limit. Behind a proxy, the connection's address is the proxy's address,
+so take the client from a header your proxy sets.
 
 ## Services that share a Redis
 
-The prefix of a cache is put in front of every key, its own included, so services that share
-a Redis do not see each other's entries. Its own keys live under `prefix + "__"`: keys of yours
-must not start with `"__"`.
+A cache puts its prefix in front of every key, including its own internal ones. So services that
+share a Redis don't see each other's entries. The cache's own keys live under `prefix + "__"`, so
+your keys must not start with `"__"`.

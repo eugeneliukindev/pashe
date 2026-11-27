@@ -1,8 +1,8 @@
 # Logging
 
-A cache answers from the function when its backend fails, and raises nothing. Give it a
-[`LoggingHook`][pashe.hooks.LoggingHook], or an `on_error` of your own, or no one sees a backend that is
-down.
+When its backend fails, a cache calls the function and raises nothing. That's good for your
+users, but it means nobody notices a backend that's down. Give the cache a
+[`LoggingHook`][pashe.hooks.LoggingHook], or your own `on_error`.
 
 === "Sync"
 
@@ -16,11 +16,12 @@ down.
     --8<-- "observability/logging_hook_async.py:show"
     ```
 
-It logs every error a cache works around as a warning, with the traceback, to the logger `pashe` or
-the [`logger`][pashe.hooks.LoggingHook(logger)] it is given. A record has the extra fields
-`pashe_operation` and `pashe_key`, for structured logs. pashe logs nothing without the hook.
+It logs every error the cache works around as a warning, with the traceback. It writes to the
+`pashe` logger, or to the [`logger`][pashe.hooks.LoggingHook(logger)] you pass. Each record has the
+extra fields `pashe_operation` and `pashe_key`, for structured logs. Without the hook, pashe logs
+nothing.
 
 !!! note "One warning per call while a backend is down"
 
-    Every cached call meets the backend that is down, so every call logs one. Filter or rate
-    them in the logging of the application, or count them with the metrics instead.
+    Every cached call hits the backend that's down, so every call logs a warning. Filter or
+    rate-limit them in your app's logging, or count them with metrics instead.

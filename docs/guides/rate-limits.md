@@ -1,25 +1,33 @@
 # Rate limits
 
-[`RateLimiter`][pashe.RateLimiter] of `pashe`, [`AsyncRateLimiter`][pashe.AsyncRateLimiter] on the
-async side, counts calls for a key in a backend, so every process over it shares the count, and
-refuses those over the limit with [`RateLimitedError`][pashe.errors.RateLimitedError]. A limit is
-a [sliding window](#a-sliding-window) or a [fixed window with a ban](#a-fixed-window-and-a-ban); a
-call can [weigh more](#a-heavy-call), a [failing backend](#when-the-backend-fails) lets calls
-through, and [HTTP requests](#rate-limits-of-http-requests) are limited by a middleware or a
-dependency of FastAPI. The counters live apart from the entries of a cache over the same backend
-and `prefix`, and the limiter closes nothing: the backend belongs to whoever made it.
+You want each client to make at most so many calls, however many processes serve them.
+[`RateLimiter`][pashe.RateLimiter], from `pashe`, counts calls for a key in a backend, so every
+process that uses it shares the count. Calls over the limit get
+[`RateLimitedError`][pashe.errors.RateLimitedError]. [`AsyncRateLimiter`][pashe.AsyncRateLimiter]
+is the async side.
+
+- A limit is a [sliding window](#a-sliding-window) or a
+  [fixed window with a ban](#a-fixed-window-and-a-ban).
+- A call can [weigh more](#a-heavy-call) than others.
+- When the [backend fails](#when-the-backend-fails), calls get through.
+- [HTTP requests](#rate-limits-of-http-requests) are limited by a middleware or a FastAPI
+  dependency.
+
+The counters don't mix with a cache's entries, even over the same backend and `prefix`. The
+limiter doesn't close anything: the backend belongs to whoever created it.
 
 !!! info "Where it works"
 
-    In the backend: every process of every machine over Redis, every process of one machine over
-    SQLite, one process over memory. See [Where each feature works](choosing.md#where-each-feature-works).
+    In the backend. Over Redis that's every process on every machine, over SQLite every process
+    on one machine, and over memory one process. See
+    [Where each feature works](choosing.md#where-each-feature-works).
 
 ## Counting a call and limiting a function
 
-[`limiter.count`][pashe.RateLimiter.count] counts one call of a key, where you choose the key,
-such as the address of a client; [`@limiter.limited`][pashe.RateLimiter.limited] counts every call
-of a function, by a [`key`][pashe.RateLimiter.limited(key)] template over its arguments, as of
-`@cache`, or by one counter for the function without one.
+[`limiter.count`][pashe.RateLimiter.count] counts one call for a key you choose, such as a
+client's address. [`@limiter.limited`][pashe.RateLimiter.limited] counts every call of a function.
+Its [`key`][pashe.RateLimiter.limited(key)] is a template over the arguments, the same as for
+`@cache`. Without a key, the function has one counter for all calls.
 
 === "Sync"
 
@@ -33,26 +41,26 @@ of a function, by a [`key`][pashe.RateLimiter.limited(key)] template over its ar
     --8<-- "locks_and_rate_limits/rate_limit_async.py:show"
     ```
 
-A call over the limit raises `RateLimitedError`, whose `retry_after` feeds a `Retry-After`
-header. `count` returns a [`RateLimitState`][pashe.ratelimit.RateLimitState]: what is left of the
-limit.
+A call over the limit raises `RateLimitedError`. Its `retry_after` is what you put in a
+`Retry-After` header. `count` returns a [`RateLimitState`][pashe.ratelimit.RateLimitState]: how
+much of the limit is left.
 
-Each limit keeps counters of its own, named by the key and the limit. Two limits on one key, such
-as 10 calls a minute and 100 an hour for one address, count apart, and a call passes when every
-one of them lets it. One limit used in two places on one key shares its counters.
+Each limit has its own counters, named by the key and the limit. Say one address has two limits:
+10 calls a minute and 100 an hour. They count separately, and a call passes only when both let it.
+If you use the same limit in two places with the same key, they share counters.
 
 !!! warning "A limit is checked in a few calls to the backend, not at once"
 
-    A sliding window adds the call to its counter, reads the last window, and takes the call back
-    if it is over the limit; a fixed window adds the call, then reads or sets the time left. In
-    between, other processes see the call counted: under a burst right at the limit, a few calls
-    may be refused that a single check would let through. Calls over the limit are never let
-    through.
+    A sliding window adds the call to its counter, reads the last window, and takes the call
+    back if it's over the limit. A fixed window adds the call, then reads or sets the time left.
+    In between, other processes already see the call counted. So under a burst right at the limit,
+    a few calls may be refused that a single check would let through. Calls over the limit never
+    get through.
 
 ## A sliding window
 
 With [`SlidingWindow`][pashe.ratelimit.SlidingWindow], about `calls` calls pass in any span of
-`per` seconds, even across the edge of two windows.
+`per` seconds, even across the boundary between two windows.
 
 === "Sync"
 
@@ -66,14 +74,15 @@ With [`SlidingWindow`][pashe.ratelimit.SlidingWindow], about `calls` calls pass 
     --8<-- "locks_and_rate_limits/sliding_window_async.py:show"
     ```
 
-Refused calls are not counted, so a client that keeps calling over the limit gets through again
-as soon as the span has room.
+Refused calls aren't counted. So a client that keeps calling over the limit gets through again as
+soon as the span has room.
 
 ## A fixed window and a ban
 
-With [`FixedWindow`][pashe.ratelimit.FixedWindow], `calls` pass per window that starts with the
-first call; the first call over it blocks the key for `ban_for`, as long as the window when it is
-not given.
+Want a client who goes over to wait longer? With [`FixedWindow`][pashe.ratelimit.FixedWindow],
+`calls` calls pass per window, and the window starts with the first call. The first call over the
+limit blocks the key for `ban_for`. If you don't set `ban_for`, the ban lasts as long as the
+window.
 
 === "Sync"
 
@@ -95,8 +104,8 @@ not given.
 
 ## A heavy call
 
-A call that costs the source more than the others, such as an exact search, counts as several:
-its [`cost`][pashe.RateLimiter.count(cost)].
+Some calls cost your source more than others, such as an exact search. Give such a call a
+[`cost`][pashe.RateLimiter.count(cost)], and it counts as that many calls.
 
 === "Sync"
 
@@ -112,10 +121,12 @@ its [`cost`][pashe.RateLimiter.count(cost)].
 
 ## When the backend fails
 
-A failing backend lets the call through uncounted and reports to `on_error`: a rate limit that
-fails takes no service down. Where a limit guards against abuse, as of logins or of password
-resets, fail closed instead: with [`fail_open`][pashe.RateLimiter.count(fail_open)] off a failing
-backend raises [`BackendError`][pashe.errors.BackendError].
+When the backend fails, the call gets through uncounted, and the error goes to `on_error`. A
+broken rate limit shouldn't take your service down.
+
+But when a limit guards against abuse, such as for logins or password resets, you want it to fail
+closed. Turn [`fail_open`][pashe.RateLimiter.count(fail_open)] off, and a failing backend raises
+[`BackendError`][pashe.errors.BackendError].
 
 === "Sync"
 
@@ -131,25 +142,29 @@ backend raises [`BackendError`][pashe.errors.BackendError].
 
 !!! warning "`limited` always fails open"
 
-    `fail_open` is an option of `count` only: a function of `limited` lets its call through when
-    the backend fails. Call `count` where the limit must fail closed.
+    Only `count` has `fail_open`. A function decorated with `limited` lets its calls through
+    when the backend fails. Call `count` wherever the limit must fail closed.
 
 ## Rate limits of HTTP requests
 
-Two ways count the requests of a web application with a limit of this page.
-[`RateLimitMiddleware`][pashe.asgi.RateLimitMiddleware] of `pashe.asgi` limits the whole
-application in any ASGI framework, or one route of Starlette or Litestar; for one route of FastAPI,
-or a limit by a user other dependencies give, take [`rate_limit`](web/fastapi.md) of
-`pashe.contrib.fastapi`. They count the same, and tell what is left in the same `RateLimit-Limit`,
+There are two ways to apply the limits from this page to a web application:
+
+- [`RateLimitMiddleware`][pashe.asgi.RateLimitMiddleware], from `pashe.asgi`, limits the whole
+  application in any ASGI framework, or one route in Starlette or Litestar.
+- [`rate_limit`](web/fastapi.md), from `pashe.contrib.fastapi`, limits one FastAPI route, or limits
+  by a user that other dependencies give you.
+
+Both count the same way. Both report what's left in the same `RateLimit-Limit`,
 `RateLimit-Remaining` and `RateLimit-Reset` headers.
 
-The middleware runs before the route: a request over the limit gets `429 Too Many Requests` with
-`Retry-After` from it, and the application never sees it. Its
-[`key`][pashe.asgi.RateLimitMiddleware(key)] is a function of the ASGI scope: the address of the
-client, a header, or `scope["user"]` when an authentication middleware ran before it. The
-dependency of FastAPI runs with the route, takes the `Request` and what other dependencies made,
-such as the current user, and raises `RateLimitedError` for a handler of yours to answer in the
-format of your API.
+The middleware runs before the route. A request over the limit gets `429 Too Many Requests` with
+`Retry-After`, and your application never sees it. Its
+[`key`][pashe.asgi.RateLimitMiddleware(key)] is a function of the ASGI scope: the client's
+address, a header, or `scope["user"]` when an authentication middleware ran first.
+
+The FastAPI dependency runs with the route. It takes the `Request` and whatever other dependencies
+produced, such as the current user. It raises `RateLimitedError`, and your handler turns it into a
+response in your API's format.
 
 ### The whole application
 
@@ -199,14 +214,14 @@ Too Many Requests
 
 !!! note "mypy and Litestar"
 
-    Litestar types ASGI with TypedDicts, while Starlette, httpx and pashe type it with
-    mappings, so mypy refuses any ASGI middleware of the Starlette kind in `DefineMiddleware`:
-    the `type: ignore` above says so. It runs as it is.
+    Litestar types ASGI with TypedDicts, while Starlette, httpx and pashe type it with mappings.
+    So mypy refuses any Starlette-style ASGI middleware in `DefineMiddleware`, which is what the
+    `type: ignore` above is for. The code runs fine as it is.
 
 !!! warning "`key` is required"
 
-    Behind a proxy the address of the connection is the address of the proxy: take the client
-    from a header your proxy sets.
+    Behind a proxy, the connection's address is the proxy's address. Take the client from a
+    header your proxy sets.
 
 ## Every option
 

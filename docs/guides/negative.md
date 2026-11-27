@@ -1,8 +1,9 @@
 # Negative caching
 
-An error of the function that means "there is no such data" can be cached as the answer, so the source
-is not asked again every time: [`Negative`][pashe.options.Negative] names those errors in
-[`on`][pashe.options.Negative(on)] and keeps one for [`ttl`][pashe.options.Negative(ttl)].
+Someone asks for user 7, and there's no user 7. Without a cache, every request for user 7 asks the
+source again, and gets the same answer. [`Negative`][pashe.options.Negative] caches that "not
+found" instead. List the errors that mean "there's no such data" in
+[`on`][pashe.options.Negative(on)], and pashe keeps each one for [`ttl`][pashe.options.Negative(ttl)].
 
 === "Sync"
 
@@ -28,5 +29,6 @@ flowchart LR
     class load,stored fromSource
 ```
 
-The cached function raises [`NotFoundError`][pashe.errors.NotFoundError] then, with the error of
-the function as its cause when it just loaded. A stale result never hides a "not found".
+While a "not found" is kept, the cached function raises
+[`NotFoundError`][pashe.errors.NotFoundError]. When the call has loaded right now, your function's
+error is its cause. A stale result never hides a "not found".

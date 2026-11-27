@@ -7,3 +7,7 @@ swap:
   loaders?: function
   loads? again: reload
   single[ -]flight: share_loads
+  thundering herds?: stampede
+  cache stampedes?: stampede
+  cache keys?: key
+  expiry|expiration: the end of the TTL

@@ -1,17 +1,19 @@
 # Stale results
 
-A stored result past its TTL is stale. [`Stale`][pashe.options.Stale], from `pashe.options`,
-keeps it answering for a while longer, each window in its own case: while it is
-[reloaded](#stale-while-revalidate), when the source [fails](#stale-if-error) or is
-[slow](#stale-if-slow). Every window is off until you set it, and the backend keeps a result long
-enough for each one, so a stale result answers in every process:
+A stored result past its TTL is stale. Often a stale result is better than none:
+[`Stale`][pashe.options.Stale], from `pashe.options`, lets calls get it for a while longer. Each
+stale window covers one case: while the result is [reloaded](#stale-while-revalidate), when the
+source [fails](#stale-if-error), and when it's [slow](#stale-if-slow).
+
+Every window is off until you set it. The backend keeps a result long enough for each window, so a
+stale result works in every process. See
 [How long the backend keeps a result](#how-long-the-backend-keeps-a-result).
 
 ## Stale while revalidate
 
-A call right after the TTL would wait for the reload. Within
-[`while_revalidate`][pashe.options.Stale(while_revalidate)] the stale result answers it at once,
-and one caller reloads it in the background.
+Right after the TTL, a call would have to wait for the reload. Within
+[`while_revalidate`][pashe.options.Stale(while_revalidate)], the call gets the stale result right
+away, and one caller reloads it in the background.
 
 === "Sync"
 
@@ -31,14 +33,15 @@ and one caller reloads it in the background.
 <div class="pashe-timeline__source" data-start="90 s"><b>MISS</b><br>the call waits for the load</div>
 </div>
 
-Callers never wait for the source while the window lasts. To reload before the result goes stale,
-see [Reload before the TTL](stampedes.md#reload-before-the-ttl).
+While the window lasts, no caller waits for the source. Want to reload before the result goes
+stale? See [Reload before the TTL](stampedes.md#reload-before-the-ttl).
 
 ## Stale if error
 
-When the source fails, the call would raise. Within [`if_error`][pashe.options.Stale(if_error)]
-the stale result answers the errors of [`if_error_on`][pashe.options.Stale(if_error_on)] instead,
-and the error goes to `on_error`.
+Your source goes down. Without a stale result, the call raises. Within
+[`if_error`][pashe.options.Stale(if_error)], a call that hits one of the
+[`if_error_on`][pashe.options.Stale(if_error_on)] errors gets the stale result instead, and the
+error goes to `on_error`.
 
 === "Sync"
 
@@ -60,14 +63,14 @@ and the error goes to `on_error`.
 
 !!! warning "Narrow `if_error_on` to the errors of your source"
 
-    By default it answers every `Exception`, so a bug of your own would be hidden behind a stale
-    result too. Name the errors of the source, as `ConnectionError` and `TimeoutError` above.
+    By default it covers every `Exception`, so a stale result would hide your own bugs too. Name
+    your source's errors, like `ConnectionError` and `TimeoutError` above.
 
 ### Stale items of a batch
 
-When the function of a [batch](caching/batches.md) raises, the stale results of the items answer
-instead, within `if_error`, only if each item the function loads has one: with one item short of a
-stale result, the call raises, as the items are one call.
+When a [batch](caching/batches.md) function raises, the call can get the items' stale results
+instead, within `if_error`. But only if every item the function loads has one. If even one item
+has no stale result, the call raises, since the items are one call.
 
 === "Sync"
 
@@ -81,19 +84,20 @@ stale result, the call raises, as the items are one call.
     --8<-- "caching_functions/batches_if_error_async.py:show"
     ```
 
-A batch waits for its load and loads nothing in the background, so it refuses `while_revalidate`,
+A batch waits for its load and never loads in the background. So it refuses `while_revalidate`,
 `if_slow`, `lock_for` and `revalidate_before`.
 
 !!! tip "A circuit breaker composes with it"
 
-    Decorate the function with a breaker of another library, under the cache: while the breaker
-    is open, its error is answered with the stale result without waiting for the source.
+    Decorate the function with a breaker from another library, under the cache. While the breaker
+    is open, the call gets the stale result for its error, without waiting for the source.
 
 ## Stale if slow
 
-A slow source holds every call that waits for it. Within [`if_slow`][pashe.options.Stale(if_slow)],
-once a call has waited [`slow_after`][pashe.options.Stale(slow_after)], the stale result answers,
-and the load goes on in the background for the calls after it. One is refused without the other.
+A slow source holds up every call that waits for it. Within
+[`if_slow`][pashe.options.Stale(if_slow)], once a call has waited
+[`slow_after`][pashe.options.Stale(slow_after)], it gets the stale result. The load goes on in the
+background for the calls after it. You need to set both: pashe refuses one without the other.
 
 === "Sync"
 
@@ -115,9 +119,9 @@ and the load goes on in the background for the calls after it. One is refused wi
 
 ## How long the backend keeps a result
 
-A result is fresh for `ttl`, and the backend keeps it longer by the longest window of `Stale`, so
-a stale result is there to answer. With `@cache(ttl=60, stale=Stale(while_revalidate=30,
-if_error=600))` the backend keeps it for 11 minutes:
+A result is fresh for `ttl`. The backend keeps it longer, by the longest window of `Stale`, so
+the stale result is still there when a call needs it. With `@cache(ttl=60,
+stale=Stale(while_revalidate=30, if_error=600))`, the backend keeps it for 11 minutes:
 
 <div class="pashe-timeline">
 <div class="pashe-timeline__fresh" style="flex: 60" data-start="0"><b>HIT</b><br>fresh</div>

@@ -1,14 +1,13 @@
 # Storing only some results
 
-By default every result is stored. [`Store`][pashe.options.Store], from `pashe.options`, keeps out
-the results not worth keeping: one that [will change soon](#a-result-that-will-change), or one the
-source [gives fast anyway](#a-load-that-was-fast).
+By default, pashe stores every result. [`Store`][pashe.options.Store], from `pashe.options`, keeps
+out the results that aren't worth keeping: one that [will change soon](#a-result-that-will-change),
+or one the source [returns fast anyway](#a-load-that-was-fast).
 
 ## A result that will change
 
-An order is final once it is done; until then its status changes, so caching it would answer
-with an old status. [`when`][pashe.options.Store(when)] stores only the results it returns true
-for.
+An order is final once it's done. Until then its status changes, so a cached order would show an
+old status. [`when`][pashe.options.Store(when)] stores only the results it returns true for.
 
 === "Sync"
 
@@ -26,9 +25,9 @@ for.
 
 ## A load that was fast
 
-A result the source gives fast is cheap to reload, so the room in the cache goes to the slow
-ones: [`slower_than`][pashe.options.Store(slower_than)] stores only the results whose load took
-at least that long.
+A result the source returns fast is cheap to reload, so you'd rather keep the room in the cache for
+the slow ones. [`slower_than`][pashe.options.Store(slower_than)] stores only the results whose load
+took at least that long.
 
 === "Sync"
 
@@ -44,7 +43,7 @@ at least that long.
 
 ## A result left out
 
-A result left out is still answered, and the call reports `MISS`. The rule holds for every way a
-result gets in: `get_order.set(order, 1)` and `refresh` with a result `when` refuses drop the
-stored one instead of keeping it. `set` loads nothing, so `slower_than` does not apply to it. In
-a batch `when` is checked per item, and `slower_than` against the load of the whole batch.
+The call still returns a result that's left out, and reports `MISS`. The rule holds however a
+result gets in. If `when` refuses a result from `get_order.set(order, 1)` or `refresh`, the stored
+one is dropped rather than kept. `set` loads nothing, so `slower_than` doesn't apply to it. In a
+batch, `when` is checked for each item, and `slower_than` against the load of the whole batch.

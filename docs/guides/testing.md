@@ -1,12 +1,12 @@
 # Testing
 
-How to test code that caches: a cache of its own for each test, time that moves without sleeping,
-and the same tests against Redis.
+This page shows how to test code that caches. Each test gets its own cache, time moves forward
+without sleeping, and the same tests run against Redis.
 
 ## A memory backend per test
 
-Code under test takes its cache from outside, so a test gives it one of its own, in memory: no
-Redis, and no entries leak from one test into another.
+Your code under test takes its cache from outside. So each test can hand it a cache of its own,
+in memory. You don't need Redis, and no entries leak from one test into the next.
 
 === "Sync"
 
@@ -22,8 +22,8 @@ Redis, and no entries leak from one test into another.
 
 ## Time without sleeping
 
-A cache asks its `clock` for the wall time, and a memory backend asks its own for when entries
-expire. A test moves them instead of sleeping:
+A cache asks its `clock` for the wall time, and a memory backend asks its own clock when entries
+expire. In a test, you move both clocks forward instead of sleeping:
 
 === "Sync"
 
@@ -41,14 +41,14 @@ expire. A test moves them instead of sleeping:
     --8<-- "testing/stale_clock_async.py:calls"
     ```
 
-A hook's `on_call` tells how every call was answered, so a test checks the behaviour of the cache,
-not only the results.
+A hook's `on_call` hears how each call was answered. So your test can check how the cache
+behaves, not only what it returns.
 
 ## Against Redis
 
-The behaviour that depends on Redis itself, such as a near cache over two processes or a bus,
-deserves a test against a real one. [testcontainers](https://testcontainers.com) starts one for
-the session:
+Some behaviour depends on Redis itself, such as a near cache over two processes, or a bus. That
+deserves a test against a real Redis. [testcontainers](https://testcontainers.com) starts one for
+the test session:
 
 === "Sync"
 

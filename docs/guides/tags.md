@@ -1,17 +1,19 @@
 # Tags and invalidation
 
-A tag names a group of results, so one call drops them all: the results of one user, of one team,
-or every user.
+When a user changes their profile, you want to drop every cached result about that user, not
+hunt down each key. A tag names a group of results, so one call drops them all: everything about
+one user, one team, or every user.
 
 !!! info "Where it works"
 
-    A tag is a counter in the backend: every process of every machine over Redis, every process of
-    one machine over SQLite, one process over memory. See [Where each feature works](choosing.md#where-each-feature-works).
+    A tag is a counter in the backend. Over Redis it covers every process on every machine. Over
+    SQLite it covers every process on one machine, and over memory one process. See
+    [Where each feature works](choosing.md#where-each-feature-works).
 
 ## Tagging a result
 
-[`tags`][pashe.Cache.__call__(tags)] of the decorator takes templates over the arguments, as
-`key=` does, and [`cache.invalidate_tags`][pashe.Cache.invalidate_tags] takes the tags as they are
+Give the decorator [`tags`][pashe.Cache.__call__(tags)]: templates over the arguments, the same
+way `key=` works. Then call [`cache.invalidate_tags`][pashe.Cache.invalidate_tags] with the tags
 filled in.
 
 === "Sync"
@@ -26,13 +28,14 @@ filled in.
     --8<-- "invalidation/tags_async.py:show"
     ```
 
-`get_user.invalidate(1)` drops one result by its arguments instead, see
+Want to drop a single result? `get_user.invalidate(1)` drops it by its arguments: see
 [`@cache`](caching/decorator.md#reading-and-writing-a-result).
 
 ## Tags of a batch
 
-A batch takes [`tags`][pashe.Cache.batch(tags)] too, templates over its item such as `["user:{}"]`: one tag drops the result
-of `get_user(3)` and of item 3 of `get_users([...])` alike.
+A batch takes [`tags`][pashe.Cache.batch(tags)] too: templates over its item, such as
+`["user:{}"]`. One tag then drops both the result of `get_user(3)` and item 3 of
+`get_users([...])`.
 
 === "Sync"
 
@@ -50,9 +53,10 @@ See [Batches](caching/batches.md).
 
 ## A tag with a digest
 
-A tag with a digest, such as `user:{email:hmac}`, is stored filled in and hashed: make it with
-[`cache.key_for`][pashe.Cache.key_for]`("user:{email:hmac}", email=...)` to invalidate it. The
-`hmac` digest needs `key_secret` of the cache.
+A tag with a digest, such as `user:{email:hmac}`, is stored filled in and hashed. To invalidate
+it, build the same tag with
+[`cache.key_for`][pashe.Cache.key_for]`("user:{email:hmac}", email=...)`. The `hmac` digest needs
+the cache's `key_secret`.
 
 === "Sync"
 
@@ -70,9 +74,9 @@ See [`key_for`](caching/keys.md#digests-and-cachekey_for).
 
 ## Invalidating on writes
 
-[`cache.invalidates(tags=...)`][pashe.Cache.invalidates] invalidates tags after every call of a function that writes. Its
-templates are filled from the arguments of the call, as those of `tags=`, so a write of user 1
-drops the results of user 1 alone.
+Put [`cache.invalidates(tags=...)`][pashe.Cache.invalidates] on a function that writes, and it
+invalidates the tags after every call. The templates are filled from the call's arguments, the same
+way as `tags=`. So writing user 1 drops only the results for user 1.
 
 === "Sync"
 
@@ -86,15 +90,15 @@ drops the results of user 1 alone.
     --8<-- "caching_functions/invalidates_async.py:show"
     ```
 
-The tags are invalidated after a call that raised too: a write that raised may have changed the
-data all the same, as a commit whose answer was lost. A backend that fails to invalidate goes to
-`on_error`, and the results stay until their TTL.
+The tags are invalidated even when the call raised. Why? A write that raised may still have
+changed the data, like a commit whose answer got lost. If the backend fails to invalidate, the
+error goes to `on_error`, and the results stay until their TTL ends.
 
 ### Writes in a transaction
 
-Invalidate after the commit, not before it: a read between the invalidation and the commit loads
-the old row, as the write is not committed yet, and stores it again, so the old data answers until
-its TTL.
+Invalidate after the commit, not before it. Otherwise a read between the invalidation and the
+commit loads the old row, since the write isn't committed yet, and stores it again. Then callers
+get the old data until its TTL ends.
 
 === "Sync"
 
@@ -108,10 +112,10 @@ its TTL.
     --8<-- "shop/data_changes_async.py:show"
     ```
 
-`@cache.invalidates` invalidates when the function returns, so it fits a function whose
-transaction ends inside it: put it above `@transaction.atomic` of Django, or on a function that
-calls `session.commit()` of SQLAlchemy. A write inside a transaction that a caller commits
-invalidates after that commit itself:
+`@cache.invalidates` invalidates when the function returns. That fits a function whose
+transaction ends inside it: put it above Django's `@transaction.atomic`, or on a function that
+calls SQLAlchemy's `session.commit()`. If a caller commits the transaction instead, invalidate
+after that commit yourself:
 
 - Django: `transaction.on_commit(functools.partial(cache.invalidate_tags, f"user:{user_id}"))`
   runs after the commit of the outermost `atomic`, and not at all after a rollback;

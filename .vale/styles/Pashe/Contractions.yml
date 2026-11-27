@@ -1,0 +1,18 @@
+# The docs talk to the reader: a contraction, as people say it.
+extends: substitution
+message: "Write '%s', not '%s'."
+level: error
+ignorecase: true
+swap:
+  does not: doesn't
+  do not: don't
+  did not: didn't
+  is not: isn't
+  are not: aren't
+  was not: wasn't
+  cannot: can't
+  will not: won't
+  would not: wouldn't
+  should not: shouldn't
+  has not: hasn't
+  have not: haven't

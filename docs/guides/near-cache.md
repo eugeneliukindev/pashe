@@ -1,16 +1,18 @@
 # Near cache
 
-[`NearCacheBackend`][pashe.backends.NearCacheBackend], a near cache, keeps copies of hot keys in the
-memory of each process, in front of a shared backend such as Redis. A read of a copy does not leave
-the process: hot keys do not load one Redis node, and reads go on for a while when Redis is slow.
+A few hot keys can send most of your reads to one Redis node. A near cache,
+[`NearCacheBackend`][pashe.backends.NearCacheBackend], keeps copies of hot keys in each process's
+memory, in front of a shared backend such as Redis. Reading a copy never leaves the process. Hot
+keys stop loading one Redis node, and reads keep working for a while when Redis is slow.
 
-The copies live in each process; the bus tells every process over the shared backend to drop
-them: [Where each feature works](choosing.md#where-each-feature-works).
+Each process has its own copies. The bus tells every process that uses the shared backend when to
+drop them: see [Where each feature works](choosing.md#where-each-feature-works).
 
 ## A near cache in front of Redis
 
-Every read of a hot key goes to one Redis node; a copy in the memory of the process answers it
-there instead. `local` is a `MemoryBackend`, and `AsyncNearCacheBackend` is the async side.
+Without a near cache, every read of a hot key goes to the same Redis node. With one, a copy in
+the process's memory answers the read right there. `local` is a `MemoryBackend`, and
+`AsyncNearCacheBackend` is the async side.
 
 === "Sync"
 
@@ -50,20 +52,21 @@ flowchart LR
 
 How it reads and writes:
 
-1. A read looks in the local memory first. A copy answers at once.
-2. A key without a copy is read from the shared backend, and the value is copied to local memory
-   for `local_ttl` seconds. The limits of `local` bound the copies: `MemoryBackend(max_entries=...)`,
-   `1000` by default.
-3. A write goes to the shared backend and drops the local copy of the key, so this process reads
-   the new value next.
-4. Other processes still hold their copies. Without a bus each answers with its copy for up to
-   `local_ttl`: that is how stale a near cache may be. A bus tells them at once.
+1. A read looks in local memory first. If there's a copy, you get it right away.
+2. If there's no copy, the read goes to the shared backend, and the value is copied to local memory
+   for `local_ttl` seconds. The limits of `local` cap the number of copies:
+   `MemoryBackend(max_entries=...)`, `1000` by default.
+3. A write goes to the shared backend and drops this process's copy of the key, so the next read
+   here gets the new value.
+4. Other processes still have their copies. Without a bus, each keeps returning its copy for up to
+   `local_ttl`: that's how stale a near cache can get. With a bus, they hear about the write right
+   away.
 
 ## How long a copy lives
 
-A copy may answer for [`local_ttl`][pashe.backends.NearCacheBackend(local_ttl)], 5 seconds by
-default, after another process wrote its key, when no bus tells of the
-write; a shorter one keeps copies fresher, at the price of more reads of the shared backend.
+When another process writes a key and no bus tells you, your copy can still be returned for
+[`local_ttl`][pashe.backends.NearCacheBackend(local_ttl)], 5 seconds by default. A shorter
+`local_ttl` keeps copies fresher, but you read the shared backend more often.
 
 === "Sync"
 
@@ -79,10 +82,10 @@ write; a shorter one keeps copies fresher, at the price of more reads of the sha
 
 ## Telling the other processes
 
-A [`bus`][pashe.backends.NearCacheBackend(bus)] carries "these keys changed" between the near caches
-of every process; only the names of keys travel, never values. A near cache starts listening to its
-bus on its first read, and a process that hears of a key drops its copy: its next read goes to the
-shared backend.
+A [`bus`][pashe.backends.NearCacheBackend(bus)] carries "these keys changed" between the near
+caches in every process. Only key names travel, never values. A near cache starts listening to its
+bus on its first read. When a process hears about a key, it drops its copy, so its next read goes
+to the shared backend.
 
 ```mermaid
 sequenceDiagram
@@ -110,8 +113,8 @@ sequenceDiagram
 
 ### Writes through pashe
 
-When every write goes through pashe, the near cache that writes publishes the keys it changed on
-a [`channel`][pashe.contrib.redis.RedisPubSubBus(channel)]; `AsyncRedisPubSubBus` is the async
+If every write goes through pashe, the near cache that writes publishes the changed keys on a
+[`channel`][pashe.contrib.redis.RedisPubSubBus(channel)]. `AsyncRedisPubSubBus` is the async
 side.
 
 === "Sync"
@@ -126,18 +129,19 @@ side.
     --8<-- "backends/pubsub_bus_async.py:show"
     ```
 
-Give every process of one cache the same channel, and two caches that must not hear each other
-different ones. Writes made past pashe, by another service or by hand, are not published: those
-copies live out `local_ttl`.
+Give every process of one cache the same channel. Two caches that shouldn't hear each other get
+different channels. Writes that skip pashe, from another service or by hand, aren't published, so
+those copies live out their `local_ttl`.
 
-Near caches may share a bus and its client. The async client of a Redis Cluster has pub/sub
-from redis-py 8: before it, `AsyncRedisPubSubBus` refuses it with `InvalidOptionsError`.
+Near caches can share a bus and its client. The async Redis Cluster client has pub/sub from
+redis-py 8 on. With an older redis-py, `AsyncRedisPubSubBus` refuses it with
+`InvalidOptionsError`.
 
 ### Every write, whoever made it
 
-When other services or people write the same keys, Redis itself tells about every write under a
-[`prefix`][pashe.contrib.redis.RedisTrackingBus(prefix)], whoever made it, so pashe publishes
-nothing; `AsyncRedisTrackingBus` is the async side.
+What if other services or people write the same keys? Then let Redis itself report every write
+under a [`prefix`][pashe.contrib.redis.RedisTrackingBus(prefix)], whoever made it. pashe publishes
+nothing. `AsyncRedisTrackingBus` is the async side.
 
 === "Sync"
 
@@ -151,30 +155,32 @@ nothing; `AsyncRedisTrackingBus` is the async side.
     --8<-- "backends/tracking_bus_async.py:show"
     ```
 
-!!! warning "Give it the prefix of the cache"
+!!! warning "Give it the cache's prefix"
 
-    The prefix is `""` by default, so every process hears of every write to the whole Redis. Give
-    it the prefix of the cache, such as `prefix="app:"`.
+    The prefix is `""` by default, so every process hears about every write to the whole Redis.
+    Give it the cache's prefix, such as `prefix="app:"`.
 
-Tracking in broadcasting mode costs the server no memory. The bus listens on a connection of its
-own; on a Redis Cluster a node tracks only its own keys, so take `RedisPubSubBus` there.
+Tracking in broadcasting mode costs the server no memory. The bus listens on its own connection.
+On a Redis Cluster, each node tracks only its own keys, so use `RedisPubSubBus` there.
 
 !!! note
 
-    `RedisTrackingBus` needs Redis or Valkey 6 or later; a clone of Redis without
-    `CLIENT TRACKING`, such as some versions of Dragonfly, takes `RedisPubSubBus`.
+    `RedisTrackingBus` needs Redis or Valkey 6 or later. For a Redis clone without
+    `CLIENT TRACKING`, such as some versions of Dragonfly, use `RedisPubSubBus`.
 
 ### When messages are lost
 
-A message sent while a process is disconnected never reaches it. So whenever a bus cannot be
-sure it heard everything, as after an error of its connection, the near cache drops all its
-copies, and listens again by itself. A publish that failed is not raised, as the write itself
-succeeded; the other processes then drop their copies within `local_ttl` at the latest.
+A message sent while a process is disconnected never reaches it. So whenever a bus can't be sure
+it heard everything, say after a connection error, the near cache drops all its copies and starts
+listening again on its own.
+
+A failed publish isn't raised, because the write itself succeeded. The other processes then drop
+their copies within `local_ttl` at the latest.
 
 ## Writing your own bus
 
-For another transport such as NATS or Kafka, subclass
+Using another transport, such as NATS or Kafka? Subclass
 [`InvalidationBus`][pashe.invalidation.InvalidationBus], or `AsyncInvalidationBus`, from
-`pashe.invalidation`, and pass it as `bus=`: it reaches wherever the transport does. It has two
-methods, [`publish`][pashe.invalidation.InvalidationBus.publish] and
+`pashe.invalidation`, and pass it as `bus=`. It reaches wherever your transport does. You write two
+methods: [`publish`][pashe.invalidation.InvalidationBus.publish] and
 [`listen`][pashe.invalidation.InvalidationBus.listen].

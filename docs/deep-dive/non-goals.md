@@ -1,24 +1,26 @@
-# What pashe does not do
+# What pashe doesn't do
 
-pashe caches the results of functions for services that run as many processes, with what such a
-cache needs around it: locks, rate limits, near caches, tags and the headers of HTTP caching. A
-cache may lose what it keeps: a miss only costs a load. What needs more than that is left to tools
-made for it.
+pashe caches function results for services that run as many processes. It also brings what such a
+cache needs around it: locks, rate limits, near caches, tags and HTTP caching headers.
 
-| Not in pashe | Why | Take instead |
+A cache can lose what it keeps, and that's fine: a miss only costs a load. Anything that needs
+more than that belongs to a tool made for it.
+
+| Not in pashe | Why | Use instead |
 | --- | --- | --- |
-| Data that must not be lost | A cache drops entries on purpose, on eviction, on a restart of Redis, on a deploy that changes a type | your database |
-| Idempotency of writes, as of payments | A lost entry would run the write twice: it needs storage that does not evict, and a refusal when it is down | a unique key in the database, in the transaction of the write |
-| Queues and background jobs | pashe runs a reload in the background of the process, not jobs that must outlive it | Celery, arq, RQ, Dramatiq |
-| ReconnectBackoff and circuit breakers around your services | A function is yours: pashe calls it, and answers with a stale result while it fails | tenacity, stamina |
-| Caching every query of an ORM by itself | It guesses what a write changes from the tables it touches; pashe caches the functions you choose, with the tags you name | django-cachalot, django-cacheops |
-| A cache in front of the application, of whole responses | That is a proxy or a CDN; pashe adds the headers they read | nginx, Varnish, a CDN |
-| Sessions, and data kept per user for long | A session must outlive an eviction | the session store of your framework |
-| Data structures in Redis: queues, Bloom filters, leaderboards | Each has its own guarantees and commands | redis-py, pottery |
-| Strong consistency between the cache and the database | A cache that answers without the database is behind it for a moment; tags and short TTLs keep the moment short | read from the database where it must be current |
+| Data you can't lose | A cache drops entries on purpose: on eviction, when Redis restarts, when a deploy changes a type | your database |
+| Idempotent writes, such as payments | A lost entry would run the write twice. You need storage that doesn't evict, and that refuses the write when it's down | a unique key in the database, in the write's transaction |
+| Queues and background jobs | pashe runs a reload in the background of your process, not jobs that have to outlive it | Celery, arq, RQ, Dramatiq |
+| Retries and circuit breakers around your services | The function is yours. pashe calls it, and returns a stale result while it fails | tenacity, stamina |
+| Caching every ORM query on its own | Such a tool guesses what a write changes from the tables it touches. pashe caches the functions you pick, with the tags you name | django-cachalot, django-cacheops |
+| A cache of whole responses in front of your application | That's a proxy or a CDN. pashe adds the headers they read | nginx, Varnish, a CDN |
+| Sessions, and per-user data you keep for long | A session has to survive an eviction | your framework's session store |
+| Redis data structures: queues, Bloom filters, leaderboards | Each one has its own guarantees and commands | redis-py, pottery |
+| Strong consistency between the cache and the database | A cache that returns results without asking the database lags behind it for a moment. Tags and short TTLs keep that moment short | read from the database where the data has to be current |
 
 !!! tip "Locks and rate limits are best effort too"
 
-    A lock expires if its holder dies, and a rate limit lets calls through when the backend
-    fails, unless `fail_open=False`. They guard against doing the same work twice and against
-    floods, not against a race that would corrupt data: for that, a transaction of the database.
+    A lock expires if its holder dies. A rate limit lets calls through when the backend fails,
+    unless you pass `fail_open=False`. They protect you from doing the same work twice and from
+    floods of calls. They don't protect you from a race that would corrupt data: use a database
+    transaction for that.

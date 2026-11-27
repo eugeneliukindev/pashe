@@ -1,34 +1,36 @@
 # Caching an endpoint
 
-Decorate the endpoint itself with `@cache(...)`, under the decorator of its route: the
-framework still routes, validates and serializes, and the body of the endpoint runs once per key
-and TTL. [`CacheHeadersMiddleware`][pashe.asgi.CacheHeadersMiddleware] of `pashe.asgi`, or of
+Decorate the endpoint itself with `@cache(...)`, under its route decorator. The framework still
+routes, validates and serializes, and the endpoint's body runs once per key and TTL.
+
+Add [`CacheHeadersMiddleware`][pashe.asgi.CacheHeadersMiddleware] from `pashe.asgi`, or from
 `pashe.wsgi`, with [`cache_control`][pashe.asgi.CacheHeadersMiddleware(cache_control)] set to
-`"public"` tells clients, proxies and CDNs how long the response stays fresh, from the TTL of the cached call.
+`"public"`. It uses the cached call's TTL to tell clients, proxies and CDNs how long the response
+stays fresh.
 
 ```python hl_lines="18 19 21 25 26 32"
 --8<-- "web/endpoint_async.py:show"
 ```
 
-- The parameters of the endpoint fill the key, as for any cached function. Put in the key all
-  that changes the response, such as `lang` here; a parameter the framework injects, such as a
-  `Request`, stays out of it.
+- The endpoint's parameters fill the key, as for any cached function. Put everything that
+  changes the response into the key, such as `lang` here. A parameter the framework injects, such
+  as a `Request`, stays out of it.
 - `stale`, `stampede`, `negative`, tags and a `Fallback` work as for any cached function, and the
   hooks see every call.
-- The codec of the cache stores what the endpoint returns:
-  [`PydanticCodec`][pashe.contrib.pydantic.PydanticCodec] for pydantic models,
-  [`MsgspecJsonCodec`][pashe.contrib.msgspec.MsgspecJsonCodec] for dataclasses;
-  [`JsonCodec`][pashe.codecs.JsonCodec], the default, holds plain `dict`s and `list`s.
+- The cache's codec stores what the endpoint returns. Use
+  [`PydanticCodec`][pashe.contrib.pydantic.PydanticCodec] for pydantic models and
+  [`MsgspecJsonCodec`][pashe.contrib.msgspec.MsgspecJsonCodec] for dataclasses. The default,
+  [`JsonCodec`][pashe.codecs.JsonCodec], holds plain `dict`s and `list`s.
 
-!!! warning "Public only when it is the same for every user"
+!!! warning "Public only when it's the same for every user"
 
-    `cache_control="public"` lets shared caches keep the response. Leave the default
-    `"private"` when a response depends on who asks; and put who asks in the key, or the endpoint
-    answers everyone with the result of one user.
+    `cache_control="public"` lets shared caches keep the response. If a response depends on who
+    asks, leave the default `"private"`. Also put who asks into the key, or the endpoint gives
+    everyone one user's result.
 
 ## What a client sees
 
-The first request runs the endpoint, the next one is answered from the cache:
+The first request runs the endpoint. The next one is answered from the cache:
 
 ```console hl_lines="6 7"
 $ curl -i 'http://localhost:8000/products/1?lang=ru'
@@ -51,12 +53,13 @@ cache-status: pashe; hit; ttl=59
 {"id":1,"name":"Kettle","lang":"ru"}
 ```
 
-After `rename(1)`, `invalidate_tags("product:1")` drops every language of the product: the next
-request runs the endpoint again, a miss.
+After `rename(1)`, `invalidate_tags("product:1")` drops the product in every language. The next
+request is a miss and runs the endpoint again.
 
 ## Whole responses
 
-pashe caches what endpoints return, not HTTP responses. To keep whole responses, such as
-rendered HTML, put a proxy or a CDN in front of the service, such as nginx, Varnish or Cloudflare:
-it keeps a response as long as its `Cache-Control` says, which `CacheHeadersMiddleware` sets. Or
-take the cache of your framework: `cache_page` of Django, `cache=` of a route in Litestar.
+pashe caches what endpoints return, not HTTP responses. Want to keep whole responses, such as
+rendered HTML? Put a proxy or a CDN in front of your service, such as nginx, Varnish or
+Cloudflare. It keeps a response as long as its `Cache-Control` says, and `CacheHeadersMiddleware`
+sets that header. Or use your framework's cache: Django's `cache_page`, or `cache=` on a Litestar
+route.

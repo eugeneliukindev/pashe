@@ -1,7 +1,8 @@
 # Codecs
 
-A codec turns values into bytes and back; the return annotation of a cached function says what
-to rebuild. Pick the codec by what your functions return:
+A backend stores bytes, so every value your cache keeps has to turn into bytes and back. That's a
+codec's job. The return annotation of a cached function tells the codec which type to rebuild.
+Pick a codec by what your functions return:
 
 | Your values | The codec | Install | Rebuilds your types | Readable by other languages |
 | --- | --- | --- | --- | --- |
@@ -13,13 +14,13 @@ to rebuild. Pick the codec by what your functions return:
 | any object pickle holds, signed with HMAC | [`PickleCodec(secret=...)`](#picklecodec) | nothing | yes | no, Python only |
 | a format of your own | [a `Codec` of your own](#a-codec-of-your-own) | nothing | as you write it | as you write it |
 
-A codec belongs to a cache, as its [`codec`][pashe.Cache(codec)], and every value the cache
+You give a codec to a cache as its [`codec`][pashe.Cache(codec)], and every value that cache
 stores goes through it.
 
 ## JsonCodec, the default
 
-A cache needs a format for its values with nothing installed;
-[`JsonCodec`][pashe.codecs.JsonCodec] holds what JSON holds, and a cache without `codec=` takes it.
+A cache has to work with nothing extra installed. [`JsonCodec`][pashe.codecs.JsonCodec] stores
+what JSON can hold, and a cache uses it when you don't pass `codec=`.
 
 === "Sync"
 
@@ -33,22 +34,22 @@ A cache needs a format for its values with nothing installed;
     --8<-- "codecs/json_async.py:show"
     ```
 
-!!! warning "A type JSON does not give back is refused when the function is decorated"
+!!! warning "A type JSON can't give back fails when you decorate the function"
 
     `JsonCodec` and `OrjsonCodec` read every value back as `dict`, `list`, `str`, numbers, `bool`
-    or `None`, and every key of a `dict` as `str`. A function that returns another type at any
-    depth, such as a dataclass, a pydantic model, a `tuple`, a `set`, a `list[User]`, a
-    `User | None` or a `dict[int, str]`, raises `InvalidOptionsError` at the decorator, when the
-    app starts: its results would not be the type it says. Give its cache `MsgspecJsonCodec` or
-    `PydanticCodec`, which rebuild it.
+    or `None`, and every `dict` key as `str`. Say your function returns another type anywhere
+    inside: a dataclass, a pydantic model, a `tuple`, a `set`, a `list[User]`, a `User | None` or
+    a `dict[int, str]`. Then the decorator raises `InvalidOptionsError` when your app starts,
+    because the results wouldn't be the type the function promises. Give that cache
+    `MsgspecJsonCodec` or `PydanticCodec`: they rebuild the type.
 
 ## msgspec
 
-A function that returns dataclasses gets `dict`s back from JSON; the codecs of
-[`pashe.contrib.msgspec`][pashe.contrib.msgspec] rebuild them, fast:
-[`MsgspecMsgpackCodec`][pashe.contrib.msgspec.MsgspecMsgpackCodec] stores MessagePack, and
-[`MsgspecJsonCodec`][pashe.contrib.msgspec.MsgspecJsonCodec] JSON, for other services that read
-the values.
+Does your function return dataclasses? JSON gives you `dict`s back. The codecs in
+[`pashe.contrib.msgspec`][pashe.contrib.msgspec] rebuild your dataclasses, and they're fast.
+[`MsgspecMsgpackCodec`][pashe.contrib.msgspec.MsgspecMsgpackCodec] stores MessagePack.
+[`MsgspecJsonCodec`][pashe.contrib.msgspec.MsgspecJsonCodec] stores JSON, for when other services
+read the values too.
 
 === "Sync"
 
@@ -64,8 +65,8 @@ the values.
 
 ## pydantic
 
-A function that returns pydantic models, or anything a `TypeAdapter` validates, gets them back,
-validated, with [`PydanticCodec`][pashe.contrib.pydantic.PydanticCodec].
+If your function returns pydantic models, or anything a `TypeAdapter` validates, use
+[`PydanticCodec`][pashe.contrib.pydantic.PydanticCodec]. You get them back, validated.
 
 === "Sync"
 
@@ -81,8 +82,8 @@ validated, with [`PydanticCodec`][pashe.contrib.pydantic.PydanticCodec].
 
 ## orjson
 
-Values that are what JSON holds encode and decode faster with
-[`OrjsonCodec`][pashe.contrib.orjson.OrjsonCodec].
+If your values are plain JSON data, [`OrjsonCodec`][pashe.contrib.orjson.OrjsonCodec] encodes
+and decodes them faster.
 
 === "Sync"
 
@@ -96,14 +97,14 @@ Values that are what JSON holds encode and decode faster with
     --8<-- "codecs/orjson_async.py:show"
     ```
 
-It reads back the same types as `JsonCodec`, `dict`s and `list`s, so it refuses the same return
-types when the function is decorated.
+It reads back the same types as `JsonCodec`, `dict`s and `list`s. So it refuses the same return
+types when you decorate the function.
 
 ## PickleCodec
 
-An object no other codec holds is stored by [`PickleCodec`][pashe.codecs.PickleCodec], which
-signs every value with HMAC under its [`secret`][pashe.codecs.PickleCodec(secret)], so tampered
-bytes are never unpickled.
+Some objects no other codec can store. [`PickleCodec`][pashe.codecs.PickleCodec] can. It signs
+every value with HMAC under its [`secret`][pashe.codecs.PickleCodec(secret)], so it never unpickles
+bytes someone tampered with.
 
 === "Sync"
 
@@ -119,21 +120,23 @@ bytes are never unpickled.
 
 !!! danger "PickleCodec runs code from the backend"
 
-    Unpickling runs code chosen by the bytes. `PickleCodec` signs every value and refuses a
-    tampered one, so keep its secret out of Redis: see [Security](../deep-dive/security.md).
-    It is also the slowest to encode: use it only for objects no other codec holds.
+    Unpickling runs whatever code the bytes ask for. `PickleCodec` signs every value and refuses
+    one that was tampered with, so keep its secret out of Redis: see
+    [Security](../deep-dive/security.md). It's also the slowest to encode. Use it only for objects
+    no other codec can store.
 
 ## A codec of your own
 
-For a format none of these writes, subclass [`Codec`][pashe.codecs.Codec].
-[`validate`][pashe.codecs.Codec.validate] is where it refuses, when a function is decorated, a
-type it cannot give back: without it a wrong type shows up only when a value is read.
+Need a format none of these writes? Subclass [`Codec`][pashe.codecs.Codec]. Its
+[`validate`][pashe.codecs.Codec.validate] refuses a type it can't give back, right when you
+decorate the function. Without it, you only find a wrong type when a value is read.
 
 ## How they compare
 
-What each one costs in bytes and microseconds: [Benchmarks](../deep-dive/benchmarks.md#codecs).
+For what each one costs in bytes and microseconds, see
+[Benchmarks](../deep-dive/benchmarks.md#codecs).
 
 !!! tip "The default is the one with no dependency, not the fastest"
 
-    `JsonCodec` needs nothing installed. For a service that caches a lot, msgspec is almost four
-    times faster to encode and twice to decode, and gives you your dataclasses back.
+    `JsonCodec` needs nothing installed. If your service caches a lot, msgspec is almost four
+    times faster to encode and twice as fast to decode. It also gives you your dataclasses back.

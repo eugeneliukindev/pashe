@@ -1,15 +1,15 @@
 # pashe and other libraries
 
-How pashe compares with the caching libraries Python services take most often. The other columns
-come from the releases on PyPI as of November 2026: cachetools 8.0.3, aiocache 0.12.3, cashews
-7.6.0 and dogpile.cache 1.5.0, read in their docs and their source.
+Here's how pashe compares with the caching libraries Python services use most often. The other
+columns come from the PyPI releases as of November 2026: cachetools 8.0.3, aiocache 0.12.3,
+cashews 7.6.0 and dogpile.cache 1.5.0. We read their docs and their source.
 
 ## What each has
 
 | | pashe | cachetools | aiocache | cashews | dogpile.cache |
 | --- | --- | --- | --- | --- | --- |
 | Sync and async | both, one API | sync | async | async | sync |
-| Shared by processes | Redis, Redis Cluster, SQLite | no, memory of the process | Redis, Memcached | Redis, Redis Cluster, a disk cache | Redis, Redis Cluster, Valkey, Memcached, DBM files |
+| Shared by processes | Redis, Redis Cluster, SQLite | no, the process's memory | Redis, Memcached | Redis, Redis Cluster, a disk cache | Redis, Redis Cluster, Valkey, Memcached, DBM files |
 | Memcached | no | no | yes | no | yes |
 | Keys from templates | `"user:{user.id}"`, with digests | a key function | a key function | `"user:{user.id}"` | a key function |
 | Invalidating a group | tags: two calls per tag, no set of keys kept | no | no | tags: a set of keys kept per tag | a whole region at once |
@@ -26,27 +26,27 @@ come from the releases on PyPI as of November 2026: cachetools 8.0.3, aiocache 0
 
 ## When another library fits better
 
-- **One process, and nothing else:** cachetools. It keeps objects as they are, without encoding
-  them, and needs no backend.
-- **Memcached:** dogpile.cache or aiocache. pashe has no Memcached backend, as [Choosing a
-  backend](../guides/backends/index.md#supported-servers) tells why.
-- **A large sync codebase on dogpile.cache:** its regions and their invalidation are mature, and
-  moving them buys little.
-- **Async code and a disk cache through `diskcache`:** cashews. pashe keeps entries on disk with
-  its SQLite backend instead.
+- **One process, and nothing else:** use cachetools. It keeps objects as they are, without
+  encoding them, and needs no backend.
+- **Memcached:** use dogpile.cache or aiocache. pashe has no Memcached backend;
+  [Choosing a backend](../guides/backends/index.md#supported-servers) explains why.
+- **A large sync codebase on dogpile.cache:** its regions and their invalidation are mature, so
+  moving away gains you little.
+- **Async code and a disk cache through `diskcache`:** use cashews. pashe keeps entries on disk
+  with its SQLite backend instead.
 
 ## Where pashe differs
 
 - **One API for sync and async code.** A service with both, such as a web app and its workers,
   uses one cache and one set of options.
-- **A tag costs the same however many entries it covers.** A tag is a counter whose generation
-  every entry remembers: an invalidation bumps the counter, and no list of keys has to be kept,
-  read or deleted. See
-  [Core concepts](../concepts.md#tags).
-- **Failure is part of the design.** Stale results answer while the source fails or hangs, a
-  fallback keeps loads from reaching the source while Redis is down, and a circuit breaker stops
-  waiting on a backend that is gone.
-- **The type of a result is kept.** A stored result decodes as the return annotation, and a type
-  the codec cannot rebuild is refused when the function is decorated. See [Types](../guides/caching/types.md).
+- **A tag costs the same however many entries it covers.** A tag is a counter, and every entry
+  remembers the counter's generation. An invalidation bumps the counter, so there's no list of
+  keys to keep, read or delete. See [Core concepts](../concepts.md#tags).
+- **Failure is part of the design.** You get stale results while the source fails or hangs. A
+  fallback keeps loads from reaching the source while Redis is down. A circuit breaker stops
+  waiting on a backend that's gone.
+- **The result's type is kept.** A stored result decodes as the return annotation. If the codec
+  can't rebuild a type, pashe refuses it when you decorate the function. See
+  [Types](../guides/caching/types.md).
 
-pashe is not released yet: its API may still change, as the [changelog](changelog.md) says.
+pashe isn't released yet, so its API can still change, as the [changelog](changelog.md) says.

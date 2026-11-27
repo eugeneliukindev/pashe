@@ -1,23 +1,26 @@
 # Stampede protection
 
-When a popular key expires, every caller misses at once and asks the source: a stampede. The
-options of [`Stampede`][pashe.options.Stampede], from `pashe.options`, keep the source from being
-asked by every caller at once: they [share a load](#sharing-a-load-within-a-process) in a process,
-[lock it](#locking-a-load-across-processes) across processes,
-[limit the loads](#limiting-loads-at-once) at once, [reload a key](#reload-before-the-ttl) before
-its TTL and [spread the expiry](#spreading-the-expiry) of entries stored together.
+When a popular key expires, every caller misses at the same moment, and they all ask the source.
+That's a stampede. [`Stampede`][pashe.options.Stampede], from `pashe.options`, keeps your source
+from getting all those calls at once. You can:
 
-A [batch](caching/batches.md) takes `jitter` and `max_loads`, and refuses `lock_for` and
-`revalidate_before`: it waits for its load and loads nothing in the background.
+- [share a load](#sharing-a-load-within-a-process) inside a process;
+- [lock it](#locking-a-load-across-processes) across processes;
+- [limit how many loads](#limiting-loads-at-once) run at once;
+- [reload a key](#reload-before-the-ttl) before its TTL ends;
+- [spread out when entries expire](#spreading-out-when-entries-expire) if they were stored together.
 
-The options of a process work in its memory; those of the backend hold a lock in it, so they
-reach every process over it: [Where each feature works](choosing.md#where-each-feature-works).
+A [batch](caching/batches.md) takes `jitter` and `max_loads`, but it refuses `lock_for` and
+`revalidate_before`. Why? A batch waits for its own load and never loads in the background.
+
+Some options work in the memory of one process. Others hold a lock in the backend, so they cover
+every process that uses it: see [Where each feature works](choosing.md#where-each-feature-works).
 
 ## Sharing a load within a process
 
-Calls of one key at the same time in one process share one load: the first loads, the others wait
-for it and get its result. It is on by default; [`share_loads`][pashe.options.Stampede(share_loads)]
-set to `False` turns it off.
+When several calls in one process miss the same key at the same time, they share one load. The
+first call loads, and the others wait for it and get its result. This is on by default. Set
+[`share_loads`][pashe.options.Stampede(share_loads)] to `False` to turn it off.
 
 === "Sync"
 
@@ -45,15 +48,16 @@ sequenceDiagram
     Note over DB: one load
 ```
 
-!!! warning "Concurrent callers share one object"
+!!! warning "Callers that wait together get one object"
 
-    The callers of one load get the same object: copy a result before you change it, or turn
-    `share_loads` off for a function whose callers change what it returns.
+    Everyone who waited for the same load gets the same object. Copy a result before you change
+    it. If your callers change what the function returns, turn `share_loads` off for it.
 
 ## Locking a load across processes
 
-`share_loads` leaves one load per process; with ten processes that is ten loads. A load lock in
-the backend, [`lock_for`][pashe.options.Stampede(lock_for)], leaves one for all of them.
+`share_loads` still leaves one load per process. With ten processes, that's ten loads. Take a
+lock in the backend with [`lock_for`][pashe.options.Stampede(lock_for)], and you're down to one
+load for all of them.
 
 === "Sync"
 
@@ -87,13 +91,13 @@ sequenceDiagram
     Note over DB: one load for every process
 ```
 
-`lock_for` is the longest the lock is held, so a process that dies holding it frees it: give it
-more than the slowest load takes.
+`lock_for` is the longest time the lock is held. If a process dies while it holds the lock, the
+lock frees itself after that time. Set it higher than your slowest load.
 
 ## Limiting loads at once
 
-[`max_loads`][pashe.options.Stampede(max_loads)] limits the loads of one function in one process,
-whatever their keys, for a source that takes only so many at once.
+Some sources can only handle so many requests at once. [`max_loads`][pashe.options.Stampede(max_loads)]
+limits how many loads one function runs at the same time in one process, whatever their keys.
 
 === "Sync"
 
@@ -120,15 +124,15 @@ sequenceDiagram
     C->>DB: load 3, in the freed slot
 ```
 
-A call over `max_loads` waits for a slot; when a stale result can answer it, that result answers
-at once instead, and the hooks hear an `OverloadedError`.
+A call over `max_loads` waits for a free slot. If there's a stale result for it, the call returns
+that result right away instead, and your hooks get an `OverloadedError`.
 
 ## Reload before the TTL
 
-A key read all the time still expires, and the calls right after it miss or answer stale. With
-[`revalidate_before`][pashe.options.Stampede(revalidate_before)] the result is reloaded while it is
-still fresh: here, the calls of its last 10 seconds get it at once, a HIT, and one caller reloads it
-in the background.
+Even a key you read all the time expires, and the calls right after that miss or get a stale
+result. With [`revalidate_before`][pashe.options.Stampede(revalidate_before)], pashe reloads the
+result while it's still fresh. Here, calls in its last 10 seconds get it right away, as a HIT, and
+one caller reloads it in the background.
 
 === "Sync"
 
@@ -148,16 +152,19 @@ in the background.
 <div class="pashe-timeline__fresh" style="flex: 60" data-start="60 s"><b>HIT</b><br>the reloaded result, fresh for 60 s more</div>
 </div>
 
-The reload holds a lock in the backend, so one process reloads a key at a time; a failed reload
-goes to `on_error`, and the result answers until its TTL, then as `Stale` says. A key nobody
-reads in those seconds expires as without it. Unlike `Stale(while_revalidate=...)`, no call
-gets a result past its TTL; the price is a load a little more often.
+The reload holds a lock in the backend, so only one process reloads a key at a time. If a reload
+fails, the error goes to `on_error`. The old result is still returned until its TTL ends, and
+after that `Stale` decides.
 
-## Spreading the expiry
+If nobody reads the key in those last seconds, it expires as usual. Compare this with
+`Stale(while_revalidate=...)`: here no call ever gets a result past its TTL. The price is a load a
+little more often.
 
-Entries stored together, as after a deploy or a cold start, expire together, and the source gets all
-their loads at once. [`jitter`][pashe.options.Stampede(jitter)] gives each entry a TTL of its own, a
-little shorter or longer, the TTL of `Negative` too.
+## Spreading out when entries expire
+
+Entries stored together, say after a deploy or a cold start, also expire together. Then your
+source gets all their loads at once. [`jitter`][pashe.options.Stampede(jitter)] gives each entry a
+TTL of its own, a little shorter or longer. It applies to the TTL of `Negative` too.
 
 === "Sync"
 
@@ -177,5 +184,5 @@ little shorter or longer, the TTL of `Negative` too.
 <div class="pashe-timeline__source" data-start="66 s"><b>every entry</b><br>has expired</div>
 </div>
 
-With `jitter=0.1` and `ttl=60` an entry lives from 54 to 66 seconds, so the loads of entries
-stored together come over 12 seconds instead of in the same moment.
+With `jitter=0.1` and `ttl=60`, an entry lives between 54 and 66 seconds. Entries stored together
+now reload over 12 seconds instead of all in the same moment.

@@ -29,10 +29,14 @@ pip install "pashe[redis]"
 
 </div>
 
-pashe caches the results of your functions in Redis, SQLite or memory. Every process of a service
-shares the entries, the tags, the locks and the rate limits, and a cold key or a failing source
-does not take the service down: callers share one load, stale results answer while the source
-is slow or failing, and a fallback keeps working while Redis is down.
+pashe caches the results of your functions in Redis, SQLite or memory. Redis here also means the
+[servers that speak its protocol](guides/backends/index.md#supported-servers): Valkey,
+Dragonfly, KeyDB, Garnet and Redis Cluster. Every process of your service sees the same entries,
+tags, locks and rate limits.
+
+A cold key or a failing source won't take your service down. Callers share one load, a stale
+result is returned while the source is slow or failing, and a fallback keeps working while Redis
+is down.
 
 === "Async"
 
@@ -56,48 +60,49 @@ is slow or failing, and a fallback keeps working while Redis is down.
 
     ---
 
-    `Cache` for `def` code, `AsyncCache` for `async def` code: the same methods, awaited.
+    Use `Cache` for `def` code and `AsyncCache` for `async def` code. The methods are the same;
+    on the async side you await them.
 
 -   :material-history:{ .lg .middle } **Stale results on purpose**
 
     ---
 
-    Stale-while-revalidate, stale-if-error and stale-if-slow answer from an old result while
-    the source reloads, fails or hangs.
+    Stale-while-revalidate, stale-if-error and stale-if-slow return an old result while the
+    source reloads, fails or hangs.
 
 -   :material-account-group:{ .lg .middle } **No stampedes**
 
     ---
 
-    Concurrent calls of a key share one load in a process, and a lock shares it across
+    Calls that miss the same key at once share one load in a process. A lock shares it across
     processes.
 
 -   :material-tag-multiple:{ .lg .middle } **Tags without scans**
 
     ---
 
-    Invalidating a tag costs two calls to the backend, however many entries it covers.
+    Invalidating a tag costs two calls to the backend, no matter how many entries it covers.
 
 -   :material-memory:{ .lg .middle } **Near caches**
 
     ---
 
-    A small cache in process memory in front of Redis, kept coherent by pub/sub or by
-    Redis client tracking.
+    A small cache in process memory sits in front of Redis. Pub/sub or Redis client tracking
+    keeps it in sync.
 
 -   :material-lock:{ .lg .middle } **Locks, rate limits, web**
 
     ---
 
-    Distributed locks, sliding and fixed window limits, and HTTP caching headers for ASGI,
-    WSGI and FastAPI.
+    You get distributed locks, sliding and fixed window limits, and HTTP caching headers for
+    ASGI, WSGI and FastAPI.
 
 -   :material-shield-check:{ .lg .middle } **Typed to the end**
 
     ---
 
-    A cached function keeps the signature of yours, and its result decodes as its return
-    annotation. pashe ships `py.typed` and is checked with mypy, pyright and pyrefly in strict
+    A cached function keeps your function's signature, and its result decodes as your return
+    annotation says. pashe ships `py.typed` and passes mypy, pyright and pyrefly in strict
     mode.
 
 -   :material-test-tube:{ .lg .middle } **Tested against real servers**
@@ -105,13 +110,13 @@ is slow or failing, and a fallback keeps working while Redis is down.
     ---
 
     Every scenario runs over memory, SQLite, Redis, Valkey, Dragonfly and a Redis Cluster, sync
-    and async; every example of these docs runs.
+    and async. Every example in these docs runs as a test.
 
 </div>
 
 ## LLMs support
 
-Do you write code with an AI assistant? These files give it the docs as context:
+Do you write code with an AI assistant? Give it these files as context:
 
 - [`llms.txt`](llms.txt): an index with a link to every page;
 - [`llms-full.txt`](llms-full.txt): the complete docs in one file;

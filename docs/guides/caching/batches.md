@@ -1,13 +1,14 @@
 # Batches
 
-A function of many items, `f(items) -> {item: value}`, caches every item on its own with
-[`@cache.batch(...)`][pashe.Cache.batch]: a call reads all items in one backend call and calls the
-function once with the missing ones.
+Some functions take many items and return a result for each: `f(items) -> {item: value}`.
+[`@cache.batch(...)`][pashe.Cache.batch] caches every item on its own. A call reads all the items
+in one backend call, then calls your function once with only the missing ones.
 
 ## Caching every item on its own
 
-A function that loads many items at once would cache them as one entry per list of items; a
-batch caches each item, so another list that shares it reads it from the cache.
+Say you cache a function that loads many users at once with plain `@cache(...)`. You get one entry
+per list of users, so `[1, 2]` and `[2, 3]` don't share anything. A batch caches each item, so a
+second list that has user 2 reads it from the cache.
 
 === "Sync"
 
@@ -23,6 +24,6 @@ batch caches each item, so another list that shares it reads it from the cache.
     --8<-- "caching_functions/batches_async.py:calls"
     ```
 
-Its [`key`][pashe.Cache.batch(key)] is a template over the item, such as `"user:{}"`. It takes
-the other options of `@cache(...)` too, but `negative`: the page of each tells how it works with a
-batch.
+The [`key`][pashe.Cache.batch(key)] is a template for one item, such as `"user:{}"`. A batch takes
+the other options of `@cache(...)` too, except `negative`. Each option's page says how it works
+with a batch.

@@ -1,7 +1,7 @@
 # Sentry
 
-[`SentryHook`][pashe.contrib.sentry.SentryHook], the `sentry` extra, leaves every error a cache works
-around as a breadcrumb in Sentry.
+[`SentryHook`][pashe.contrib.sentry.SentryHook], from the `sentry` extra, leaves every error a
+cache works around as a breadcrumb in Sentry.
 
 === "Sync"
 
@@ -15,9 +15,9 @@ around as a breadcrumb in Sentry.
     --8<-- "observability/sentry_async.py:show"
     ```
 
-Such an error, as a backend that is down, raises nothing: the call is answered all the same, so
-no event of Sentry would show it. As a breadcrumb it shows in the next event the application
-sends, such as the error of the request, with `pashe.operation` and `error.type`:
+Such an error, like a backend that's down, raises nothing: the call is still answered. So no
+Sentry event would ever show it. As a breadcrumb, it shows up in the next event your app sends,
+such as the request's error, with `pashe.operation` and `error.type`:
 
 | Breadcrumb | Value |
 | --- | --- |
@@ -26,8 +26,9 @@ sends, such as the error of the request, with `pashe.operation` and `error.type`
 | message | `get: pashe.errors.BackendError` |
 | data | `{"pashe.operation": "get", "error.type": "pashe.errors.BackendError"}` |
 
-The key of the call and the text of the error are left out: either may name a user.
+The call's key and the error's text are left out, since either one may name a user.
 
-With [`capture_errors`][pashe.contrib.sentry.SentryHook(capture_errors)] on, it sends every such
-error as an event of its own too. Leave it off unless you need it: while a backend is down every
-cached call would send one, and a [metric of errors](prometheus.md) shows the same at no cost.
+Turn on [`capture_errors`][pashe.contrib.sentry.SentryHook(capture_errors)], and it also sends
+every such error as its own event. Leave it off unless you need it. While a backend is down,
+every cached call would send one, and an [error metric](prometheus.md) shows the same thing for
+free.

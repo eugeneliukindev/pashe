@@ -1,8 +1,8 @@
 # Prometheus
 
-[`PrometheusMetricsHook`][pashe.contrib.prometheus.PrometheusMetricsHook], the `prometheus` extra, records the
-metrics of [OpenTelemetry](opentelemetry.md#metrics) through `prometheus_client`, named as its
-Prometheus column says.
+[`PrometheusMetricsHook`][pashe.contrib.prometheus.PrometheusMetricsHook], from the `prometheus`
+extra, records the same metrics as [OpenTelemetry](opentelemetry.md#metrics) through
+`prometheus_client`, with the names from the Prometheus column.
 
 === "Sync"
 
@@ -16,8 +16,8 @@ Prometheus column says.
     --8<-- "observability/prometheus_async.py:show"
     ```
 
-Make one hook per registry and give it to every cache, and to every near cache: a second hook over
-the same registry raises `ValueError` of `prometheus_client`, as its metrics are there already.
-[`registry`][pashe.contrib.prometheus.PrometheusMetricsHook(registry)] takes a registry of its
-own, as tests do. The histogram of
-loads has the default buckets of `prometheus_client`.
+Make one hook per registry and give it to every cache and every near cache. A second hook on the
+same registry raises a `prometheus_client` `ValueError`, because its metrics are there already.
+To use a separate registry, as tests do, pass it to
+[`registry`][pashe.contrib.prometheus.PrometheusMetricsHook(registry)]. The load histogram uses
+the default `prometheus_client` buckets.

@@ -56,6 +56,7 @@ nav = [
         { "FastAPI" = "guides/web/fastapi.md" },
     ] },
     { "Testing" = "guides/testing.md" },
+    { "Migrating from cashews and aiocache" = "guides/migrating.md" },
     { "In production" = [
         { "Recommended setup" = "guides/recommended-setup.md" },
         { "Examples: a shop" = "examples.md" },
@@ -228,7 +229,7 @@ cards_layout_options.color = "#ffffff"
 
 [project.plugins.llmstxt]
 full_output = "llms-full.txt"
-markdown_description = "pashe caches the results of Python functions in Redis or memory for services that run as many processes: stale results, stampede protection, tags, near caches, locks and rate limits, for sync and async code."
+markdown_description = "pashe caches the results of Python functions in Redis, Valkey and other servers of its protocol, SQLite or memory, for services that run as many processes: stale results, stampede protection, tags, near caches, locks and rate limits, for sync and async code."
 
 [project.plugins.llmstxt.sections]
 "Start here" = ["index.md", "getting-started.md", "concepts.md", "examples.md"]

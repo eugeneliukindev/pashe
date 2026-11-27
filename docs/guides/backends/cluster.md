@@ -16,9 +16,11 @@
     --8<-- "backends/cluster_async.py:calls"
     ```
 
-The same backend takes a cluster client; the client finds the other nodes from the one it is
-given. Every command of one key goes to the node of its slot, and a command of many keys is split
-by node: a cached call reads its entry and the counters of its tags with one `MGET` per node they
-live on, and a batch writes with one pipeline per node. pashe needs no atomicity across keys, so
-nothing else changes: tags, batches, locks, rate limits and a near cache with `RedisPubSubBus`
-work as on one node.
+Pass the same backend a cluster client. You give the client one node, and it finds the others.
+
+A command for one key goes to the node that owns the key's slot. A command for many keys is split
+by node: a cached call reads its entry and its tag counters with one `MGET` per node they live on,
+and a batch writes with one pipeline per node.
+
+pashe needs no atomicity across keys, so nothing else changes. Tags, batches, locks, rate limits
+and a near cache with `RedisPubSubBus` work the same as on one node.

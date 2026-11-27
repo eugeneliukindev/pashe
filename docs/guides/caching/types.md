@@ -1,8 +1,9 @@
 # Types
 
-A cached function is typed as the function it caches: a type checker sees the same parameters
-and the same result. A stored result comes back as its type when the codec rebuilds it: the
-default one, [`JsonCodec`][pashe.codecs.JsonCodec], gives back what JSON holds, so a `TypedDict` works as it is.
+A cached function has the same type as the function it caches. Your type checker sees the same
+parameters and the same result. A stored result comes back as its type when the codec can rebuild
+it. The default codec, [`JsonCodec`][pashe.codecs.JsonCodec], gives back what JSON holds, so a
+`TypedDict` works as it is.
 
 === "Sync"
 
@@ -20,21 +21,24 @@ default one, [`JsonCodec`][pashe.codecs.JsonCodec], gives back what JSON holds, 
 
 ## What a result decodes as
 
-The return annotation of the function says what a stored result decodes as; for a batch, the
-type of the values of the `dict` it returns. The codec does the work, so the codec decides which
-types come back whole: [Codecs](../codecs.md) tells which.
+Your function's return annotation tells pashe what type to decode a stored result as. For a batch,
+it's the type of the values in the `dict` it returns. The codec does the decoding, so the codec
+decides which types come back whole. [Codecs](../codecs.md) lists them.
 
-A type the codec would give back as another one is refused when the function is decorated, not when
-its first result is read: a dataclass under `JsonCodec` raises
-[`InvalidOptionsError`][pashe.errors.InvalidOptionsError], which names the codecs that rebuild it. A
-type the codec takes comes back as it went in, so a miss answers with the result the function
-returned and a hit with the same. A function without a return annotation, or a part of its type left
-as `Any`, gets on a hit what the codec reads on its own, such as a list for a tuple under
-`JsonCodec`.
+What if the codec would give your type back as something else? Then pashe refuses it when you
+decorate the function, not when it first reads a result. For example, a dataclass under
+`JsonCodec` raises [`InvalidOptionsError`][pashe.errors.InvalidOptionsError], and the error names
+the codecs that can rebuild it.
+
+A type the codec accepts comes back as it went in. So a miss returns the result your function
+returned, and a hit returns the same thing. If your function has no return annotation, or part of
+its type is `Any`, a hit gets whatever the codec reads on its own: for example, a list instead of a
+tuple under `JsonCodec`.
 
 ## After the type changes
 
-An entry remembers the shape of its type: its classes, their fields and the types of those. A
-deploy that adds a field or renames a class makes the old entries misses, so a process never
-decodes an entry into the wrong form; during a rolling deploy the old and the new processes each
-take the entries of the other for misses and load. See [Core concepts](../../concepts.md#types) and [Codecs](../codecs.md).
+An entry remembers the shape of its type: its classes, their fields and the fields' types. Say a
+deploy adds a field or renames a class. The old entries then become misses, so a process never
+decodes an entry into the wrong shape. During a rolling deploy, old and new processes each treat
+the other's entries as misses and load. See [Core concepts](../../concepts.md#types) and
+[Codecs](../codecs.md).

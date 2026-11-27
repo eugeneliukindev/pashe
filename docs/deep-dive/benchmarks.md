@@ -1,9 +1,10 @@
 # Benchmarks
 
-What a codec, a compressor and a call of the cache cost, as `benchmarks/` of the repository
-measures them. Run them with `just bench`: it prints the times, then the bytes each codec and
-compressor made. Every other run of the tests takes each benchmark once, as a test. Your numbers
-will differ, the ratios hold.
+This page shows what a codec, a compressor and a cache call cost, as measured by the
+repository's `benchmarks/`. Run them with `just bench`: it prints the times, then the bytes each
+codec and compressor produced. Every other test run also runs each benchmark once, as a test.
+
+Your numbers will differ, but the ratios hold.
 
 ## The machine
 
@@ -16,14 +17,15 @@ will differ, the ratios hold.
 | Libraries | msgspec 0.22, orjson 3.13, pydantic 2.14, redis-py 8.1 |
 | How | the median of many rounds of pytest-benchmark, in one process |
 
-Times are in microseconds (us, a millionth of a second), sizes in bytes. In each column the
-<span class="pashe-best">best</span> is green, the <span class="pashe-second">second</span> yellow
-and the <span class="pashe-worst">worst</span> red; lower is better in every table.
+Times are in microseconds (us, a millionth of a second), and sizes are in bytes. In each column
+the <span class="pashe-best">best</span> is green, the <span class="pashe-second">second</span> is
+yellow and the <span class="pashe-worst">worst</span> is red. Lower is better in every table.
 
 ## What is stored
 
-The codecs and the compressors store products of a shop, in three sizes: one product, a small
-entry; 100, a page or a list; and 10 000, a big report, about the most worth caching.
+The codecs and compressors store a shop's products, in three sizes. One product is a small
+entry. 100 products are a page or a list. 10 000 products are a big report, about the most you'd
+want to cache.
 
 ```python
 --8<-- "benchmarks/products.py"
@@ -31,8 +33,8 @@ entry; 100, a page or a list; and 10 000, a big report, about the most worth cac
 
 ## Codecs
 
-Each codec encodes the products and decodes them back as the type of the cached function:
-`list[Product]` for a codec that rebuilds your types, a list of `dict`s for one of plain JSON.
+Each codec encodes the products and decodes them back as the cached function's type. A codec
+that rebuilds your types returns `list[Product]`; a plain JSON codec returns a list of `dict`s.
 
 ### Bytes
 
@@ -69,9 +71,9 @@ Each codec encodes the products and decodes them back as the type of the cached 
 
 ## Compressors
 
-Each compressor shrinks the products as MessagePack and restores them. One product grows: the
-header of the format outweighs what it saves, which is why a compressor leaves a value under its
-`min_size` as it is.
+Each compressor shrinks the products, encoded as MessagePack, and restores them. One product
+actually grows: the format's header outweighs what it saves. That's why a compressor leaves a
+value under its `min_size` as it is.
 
 ### Bytes
 
@@ -100,8 +102,8 @@ header of the format outweighs what it saves, which is why a compressor leaves a
 
 ## A call of the cache
 
-A cached function of one argument returns a small `TypedDict`, over each backend of `Cache`: a hit
-answers from the cache, a miss runs the function and stores what it returned.
+A cached function with one argument returns a small `TypedDict`, over each `Cache` backend. A
+hit is answered from the cache; a miss runs the function and stores what it returned.
 
 ### One call, us
 
@@ -112,6 +114,6 @@ answers from the cache, a miss runs the function and stores what it returned.
 | `RedisBackend` | 93 | <span class="pashe-worst">225</span> |
 | `RedisBackend` over a Redis Cluster | <span class="pashe-worst">95</span> | 213 |
 
-Most of a call over Redis is its round trips, one for a hit and two for a miss: see
-[What a call costs](cost.md). A near cache answers a hit from memory:
+Over Redis, most of a call's time goes to its round trips: one for a hit and two for a miss.
+See [What a call costs](cost.md). A near cache answers a hit from memory; see
 [Near cache](../guides/near-cache.md).

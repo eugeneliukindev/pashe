@@ -1,11 +1,12 @@
 # Examples
 
-The code of an online shop, from its first cached query to a service of many processes. The
-examples build on each other, as the modules of one application do. Pick **Sync** or **Async**
-once: every example on every page switches with it.
+This page builds an online shop, from its first cached query to a service of many processes.
+The examples build on each other, like the modules of one application. Pick **Sync** or **Async**
+once, and every example on every page switches with it.
 
-The diagram above each example tells what it does: yellow answers from the cache, blue reaches
-the source, and a box is a process or Redis, as [Core concepts](concepts.md#where-each-feature-works) shows.
+The diagram above each example shows what it does. Yellow means the answer comes from the
+cache, blue means the call reaches the source, and a box is a process or Redis, as
+[Core concepts](concepts.md#where-each-feature-works) explains.
 
 ## The shop
 
@@ -24,12 +25,13 @@ the async one. `partner` and `payments` are `httpx` clients of the APIs the shop
     --8<-- "shop/shop_async.py"
     ```
 
-`MsgspecJsonCodec` rebuilds a `Product` from the return annotation of a cached function; the
-default `JsonCodec` would hand back a `dict`.
+`MsgspecJsonCodec` rebuilds a `Product` from the cached function's return annotation. The
+default `JsonCodec` would give you back a `dict`.
 
 ## 1. A slow query
 
-A product page reads its product from the database on every request. Cache it for five minutes:
+Your product page reads its product from the database on every request. Cache it for five
+minutes:
 
 === "Sync"
 
@@ -52,10 +54,10 @@ get_product(1)  0 queries
 
 ## 2. Data that changes
 
-A new price must show at once, on the product page and on every list of its category. Tag what
-depends on what, and tell the cache when you write: `change_price` stores the new price with
-`get_product.set` and drops every list tagged `category:coffee`, which the next `list_category`
-reloads.
+A new price has to show up at once, on the product page and on every list of its category. Tag
+what depends on what, and tell the cache when you write. `change_price` stores the new price with
+`get_product.set` and drops every list tagged `category:coffee`. The next `list_category` call
+reloads it.
 
 === "Sync"
 
@@ -73,14 +75,14 @@ reloads.
     --8<-- "shop/data_changes_async.py:calls"
     ```
 
-`set` stores the new product without a query; the tag drops every list of the category in one
-write, however many there are.
+`set` stores the new product without a query. The tag drops every list of the category in one
+write, no matter how many there are.
 
 ## 3. A partner that fails
 
-Prices show in the currency of the customer, and the rates come from a partner API that is down
-now and then. A rate an hour old is better than an error page, and a currency the partner does
-not know is not asked for again on every request:
+Prices show in the customer's currency, and the rates come from a partner API that's down now
+and then. A rate that's an hour old beats an error page. And when the partner doesn't know a
+currency, you don't want to ask again on every request:
 
 ```mermaid
 flowchart LR
@@ -110,12 +112,13 @@ flowchart LR
     --8<-- "shop/partner_async.py:calls"
     ```
 
-A call for an unknown currency raises `NotFoundError`, from the cache the next ten minutes.
+A call for an unknown currency raises `NotFoundError`. For the next ten minutes, that answer
+comes from the cache.
 
 ## 4. An expensive report under load
 
-The sales report of a day takes seconds to build. When it expires, every admin who opens the
-dashboard at that moment would start one:
+A day's sales report takes seconds to build. When it expires, every admin who opens the
+dashboard at that moment would start building a new one:
 
 ```mermaid
 sequenceDiagram
@@ -154,8 +157,8 @@ sequenceDiagram
 
 ## 5. A feed of many products
 
-The home page shows fifty prices. Fifty cached calls are fifty round trips to the cache; a batch
-function reads them in one and queries only the missing ones:
+The home page shows fifty prices. Fifty cached calls mean fifty round trips to the cache. A
+batch function reads them all in one and queries only the missing ones:
 
 === "Sync"
 
@@ -178,8 +181,8 @@ get_prices([1, 2, 3])  1 query
 
 ## 6. A token that says how long it lives
 
-The payment provider hands out access tokens and says how long each is valid. Keep each that
-long, less a minute of margin:
+The payment provider hands out access tokens and tells you how long each one is valid. Keep
+each token that long, minus a minute of margin:
 
 <div class="pashe-timeline">
 <div class="pashe-timeline__fresh" style="flex: 3540" data-start="0"><b>HIT</b><br>the same token for every call</div>
@@ -205,9 +208,9 @@ long, less a minute of margin:
 
 ## 7. Logins, quotas and a nightly job
 
-Every process of the shop shares the limits and the locks, as they live in the backend: five
-failed logins of an email in 15 minutes ban it for an hour, a partner gets 100 searches a minute, and the nightly export
-runs on one server while the others skip it.
+The limits and locks live in the backend, so every process of the shop shares them. Five failed
+logins for an email in 15 minutes ban it for an hour. A partner gets 100 searches a minute. The
+nightly export runs on one server while the others skip it.
 
 === "Sync"
 
@@ -227,7 +230,7 @@ runs on one server while the others skip it.
 
 ## 8. A web service
 
-The product page over HTTP, with the headers of caching and a quota per client:
+Here's the product page over HTTP, with caching headers and a quota for each client:
 
 ```mermaid
 sequenceDiagram
@@ -258,7 +261,8 @@ sequenceDiagram
     --8<-- "shop/web_async.py:show"
     ```
 
-A second request with the `ETag` of the first in `If-None-Match` gets `304`, without the body:
+Send a second request with the first one's `ETag` in `If-None-Match`, and you get `304`, with no
+body:
 
 ```console title="Two requests to the service" hl_lines="5 6 7 11"
 $ curl -i http://localhost:8000/products/1
@@ -279,8 +283,8 @@ cache-status: pashe; hit; ttl=299
 
 ## 9. Many processes in production
 
-Every worker of every server shares Redis, keeps hot entries in its own memory for five seconds
-and answers from a fallback while Redis is down:
+Every worker on every server shares Redis. Each keeps hot entries in its own memory for five
+seconds, and it answers from a fallback while Redis is down:
 
 ```mermaid
 flowchart LR
