@@ -29,7 +29,7 @@ pip install "pashe[redis]"
 
 </div>
 
-pashe caches the results of your functions in Redis, SQLite or memory. Redis here also means the
+pashe caches the results of your functions in Redis, Memcached, SQLite or memory. Redis here also means the
 [servers that speak its protocol](guides/backends/index.md#supported-servers): Valkey,
 Dragonfly, KeyDB, Garnet and Redis Cluster. Every process of your service sees the same entries,
 tags, locks and rate limits.

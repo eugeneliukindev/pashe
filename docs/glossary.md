@@ -9,7 +9,7 @@ code.
 | --- | --- |
 | cache | the object you decorate functions with: `Cache`, or `AsyncCache` for `async def` code |
 | backend | where a cache keeps its entries: `MemoryBackend`, `SQLiteBackend`, `RedisBackend`, `NearCacheBackend` |
-| server | a Redis server, or Valkey, Dragonfly or Garnet, that a `RedisBackend` talks to; an HTTP server such as gunicorn or uvicorn is a WSGI or ASGI server |
+| server | a Redis server, or Valkey, Dragonfly or Garnet, that a `RedisBackend` talks to, or a memcached that a `MemcachedBackend` talks to; an HTTP server such as gunicorn or uvicorn is a WSGI or ASGI server |
 | process | one running copy of your application, such as a worker of gunicorn |
 | machine | a computer or a virtual machine that runs processes |
 | service | your application as a whole: all its processes on all machines |

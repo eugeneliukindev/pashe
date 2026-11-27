@@ -9,8 +9,8 @@ cashews 7.6.0 and dogpile.cache 1.5.0. We read their docs and their source.
 | | pashe | cachetools | aiocache | cashews | dogpile.cache |
 | --- | --- | --- | --- | --- | --- |
 | Sync and async | both, one API | sync | async | async | sync |
-| Shared by processes | Redis, Redis Cluster, SQLite | no, the process's memory | Redis, Memcached | Redis, Redis Cluster, a disk cache | Redis, Redis Cluster, Valkey, Memcached, DBM files |
-| Memcached | no | no | yes | no | yes |
+| Shared by processes | Redis, Redis Cluster, Memcached, SQLite | no, the process's memory | Redis, Memcached | Redis, Redis Cluster, a disk cache | Redis, Redis Cluster, Valkey, Memcached, DBM files |
+| Memcached | yes | no | yes | no | yes |
 | Keys from templates | `"user:{user.id}"`, with digests | a key function | a key function | `"user:{user.id}"` | a key function |
 | Invalidating a group | tags: two calls per tag, no set of keys kept | no | no | tags: a set of keys kept per tag | a whole region at once |
 | Stale results | while revalidating, on an error, when slow; reload before the TTL | no | no | an early refresh, on an error | while one caller reloads |
@@ -28,8 +28,6 @@ cashews 7.6.0 and dogpile.cache 1.5.0. We read their docs and their source.
 
 - **One process, and nothing else:** use cachetools. It keeps objects as they are, without
   encoding them, and needs no backend.
-- **Memcached:** use dogpile.cache or aiocache. pashe has no Memcached backend;
-  [Choosing a backend](../guides/backends/index.md#supported-servers) explains why.
 - **A large sync codebase on dogpile.cache:** its regions and their invalidation are mature, so
   moving away gains you little.
 - **Async code and a disk cache through `diskcache`:** use cashews. pashe keeps entries on disk

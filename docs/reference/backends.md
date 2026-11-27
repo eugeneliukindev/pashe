@@ -25,6 +25,14 @@
     options:
       filters: ["!^_[^_]", "!^__(?!(call|enter|exit|aenter|aexit)__$)", "!^get_many$", "!^set_many$", "!^set_if_absent$", "!^delete$", "!^incr$", "!^expire$", "!^ttl$", "!^delete_if_equals$", "!^expire_if_equals$", "!^ping$", "!^aclose$"]  # its base tells the contract; the library calls the rest
 
+::: pashe.backends.MemcachedBackend
+    options:
+      filters: ["!^_[^_]", "!^__(?!(call|enter|exit|aenter|aexit)__$)", "!^get_many$", "!^set_many$", "!^set_if_absent$", "!^delete$", "!^incr$", "!^expire$", "!^ttl$", "!^delete_if_equals$", "!^expire_if_equals$", "!^ping$", "!^close$"]  # its base tells the contract; the library calls the rest
+
+::: pashe.backends.AsyncMemcachedBackend
+    options:
+      filters: ["!^_[^_]", "!^__(?!(call|enter|exit|aenter|aexit)__$)", "!^get_many$", "!^set_many$", "!^set_if_absent$", "!^delete$", "!^incr$", "!^expire$", "!^ttl$", "!^delete_if_equals$", "!^expire_if_equals$", "!^ping$", "!^aclose$"]  # its base tells the contract; the library calls the rest
+
 ::: pashe.backends.NearCacheBackend
     options:
       filters: ["!^_[^_]", "!^__(?!(call|enter|exit|aenter|aexit)__$)", "!^get$", "!^get_many$", "!^set$", "!^set_many$", "!^set_if_absent$", "!^delete$", "!^incr$", "!^expire$", "!^ttl$", "!^delete_if_equals$", "!^expire_if_equals$", "!^ping$", "!^close$"]  # its base tells the contract; the library calls the rest

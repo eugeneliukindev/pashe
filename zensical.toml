@@ -36,6 +36,7 @@ nav = [
         { "SQLite" = "guides/backends/sqlite.md" },
         { "Redis and Valkey" = "guides/backends/redis.md" },
         { "Redis Cluster" = "guides/backends/cluster.md" },
+        { "Memcached" = "guides/backends/memcached.md" },
         { "Writing your own backend" = "guides/backends/your-own.md" },
     ] },
     { "Near cache" = "guides/near-cache.md" },
@@ -229,7 +230,7 @@ cards_layout_options.color = "#ffffff"
 
 [project.plugins.llmstxt]
 full_output = "llms-full.txt"
-markdown_description = "pashe caches the results of Python functions in Redis, Valkey and other servers of its protocol, SQLite or memory, for services that run as many processes: stale results, stampede protection, tags, near caches, locks and rate limits, for sync and async code."
+markdown_description = "pashe caches the results of Python functions in Redis, Valkey and other servers of its protocol, Memcached, SQLite or memory, for services that run as many processes: stale results, stampede protection, tags, near caches, locks and rate limits, for sync and async code."
 
 [project.plugins.llmstxt.sections]
 "Start here" = ["index.md", "getting-started.md", "concepts.md", "examples.md"]

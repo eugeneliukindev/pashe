@@ -38,7 +38,7 @@ shows.
 
 | In aiocache | In pashe | Guide |
 | --- | --- | --- |
-| `SimpleMemoryCache`, `RedisCache` | [`MemoryBackend`][pashe.backends.MemoryBackend], [`RedisBackend`][pashe.contrib.redis.RedisBackend]; there's no Memcached backend | [Choosing a backend](backends/index.md) |
+| `SimpleMemoryCache`, `RedisCache`, `MemcachedCache` | [`MemoryBackend`][pashe.backends.MemoryBackend], [`RedisBackend`][pashe.contrib.redis.RedisBackend], [`MemcachedBackend`][pashe.backends.MemcachedBackend] | [Choosing a backend](backends/index.md) |
 | `@cached(ttl=...)` | [`@cache(ttl=...)`][pashe.Cache.__call__] | [Caching a function](caching/decorator.md) |
 | `key=` or `key_builder=` | [`key`][pashe.Cache.__call__(key)], a template over the arguments | [Keys](caching/keys.md) |
 | `namespace=` | [`prefix`][pashe.Cache(prefix)] | [Keys](caching/keys.md) |

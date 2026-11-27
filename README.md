@@ -17,7 +17,7 @@
   <a href="https://opensource.org/license/mit"><img src="https://img.shields.io/badge/license-MIT-f7b500" alt="License: MIT"></a>
 </p>
 
-pashe caches your functions' results in Redis, SQLite or memory. Redis here also means the
+pashe caches your functions' results in Redis, Memcached, SQLite or memory. Redis here also means the
 servers that speak its protocol: Valkey, Dragonfly, KeyDB, Garnet and Redis Cluster. Every process
 of your service shares the entries, tags, locks and rate limits.
 
