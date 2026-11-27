@@ -5,16 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final, Self, final
 
-from pashe._internal.checks import expect_positive, parse_int
+from pashe._internal.checks import parse_int, validate_positive
 
 __all__ = ["FixedWindow", "Limit", "RateLimitState", "SlidingWindow"]
+
+_MINUTE: Final = 60.0
+_HOUR: Final = 3600.0
 
 
 type Limit = SlidingWindow | FixedWindow
 """A limit: a SlidingWindow or a FixedWindow."""
-
-_MINUTE: Final = 60.0
-_HOUR: Final = 3600.0
 
 
 @final
@@ -46,7 +46,7 @@ class SlidingWindow:
             InvalidOptionsError: calls or per is not positive.
         """
         parse_int("SlidingWindow.calls", self.calls, low=1, meaning="how many calls the window allows, 1 or more")
-        expect_positive("SlidingWindow.per", self.per, "the span of the window, more than 0 seconds")
+        validate_positive("SlidingWindow.per", self.per, "the span of the window, more than 0 seconds")
 
     @classmethod
     def per_second(cls, calls: int, /) -> Self:
@@ -142,9 +142,9 @@ class FixedWindow:
             InvalidOptionsError: calls, per or ban_for is not positive.
         """
         parse_int("FixedWindow.calls", self.calls, low=1, meaning="how many calls the window allows, 1 or more")
-        expect_positive("FixedWindow.per", self.per, "the length of the window, more than 0 seconds")
+        validate_positive("FixedWindow.per", self.per, "the length of the window, more than 0 seconds")
         if self.ban_for is not None:
-            expect_positive(
+            validate_positive(
                 "FixedWindow.ban_for", self.ban_for, "more than 0 seconds, or None for the length of the window"
             )
 

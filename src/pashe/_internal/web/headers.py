@@ -47,11 +47,12 @@ _HIT: Final = "hit"
 _MISS: Final = "fwd=miss"
 _BY_REQUEST: Final = "fwd=request"  # the request asked past the stored results, with no-cache
 _BODY_HEADERS: Final = frozenset((Header.CONTENT_LENGTH, Header.CONTENT_TYPE))  # a 304 has no body they describe
-
-type Headers = list[tuple[str, str]]
 type Directive = Literal["private", "public"]
 """Who may keep a response: "private", the client only, or "public", shared caches too."""
 _DIRECTIVES: Final = frozenset(get_args(Directive.__value__))
+
+
+type Headers = list[tuple[str, str]]
 
 
 @final

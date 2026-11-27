@@ -6,14 +6,14 @@ import functools
 from typing import TYPE_CHECKING, final, override
 
 from pashe._internal.cache.keys import CallKeys, KeyPrefix, KeyTemplate, key_name, parse_key
-from pashe._internal.checks import expect_type, parse_secret
+from pashe._internal.checks import parse_secret, validate_type
 from pashe._internal.hooks import Hooks
 from pashe._internal.locks.lock import lock_slots, parse_lock_holders, parse_lock_timeout, parse_lock_ttl
 from pashe._internal.sync.backends.backend import Backend
 from pashe._internal.sync.backends.prefixed import PrefixedBackend
 from pashe._internal.sync.locks.lock import Lock
 from pashe._internal.sync.locks.locking import try_take
-from pashe._internal.sync.threads import expect_side
+from pashe._internal.sync.threads import validate_sync
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -61,9 +61,8 @@ class Locks:
             TypeError: an argument is not of the type its annotation names.
             InvalidOptionsError: key_secret is shorter than 16 bytes.
         """
-        expect_type("backend", backend, Backend)
-        expect_type("prefix", prefix, str)
-        expect_type("key_secret", key_secret, str | bytes | None)
+        validate_type("backend", backend, Backend)
+        validate_type("prefix", prefix, str)
 
         self._backend = PrefixedBackend(backend, prefix + KeyPrefix.LOCK)
         self._hooks = Hooks(hooks)
@@ -110,7 +109,7 @@ class Locks:
             >>> with locks.lock("export", ttl=30, holders=3):
             ...     pass
         """
-        expect_type("key", key, str)
+        validate_type("key", key, str)
         return Lock(
             self._backend,
             key=key,
@@ -154,7 +153,7 @@ class Locks:
             >>> with lock:
             ...     pass
         """
-        expect_type("key", key, str)
+        validate_type("key", key, str)
         ttl = parse_lock_ttl(ttl)
         holders = parse_lock_holders(holders)
 
@@ -203,7 +202,7 @@ class Locks:
         holders = parse_lock_holders(holders)
 
         def decorator[**P, R](function: Callable[P, R], /) -> Callable[P, R]:
-            expect_side(function, "decorate", self)
+            validate_sync(function, "decorate", self)
             keys = CallKeys(function, key_template or KeyTemplate(key_name(function), key_secret=self._key_secret), ())
 
             @functools.wraps(function)

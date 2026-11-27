@@ -80,6 +80,24 @@ class AsyncLoadLocks:
         return await atry_take(self._backend, (lock_key,), ttl, name=lock_key, hooks=self._hooks)
 
 
+@final
+class _Backoff:
+    __slots__ = ("_deadline", "_longest", "_pause")
+
+    def __init__(self, ttl: float, timeout: float | None) -> None:
+        self._pause = _FIRST_PAUSE
+        self._longest = max(_FIRST_PAUSE, min(_LONGEST_PAUSE, ttl / _PAUSES_PER_TTL))
+        self._deadline = None if timeout is None else time.monotonic() + timeout
+
+    def next_pause(self) -> float | None:
+        pause = self._pause * random.uniform(1 - _JITTER, 1)  # noqa: S311 - jitter, not a secret
+        self._pause = min(self._pause * 2, self._longest)
+        if self._deadline is None:
+            return pause
+        left = self._deadline - time.monotonic()
+        return None if left <= 0 else min(pause, left)
+
+
 async def atake(
     backend: AsyncBackend,
     slots: Sequence[str],
@@ -116,21 +134,3 @@ async def atry_take(
         if await backend.set_if_absent(slot, owner, ttl=ttl):  # noqa: WPS476 - the next place only if this one is taken
             return AsyncLease(backend, slot, owner, name=name, hooks=hooks)
     return None
-
-
-@final
-class _Backoff:
-    __slots__ = ("_deadline", "_longest", "_pause")
-
-    def __init__(self, ttl: float, timeout: float | None) -> None:
-        self._pause = _FIRST_PAUSE
-        self._longest = max(_FIRST_PAUSE, min(_LONGEST_PAUSE, ttl / _PAUSES_PER_TTL))
-        self._deadline = None if timeout is None else time.monotonic() + timeout
-
-    def next_pause(self) -> float | None:
-        pause = self._pause * random.uniform(1 - _JITTER, 1)  # noqa: S311 - jitter, not a secret
-        self._pause = min(self._pause * 2, self._longest)
-        if self._deadline is None:
-            return pause
-        left = self._deadline - time.monotonic()
-        return None if left <= 0 else min(pause, left)

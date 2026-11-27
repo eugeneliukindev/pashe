@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING, Any, Final, final
 from pashe._internal.checks import (
     FUNCTION,
     duration_seconds,
-    expect_error_classes,
-    expect_type,
     parse_seconds,
+    validate_error_classes,
+    validate_type,
 )
 from pashe.errors import InvalidOptionsError
 
@@ -97,7 +97,7 @@ class Stale:
             InvalidOptionsError: a window is negative, if_error_on names errors while if_error is 0,
                 or one of if_slow and slow_after is set without the other.
         """
-        expect_error_classes("Stale.if_error_on", if_error_on)
+        validate_error_classes("Stale.if_error_on", if_error_on)
         if_error = parse_seconds("Stale.if_error", if_error, _WINDOW)
         if_slow = parse_seconds("Stale.if_slow", if_slow, _WINDOW)
         slow_after = parse_seconds("Stale.slow_after", slow_after, "how long a call waits for the function")
@@ -174,9 +174,9 @@ class Stampede:
             InvalidOptionsError: jitter is not from 0 to less than 1, or revalidate_before, lock_for or
                 max_loads is negative.
         """
-        expect_type("Stampede.jitter", jitter, int | float)
-        expect_type("Stampede.max_loads", max_loads, int)
-        expect_type("Stampede.share_loads", share_loads, bool)
+        validate_type("Stampede.jitter", jitter, int | float)
+        validate_type("Stampede.max_loads", max_loads, int)
+        validate_type("Stampede.share_loads", share_loads, bool)
         if not 0 <= jitter < 1:
             msg = f"Stampede.jitter is {jitter!r}: a share from 0 to less than 1, such as 0.1 for +-10%"
             raise InvalidOptionsError(msg)
@@ -229,7 +229,7 @@ class Negative:
             InvalidOptionsError: ttl is negative, on names errors without a positive ttl, or ttl is
                 set without errors in on.
         """
-        expect_error_classes("Negative.on", on)
+        validate_error_classes("Negative.on", on)
         seconds = parse_seconds("Negative.ttl", ttl, "how long a not found is kept")
         if on and not seconds:
             msg = f"Negative.on names {len(on)} errors and Negative.ttl is 0: set how long a not found is kept"
@@ -271,7 +271,7 @@ class Store:
             TypeError: an option is not of the type its annotation names.
             InvalidOptionsError: slower_than is negative.
         """
-        expect_type("Store.when", when, FUNCTION | None)
+        validate_type("Store.when", when, FUNCTION | None)
 
         object.__setattr__(self, "when", when)
         object.__setattr__(

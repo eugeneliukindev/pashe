@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, final
 
 from pashe import AsyncRateLimiter
-from pashe._internal.checks import FUNCTION, expect_type
+from pashe._internal.checks import FUNCTION, validate_type
 from pashe._internal.limits import LIMIT, parse_cost, rate_limit_headers
 from pashe.errors import MissingExtraError
 from pashe.ratelimit import RateLimitState  # noqa: TC001 - FastAPI reads the annotations of a dependency at runtime
@@ -87,11 +87,11 @@ class rate_limit:  # noqa: N801 - a dependency is named as what it does, as Depe
             TypeError: an argument is not of the type its annotation names.
             InvalidOptionsError: cost is not from 1 to the calls of the limit.
         """
-        expect_type("limiter", limiter, AsyncRateLimiter)
-        expect_type("limit", limit, LIMIT)
-        expect_type("key", key, FUNCTION)
+        validate_type("limiter", limiter, AsyncRateLimiter)
+        validate_type("limit", limit, LIMIT)
+        validate_type("key", key, FUNCTION)
         cost = parse_cost(limit, cost)
-        expect_type("fail_open", fail_open, bool)
+        validate_type("fail_open", fail_open, bool)
 
         self._limiter = limiter
         self._limit = limit

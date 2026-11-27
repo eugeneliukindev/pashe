@@ -19,7 +19,7 @@ import redis.asyncio.cluster  # noqa: WPS301 - it names redis.asyncio and its cl
 import redis.cluster
 
 from pashe._internal.breakers import Breaker, NoOpBreaker
-from pashe._internal.checks import expect_int64, expect_type
+from pashe._internal.checks import validate_int64, validate_type
 from pashe._internal.redis.clients import (  # noqa: WPS235 - what both sides share about Redis is one module, read whole
     DELETE_IF_EQUALS,
     EXPIRE_IF_EQUALS,
@@ -65,9 +65,9 @@ class RedisBackend(Backend):
             TypeError: an argument is not of the type its annotation names.
             InvalidOptionsError: client has decode_responses on, or no socket_timeout.
         """
-        expect_type("client", client, redis.Redis | redis.cluster.RedisCluster)
+        validate_type("client", client, redis.Redis | redis.cluster.RedisCluster)
         check_client(client)
-        expect_type("breaker", breaker, Breaker)
+        validate_type("breaker", breaker, Breaker)
 
         self._client = client
         self._breaker = breaker
@@ -139,7 +139,7 @@ class RedisBackend(Backend):
         *,
         ttl: float | None = None,
     ) -> int:
-        expect_int64("redis.by", by)
+        validate_int64("redis.by", by)
         with self._breaker.guarding(), translated_errors():
             if ttl is None:
                 return self._client.incrby(key, by)

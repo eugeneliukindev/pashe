@@ -9,11 +9,19 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, final, override
 
 from pashe._internal.async_.backends.backend import AsyncBackend
-from pashe._internal.checks import FUNCTION, expect_int64, expect_type, parse_counter
+from pashe._internal.checks import FUNCTION, parse_counter, validate_int64, validate_type
 from pashe.errors import InvalidOptionsError, ValueTooLargeError
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping, Sequence
+
+
+@final
+@dataclass(slots=True)
+class _Entry:
+    data: bytes
+    expires_at: float | None  # a reading of the clock; None means no expiry
+    pinned: bool = False  # a lock or a counter: evicting it frees the lock or resets the limit
 
 
 class AsyncMemoryBackend(AsyncBackend):
@@ -50,9 +58,9 @@ class AsyncMemoryBackend(AsyncBackend):
             TypeError: an argument is not of the type its annotation names.
             InvalidOptionsError: a limit is not positive.
         """
-        expect_type("max_entries", max_entries, int)
-        expect_type("max_bytes", max_bytes, int | None)
-        expect_type("clock", clock, FUNCTION)
+        validate_type("max_entries", max_entries, int)
+        validate_type("max_bytes", max_bytes, int | None)
+        validate_type("clock", clock, FUNCTION)
 
         if max_entries <= 0:
             msg = f"max_entries is {max_entries}: the most entries the backend keeps, 1 or more"
@@ -212,9 +220,9 @@ class AsyncMemoryBackend(AsyncBackend):
             entry = self._live(key)
             if entry is None:
                 entry = _Entry(b"0", self._expires_at(ttl))
-            expect_int64("memory.by", by)
+            validate_int64("memory.by", by)
             new = parse_counter("memory", entry.data) + by
-            expect_int64("memory.result", new)
+            validate_int64("memory.result", new)
             self._put(key, str(new).encode(), entry.expires_at, pinned=entry.expires_at is not None)
             return new
 
@@ -339,14 +347,6 @@ class AsyncMemoryBackend(AsyncBackend):
 
     def _expires_at(self, ttl: float | None) -> float | None:
         return None if ttl is None else self._clock() + ttl
-
-
-@final
-@dataclass(slots=True)
-class _Entry:
-    data: bytes
-    expires_at: float | None  # a reading of the clock; None means no expiry
-    pinned: bool = False  # a lock or a counter: evicting it frees the lock or resets the limit
 
 
 def _is_expired(entry: _Entry, now: float) -> bool:

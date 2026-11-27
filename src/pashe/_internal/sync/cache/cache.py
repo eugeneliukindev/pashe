@@ -19,8 +19,8 @@ from pashe._internal.cache.keys import (
     qualified_name,
 )
 from pashe._internal.cache.policy import Policy
-from pashe._internal.cache.value_types import item_type, return_type
-from pashe._internal.checks import FUNCTION, expect_item_types, expect_type, parse_secret
+from pashe._internal.cache.value_types import batch_value_type, return_type
+from pashe._internal.checks import FUNCTION, parse_secret, validate_item_types, validate_type
 from pashe._internal.hooks import Hooks
 from pashe._internal.sync.backends.backend import Backend
 from pashe._internal.sync.backends.prefixed import PrefixedBackend
@@ -30,7 +30,7 @@ from pashe._internal.sync.cache.cached_batch import CachedBatchFunction
 from pashe._internal.sync.cache.function_cache import FunctionCache
 from pashe._internal.sync.cache.storage import Storage
 from pashe._internal.sync.locks.locking import LoadLocks
-from pashe._internal.sync.threads import BackgroundTasks, expect_side
+from pashe._internal.sync.threads import BackgroundTasks, validate_sync
 from pashe.codecs import Codec, JsonCodec
 from pashe.compressors import Compressor, NoOpCompressor
 from pashe.errors import BackendError
@@ -136,15 +136,14 @@ class Cache:
             ...     hooks=[PrintErrors()],
             ... )
         """
-        expect_type("backend", backend, Backend)
-        expect_type("prefix", prefix, str)
-        expect_type("codec", codec, Codec)
-        expect_type("fallback", fallback, Fallback | None)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
+        validate_type("backend", backend, Backend)
+        validate_type("prefix", prefix, str)
+        validate_type("codec", codec, Codec)
+        validate_type("fallback", fallback, Fallback | None)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
         if fallback is not None:
-            expect_type("Fallback.backend", fallback.backend, Backend)
-        expect_type("compressor", compressor, Compressor)
-        expect_type("key_secret", key_secret, str | bytes | None)
-        expect_type("clock", clock, FUNCTION)
+            validate_type("Fallback.backend", fallback.backend, Backend)
+        validate_type("compressor", compressor, Compressor)
+        validate_type("clock", clock, FUNCTION)
 
         self._backend = PrefixedBackend(backend, prefix)
         self._codec = codec
@@ -341,9 +340,12 @@ class Cache:
         tag_templates = parse_tags(tags, key_secret=self._key_secret)
 
         def decorator[K: Hashable, V](function: BatchFunction[K, V], /) -> CachedBatchFunction[K, V]:
-            expect_side(function, "cache", self)
+            validate_sync(function, "cache", self)
+            value_type = batch_value_type(function)
+            self._codec.validate(value_type)  # as for a cached function, of the type of an item
+
             entry_format = EntryFormat(
-                policy, item_type(function), codec=self._codec, compressor=self._compressor, hooks=self._hooks
+                policy, value_type, codec=self._codec, compressor=self._compressor, hooks=self._hooks
             )
             keys = ItemKeys(function, key_template, tag_templates)
             batch_cache = BatchCache[K, V](
@@ -394,7 +396,7 @@ class Cache:
             ... )
             True
         """
-        expect_type("template", template, str)
+        validate_type("template", template, str)
         return KeyTemplate(template, key_secret=self._key_secret).render(args, kwargs)
 
     def invalidate_tags(self, *tags: str) -> None:
@@ -415,7 +417,7 @@ class Cache:
             ...     return {"id": user_id}
             >>> cache.invalidate_tags("user:1")
         """
-        expect_item_types("tags", tags, str)
+        validate_item_types("tags", tags, str)
         self._storage.invalidate_tags(tags)
 
     def invalidates(self, *, tags: list[str] | tuple[str, ...]) -> Decorator:
@@ -452,7 +454,7 @@ class Cache:
         tag_templates = parse_tags(tags, key_secret=self._key_secret)
 
         def decorator[**P, R](function: Callable[P, R], /) -> Callable[P, R]:
-            expect_side(function, "decorate", self)
+            validate_sync(function, "decorate", self)
             keys = CallKeys(function, None, tag_templates)
 
             @functools.wraps(function)
@@ -527,13 +529,15 @@ class Cache:
         tag_templates: tuple[KeyTemplate, ...],
     ) -> tuple[CallKeys, FunctionCache[R]]:
         """What a cached function or a value of function finds and keeps its results with."""
-        expect_side(function, "cache", self)
+        validate_sync(function, "cache", self)
         if key_template is None:
             key_name(function)  # refuses a lambda, whose name is no key of its own
         keys = CallKeys(function, key_template, tag_templates)
+        value_type = return_type(function)
+        self._codec.validate(value_type)  # a type the codec gives back as another one is refused when decorated
 
         entry_format = EntryFormat(
-            policy, return_type(function), codec=self._codec, compressor=self._compressor, hooks=self._hooks
+            policy, value_type, codec=self._codec, compressor=self._compressor, hooks=self._hooks
         )
         function_cache = FunctionCache[R](
             policy,

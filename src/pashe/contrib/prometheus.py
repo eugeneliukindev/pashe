@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, final, override
 
-from pashe._internal.checks import expect_type
+from pashe._internal.checks import validate_type
 from pashe.errors import MissingExtraError
 from pashe.hooks import Hook
 
@@ -64,7 +64,7 @@ class PrometheusMetricsHook(Hook):
         Raises:
             TypeError: registry is not a CollectorRegistry.
         """
-        expect_type("registry", registry, prometheus_client.CollectorRegistry)
+        validate_type("registry", registry, prometheus_client.CollectorRegistry)
 
         self._calls = prometheus_client.Counter(
             "pashe_calls",

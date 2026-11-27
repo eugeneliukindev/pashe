@@ -46,7 +46,7 @@ class _MsgspecCodec(Codec):
             raise CodecError(msg) from error
 
     @override
-    def check(self, type_: object, /) -> None:
+    def validate(self, type_: object, /) -> None:
         # msgspec rebuilds a class it does not know only through a dec_hook, which these codecs do not take
         if isinstance(msgspec.inspect.type_info(type_), msgspec.inspect.CustomType):
             msg = f"{type(self).__name__} cannot rebuild {type_!r}: return a dataclass, a msgspec.Struct or a type msgspec knows"

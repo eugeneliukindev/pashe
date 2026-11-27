@@ -9,7 +9,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, final, override
 
-from pashe._internal.checks import expect_type
+from pashe._internal.checks import validate_type
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Sequence
@@ -27,6 +27,202 @@ __all__ = [
     "Outcome",
     "RateLimitDecision",
 ]
+
+
+@enum.unique
+class CacheStatus(enum.StrEnum):
+    """How a call of a cached function was answered."""
+
+    HIT = "hit"
+    """A fresh stored result."""
+    MISS = "miss"
+    """The function ran."""
+    STALE_WHILE_REVALIDATE = "stale-while-revalidate"
+    """A stale result, answered while it is reloaded in the background."""
+    STALE_IF_ERROR = "stale-if-error"
+    """A stale result, answered instead of an error of the function."""
+    STALE_IF_SLOW = "stale-if-slow"
+    """A stale result, answered because the function was slow; the load goes on in the background."""
+    NOT_FOUND = "not-found"
+    """A cached "not found"."""
+    FALLBACK = "fallback"
+    """A result kept by the fallback backend of the cache, answered while the backend fails."""
+
+
+@enum.unique
+class Operation(enum.StrEnum):
+    """What a cache was doing when an error it worked around came: a label for metrics."""
+
+    GET = "get"
+    """A read of the backend."""
+    GET_MANY = "get_many"
+    """A read of the backend for a batch."""
+    SET = "set"
+    """A write to the backend."""
+    SET_MANY = "set_many"
+    """A write to the backend for a batch."""
+    FALLBACK_GET = "fallback_get"
+    """A read of the fallback, while the backend fails."""
+    FALLBACK_SET = "fallback_set"
+    """A write to the fallback, while the backend fails."""
+    STAMPEDE_LOCK = "stampede_lock"
+    """Taking the lock of a load, as Stampede.lock_for does."""
+    REVALIDATION_LOCK = "revalidation_lock"
+    """Taking the lock of a reload in the background."""
+    RELEASE_LOCK = "release_lock"
+    """Releasing a lock."""
+    ENCODE = "encode"
+    """Encoding a result: it is not stored."""
+    DECODE = "decode"
+    """Decoding a stored result: it is a miss."""
+    TTL = "ttl"
+    """Computing the TTL of a result from it: a negative one is not stored."""
+    LOAD = "load"
+    """A load that failed: a stale result answered instead of its error."""
+    REVALIDATION = "revalidation"
+    """A reload in the background."""
+    RATE_LIMIT = "rate_limit"
+    """Counting a call of a rate limit: it is let through; or taking back the count of a refused one, which stays."""
+    PUBLISH = "publish"
+    """Telling the other near caches through the bus which keys changed: their copies stay up to local_ttl."""
+    LISTEN = "listen"
+    """Listening to the bus, failed past a lost connection: every copy goes, and the bus listens again."""
+    INVALIDATE = "invalidate"
+    """Invalidating the tags of cache.invalidates after a write: their results stay up to their TTL."""
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class Outcome:
+    """How one call of a cached function, or one key of a batch, was answered.
+
+    Attributes:
+        function: the module and the qualified name of the cached function, such as
+            ``app.users.get_user``: a label for metrics, the same for every call of it.
+        key: the stored key, with the prefixes.
+        status: how the call was answered.
+        load_seconds: seconds the function ran for this call; 0 when it did not run.
+        fresh_seconds: seconds the result of the call stays fresh from the call, negative for a
+            stale answer; None when no result is stored.
+
+    Examples:
+        >>> from pashe import Cache
+        >>> from pashe.backends import MemoryBackend
+        >>> from pashe.hooks import Hook
+        >>> outcomes = []
+        >>> class Record(Hook):
+        ...     def on_call(self, outcome: Outcome, /) -> None:
+        ...         outcomes.append(outcome)
+        >>> cache = Cache(MemoryBackend(), prefix="app:", hooks=[Record()])
+        >>> @cache(ttl=60, key="user:{user_id}")
+        ... def get_user(user_id: int) -> int:
+        ...     return user_id
+        >>> get_user(1), get_user(1)
+        (1, 1)
+        >>> [(outcome.function.rpartition(".")[2], outcome.key, outcome.status.value) for outcome in outcomes]
+        [('get_user', 'app:user:1', 'miss'), ('get_user', 'app:user:1', 'hit')]
+    """
+
+    function: str
+    key: str
+    status: CacheStatus
+    load_seconds: float
+    fresh_seconds: float | None
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class Failure:
+    """An error the cache worked around instead of raising it, and where.
+
+    Attributes:
+        operation: what the cache was doing.
+        key: the key it was doing it with, with the prefixes; "" for a batch and for listening to a bus.
+        error: the error: a PasheError of the cache, or the one the function raised, as it raised it.
+
+    Examples:
+        >>> import logging
+        >>> from pashe.hooks import Hook
+        >>> class LoggingHook(Hook):
+        ...     def on_error(self, failure: Failure, /) -> None:
+        ...         logging.warning("%s %r", failure.operation, failure.key, exc_info=failure.error)
+    """
+
+    operation: Operation
+    key: str
+    error: Exception
+
+    @property
+    def error_type(self) -> str:
+        """The class of the error with its module, such as ``"pashe.errors.BackendError"``: a label for metrics."""
+        kind = type(self.error)
+        return f"{kind.__module__}.{kind.__qualname__}"
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class RateLimitDecision:
+    """What a rate limit decided of a call it counted.
+
+    Attributes:
+        key: what the limit counts, as count of the rate limiter was given it, such as ``"ip:203.0.113.7"``: for
+            logs; too many values for a label of metrics.
+        allowed: whether the call went through; False when it raised RateLimitedError.
+    """
+
+    key: str
+    allowed: bool
+
+    @property
+    def label(self) -> Literal["allowed", "refused"]:
+        """``"allowed"`` or ``"refused"``: a label for metrics."""
+        return "allowed" if self.allowed else "refused"
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class NearRead:
+    """One read of a near cache: get, or get_many with every key it was asked.
+
+    Attributes:
+        from_local: how many keys its copies in memory answered.
+        from_shared: how many keys it read from the shared backend, found or not.
+    """
+
+    from_local: int
+    from_shared: int
+
+    @property
+    def sources(self) -> dict[Literal["local", "shared"], int]:
+        """The keys each source answered, ``"local"`` and ``"shared"``, without a source that answered none.
+
+        Examples:
+            >>> from pashe.hooks import NearRead
+            >>> NearRead(from_local=2, from_shared=0).sources
+            {'local': 2}
+        """
+        counts: dict[Literal["local", "shared"], int] = {"local": self.from_local, "shared": self.from_shared}
+        return {source: count for source, count in counts.items() if count}
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class Circuit:
+    """The Breaker of a backend opened or closed.
+
+    Attributes:
+        open: True when it opened: every call skips the backend for a while, as if it failed;
+            False when it closed, as the backend answered again.
+        failures: the failures in a row that opened it; 0 when it closed.
+    """
+
+    open: bool
+    failures: int
+
+    @property
+    def state(self) -> Literal["open", "closed"]:
+        """``"open"`` or ``"closed"``: a label for metrics."""
+        return "open" if self.open else "closed"
 
 
 class Hook:
@@ -130,7 +326,7 @@ class LoggingHook(Hook):
         Raises:
             TypeError: logger is not a Logger.
         """
-        expect_type("logger", logger, logging.Logger | None)
+        validate_type("logger", logger, logging.Logger | None)
 
         self._logger = logger or logging.getLogger("pashe")
 
@@ -199,199 +395,3 @@ class CacheHeadersHook(Hook):
             yield calls
         finally:
             self._calls.reset(token)
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class Outcome:
-    """How one call of a cached function, or one key of a batch, was answered.
-
-    Attributes:
-        function: the module and the qualified name of the cached function, such as
-            ``app.users.get_user``: a label for metrics, the same for every call of it.
-        key: the stored key, with the prefixes.
-        status: how the call was answered.
-        load_seconds: seconds the function ran for this call; 0 when it did not run.
-        fresh_seconds: seconds the result of the call stays fresh from the call, negative for a
-            stale answer; None when no result is stored.
-
-    Examples:
-        >>> from pashe import Cache
-        >>> from pashe.backends import MemoryBackend
-        >>> from pashe.hooks import Hook
-        >>> outcomes = []
-        >>> class Record(Hook):
-        ...     def on_call(self, outcome: Outcome, /) -> None:
-        ...         outcomes.append(outcome)
-        >>> cache = Cache(MemoryBackend(), prefix="app:", hooks=[Record()])
-        >>> @cache(ttl=60, key="user:{user_id}")
-        ... def get_user(user_id: int) -> int:
-        ...     return user_id
-        >>> get_user(1), get_user(1)
-        (1, 1)
-        >>> [(outcome.function.rpartition(".")[2], outcome.key, outcome.status.value) for outcome in outcomes]
-        [('get_user', 'app:user:1', 'miss'), ('get_user', 'app:user:1', 'hit')]
-    """
-
-    function: str
-    key: str
-    status: CacheStatus
-    load_seconds: float
-    fresh_seconds: float | None
-
-
-@enum.unique
-class CacheStatus(enum.StrEnum):
-    """How a call of a cached function was answered."""
-
-    HIT = "hit"
-    """A fresh stored result."""
-    MISS = "miss"
-    """The function ran."""
-    STALE_WHILE_REVALIDATE = "stale-while-revalidate"
-    """A stale result, answered while it is reloaded in the background."""
-    STALE_IF_ERROR = "stale-if-error"
-    """A stale result, answered instead of an error of the function."""
-    STALE_IF_SLOW = "stale-if-slow"
-    """A stale result, answered because the function was slow; the load goes on in the background."""
-    NOT_FOUND = "not-found"
-    """A cached "not found"."""
-    FALLBACK = "fallback"
-    """A result kept by the fallback backend of the cache, answered while the backend fails."""
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class Failure:
-    """An error the cache worked around instead of raising it, and where.
-
-    Attributes:
-        operation: what the cache was doing.
-        key: the key it was doing it with, with the prefixes; "" for a batch and for listening to a bus.
-        error: the error: a PasheError of the cache, or the one the function raised, as it raised it.
-
-    Examples:
-        >>> import logging
-        >>> from pashe.hooks import Hook
-        >>> class LoggingHook(Hook):
-        ...     def on_error(self, failure: Failure, /) -> None:
-        ...         logging.warning("%s %r", failure.operation, failure.key, exc_info=failure.error)
-    """
-
-    operation: Operation
-    key: str
-    error: Exception
-
-    @property
-    def error_type(self) -> str:
-        """The class of the error with its module, such as ``"pashe.errors.BackendError"``: a label for metrics."""
-        kind = type(self.error)
-        return f"{kind.__module__}.{kind.__qualname__}"
-
-
-@enum.unique
-class Operation(enum.StrEnum):
-    """What a cache was doing when an error it worked around came: a label for metrics."""
-
-    GET = "get"
-    """A read of the backend."""
-    GET_MANY = "get_many"
-    """A read of the backend for a batch."""
-    SET = "set"
-    """A write to the backend."""
-    SET_MANY = "set_many"
-    """A write to the backend for a batch."""
-    FALLBACK_GET = "fallback_get"
-    """A read of the fallback, while the backend fails."""
-    FALLBACK_SET = "fallback_set"
-    """A write to the fallback, while the backend fails."""
-    STAMPEDE_LOCK = "stampede_lock"
-    """Taking the lock of a load, as Stampede.lock_for does."""
-    REVALIDATION_LOCK = "revalidation_lock"
-    """Taking the lock of a reload in the background."""
-    RELEASE_LOCK = "release_lock"
-    """Releasing a lock."""
-    ENCODE = "encode"
-    """Encoding a result: it is not stored."""
-    DECODE = "decode"
-    """Decoding a stored result: it is a miss."""
-    TTL = "ttl"
-    """Computing the TTL of a result from it: a negative one is not stored."""
-    LOAD = "load"
-    """A load that failed: a stale result answered instead of its error."""
-    REVALIDATION = "revalidation"
-    """A reload in the background."""
-    RATE_LIMIT = "rate_limit"
-    """Counting a call of a rate limit: it is let through; or taking back the count of a refused one, which stays."""
-    PUBLISH = "publish"
-    """Telling the other near caches through the bus which keys changed: their copies stay up to local_ttl."""
-    LISTEN = "listen"
-    """Listening to the bus, failed past a lost connection: every copy goes, and the bus listens again."""
-    INVALIDATE = "invalidate"
-    """Invalidating the tags of cache.invalidates after a write: their results stay up to their TTL."""
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class RateLimitDecision:
-    """What a rate limit decided of a call it counted.
-
-    Attributes:
-        key: what the limit counts, as count of the rate limiter was given it, such as ``"ip:203.0.113.7"``: for
-            logs; too many values for a label of metrics.
-        allowed: whether the call went through; False when it raised RateLimitedError.
-    """
-
-    key: str
-    allowed: bool
-
-    @property
-    def label(self) -> Literal["allowed", "refused"]:
-        """``"allowed"`` or ``"refused"``: a label for metrics."""
-        return "allowed" if self.allowed else "refused"
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class NearRead:
-    """One read of a near cache: get, or get_many with every key it was asked.
-
-    Attributes:
-        from_local: how many keys its copies in memory answered.
-        from_shared: how many keys it read from the shared backend, found or not.
-    """
-
-    from_local: int
-    from_shared: int
-
-    @property
-    def sources(self) -> dict[Literal["local", "shared"], int]:
-        """The keys each source answered, ``"local"`` and ``"shared"``, without a source that answered none.
-
-        Examples:
-            >>> from pashe.hooks import NearRead
-            >>> NearRead(from_local=2, from_shared=0).sources
-            {'local': 2}
-        """
-        counts: dict[Literal["local", "shared"], int] = {"local": self.from_local, "shared": self.from_shared}
-        return {source: count for source, count in counts.items() if count}
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class Circuit:
-    """The Breaker of a backend opened or closed.
-
-    Attributes:
-        open: True when it opened: every call skips the backend for a while, as if it failed;
-            False when it closed, as the backend answered again.
-        failures: the failures in a row that opened it; 0 when it closed.
-    """
-
-    open: bool
-    failures: int
-
-    @property
-    def state(self) -> Literal["open", "closed"]:
-        """``"open"`` or ``"closed"``: a label for metrics."""
-        return "open" if self.open else "closed"

@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any, Final, final
 
 from pashe import AsyncRateLimiter
 from pashe._internal.cache.call import no_cache
-from pashe._internal.checks import FUNCTION, expect_type
+from pashe._internal.checks import FUNCTION, validate_type
 from pashe._internal.limits import LIMIT, parse_cost, rate_limit_headers
 from pashe._internal.web.headers import (
     Directive,
@@ -41,16 +41,25 @@ if TYPE_CHECKING:
 
 __all__ = ["CacheHeadersMiddleware", "RateLimitMiddleware"]
 
-# The types of the ASGI specification, by the names starlette.types gives them.
-type Scope = MutableMapping[str, Any]  # what the server tells of a connection: its type, method, path and headers
-type Message = MutableMapping[str, Any]  # an event of the connection, such as http.response.start
-type Receive = Callable[[], Awaitable[Message]]
-type Send = Callable[[Message], Awaitable[None]]
-type ASGIApp = Callable[[Scope, Receive, Send], Awaitable[None]]
-
 _START: Final = "http.response.start"
 _BODY: Final = "http.response.body"
 _LATIN1: Final = "latin-1"  # the charset of HTTP header bytes in ASGI
+
+
+# The types of the ASGI specification, by the names starlette.types gives them.
+type Scope = MutableMapping[str, Any]  # what the server tells of a connection: its type, method, path and headers
+
+
+type Message = MutableMapping[str, Any]  # an event of the connection, such as http.response.start
+
+
+type Receive = Callable[[], Awaitable[Message]]
+
+
+type Send = Callable[[Message], Awaitable[None]]
+
+
+type ASGIApp = Callable[[Scope, Receive, Send], Awaitable[None]]
 
 
 @final
@@ -97,9 +106,9 @@ class CacheHeadersMiddleware:
             TypeError: app is not an application, or hook not a CacheHeadersHook.
             InvalidOptionsError: cache_control is neither "private" nor "public".
         """
-        expect_type("app", app, FUNCTION)
-        expect_type("hook", hook, CacheHeadersHook)
-        expect_type("honor_no_cache", honor_no_cache, FUNCTION | None)
+        validate_type("app", app, FUNCTION)
+        validate_type("hook", hook, CacheHeadersHook)
+        validate_type("honor_no_cache", honor_no_cache, FUNCTION | None)
 
         self._app = app
         self._cache_control: Directive = parse_cache_control(cache_control)
@@ -194,11 +203,11 @@ class RateLimitMiddleware:
             TypeError: an argument is not of the type its annotation names.
             InvalidOptionsError: cost is not from 1 to the calls of the limit.
         """
-        expect_type("app", app, FUNCTION)
-        expect_type("limiter", limiter, AsyncRateLimiter)
-        expect_type("limit", limit, LIMIT)
-        expect_type("key", key, FUNCTION)
-        expect_type("fail_open", fail_open, bool)
+        validate_type("app", app, FUNCTION)
+        validate_type("limiter", limiter, AsyncRateLimiter)
+        validate_type("limit", limit, LIMIT)
+        validate_type("key", key, FUNCTION)
+        validate_type("fail_open", fail_open, bool)
 
         self._app = app
         self._limiter = limiter

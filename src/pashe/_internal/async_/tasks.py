@@ -115,7 +115,11 @@ class AsyncBackgroundTasks:
         await asyncio.gather(*self._tasks, return_exceptions=True)
 
 
-def aexpect_side(
+class _LeaderLeft(Exception):  # noqa: N818 - not an error: tells a waiter to load itself
+    """The caller that loaded was cancelled: a caller that waited for it loads instead."""
+
+
+def validate_async(
     function: Callable[..., object],
     action: Literal["decorate", "cache"],
     owner: object,
@@ -125,10 +129,6 @@ def aexpect_side(
         twin = type(owner).__name__.removeprefix("Async")
         msg = f"{getattr(function, '__qualname__', function)} is not async: {action} it with {twin}"
         raise TypeError(msg)
-
-
-class _LeaderLeft(Exception):  # noqa: N818 - not an error: tells a waiter to load itself
-    """The caller that loaded was cancelled: a caller that waited for it loads instead."""
 
 
 def _fail(load: asyncio.Future[Any] | None, error: BaseException) -> None:

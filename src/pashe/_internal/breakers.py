@@ -6,7 +6,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, final, override
 
-from pashe._internal.checks import FUNCTION, expect_type, parse_int, parse_seconds
+from pashe._internal.checks import FUNCTION, parse_int, parse_seconds, validate_type
 from pashe._internal.hooks import Hooks
 from pashe.errors import BackendError, CircuitOpenError
 from pashe.hooks import Circuit, Hook
@@ -159,7 +159,7 @@ class CircuitBreaker(Breaker):
             "CircuitBreaker.open_for", open_for, "how long it skips the backend", positive=True
         )
 
-        expect_type("clock", clock, FUNCTION)
+        validate_type("clock", clock, FUNCTION)
 
         self._hooks = Hooks(hooks)
         self._clock = clock

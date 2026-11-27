@@ -34,12 +34,12 @@ class PydanticCodec(Codec):
     __slots__ = ("_adapters",)
 
     def __init__(self) -> None:
-        """Create the codec; check builds one TypeAdapter per type and keeps it."""
+        """Create the codec; it builds one TypeAdapter per type, when it first meets the type, and keeps it."""
         self._adapters: dict[object, pydantic.TypeAdapter[Any]] = {}
 
     @override
-    def check(self, type_: object, /) -> None:
-        """Build the TypeAdapter of type_, or refuse a type pydantic has no schema for.
+    def validate(self, type_: object, /) -> None:
+        """Refuse a type pydantic has no schema for.
 
         Args:
             type_: the return type of the cached function, or of an item of a batch.
@@ -47,13 +47,7 @@ class PydanticCodec(Codec):
         Raises:
             InvalidOptionsError: pydantic cannot validate type_, such as a plain class.
         """
-        if type_ in self._adapters:
-            return
-        try:
-            self._adapters[type_] = pydantic.TypeAdapter(type_)  # type: ignore[arg-type]  # any type: a schema error refuses it
-        except pydantic.PydanticSchemaGenerationError as error:
-            msg = f"PydanticCodec cannot rebuild {type_!r}: return a model, a dataclass or a type pydantic validates"
-            raise InvalidOptionsError(msg) from error
+        self._adapter(type_)
 
     @override
     def encode(self, value: object, /) -> bytes:
@@ -65,10 +59,23 @@ class PydanticCodec(Codec):
 
     @override
     def decode[T](self, data: bytes, type_: type[T], /) -> T:
-        self.check(type_)  # a TypeAdapter takes a while to build: one per type, kept
         try:
-            decoded: T = self._adapters[type_].validate_json(data)
+            decoded: T = self._adapter(type_).validate_json(data)
         except pydantic.ValidationError as error:
             msg = f"cannot decode JSON as {type_!r}"
             raise CodecError(msg) from error
         return decoded
+
+    def _adapter(self, type_: object) -> pydantic.TypeAdapter[Any]:
+        """The TypeAdapter of type_, built once: it takes a while."""
+        adapter: pydantic.TypeAdapter[Any] | None = self._adapters.get(type_)
+        if adapter is None:
+            try:
+                adapter = pydantic.TypeAdapter(type_)  # type: ignore[arg-type]  # any type: a schema error refuses it
+            except pydantic.PydanticSchemaGenerationError as error:
+                msg = (
+                    f"PydanticCodec cannot rebuild {type_!r}: return a model, a dataclass or a type pydantic validates"
+                )
+                raise InvalidOptionsError(msg) from error
+            self._adapters[type_] = adapter
+        return adapter

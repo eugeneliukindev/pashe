@@ -28,19 +28,13 @@ if TYPE_CHECKING:
 
     from pashe.options import Duration
 
-# What a user gives is checked here, once, where it comes in. expect_* checks and returns None;
+# What a user gives is checked here, once, where it comes in. validate_* checks and returns None;
 # parse_* checks and returns the value in the form the code inside trusts, such as seconds. A check
 # that the lines after it rely on uses isinstance itself, which the type checkers see, and type_error.
 __all__ = [
     "DURATION",
     "FUNCTION",
     "duration_seconds",
-    "expect_error_classes",
-    "expect_int64",
-    "expect_item_types",
-    "expect_json_type",
-    "expect_positive",
-    "expect_type",
     "is_async",
     "parse_int",
     "parse_seconds",
@@ -48,6 +42,12 @@ __all__ = [
     "parse_timeout",
     "parse_ttl",
     "type_error",
+    "validate_error_classes",
+    "validate_int64",
+    "validate_item_types",
+    "validate_json_type",
+    "validate_positive",
+    "validate_type",
 ]
 
 DURATION: Final = int | float | timedelta  # what isinstance checks a Duration as
@@ -68,7 +68,7 @@ _JSON_KEYS: Final = frozenset((str, Any, object))  # JSON writes every key of an
 _UNIONS: Final = (types.UnionType, Union)  # the origins of X | Y and of Optional[X] before 3.14
 
 
-def expect_type(
+def validate_type(
     name: str,
     value: object,
     kind: type | types.UnionType,
@@ -88,16 +88,16 @@ def type_error(
     return TypeError(f"{name} must be {names}, not {type(value).__name__}")
 
 
-def expect_item_types(
+def validate_item_types(
     name: str,
     values: Iterable[object],
     kind: type | types.UnionType,
 ) -> None:
     for index, value in enumerate(values):
-        expect_type(f"{name}[{index}]", value, kind)
+        validate_type(f"{name}[{index}]", value, kind)
 
 
-def expect_error_classes(name: str, values: object) -> None:
+def validate_error_classes(name: str, values: object) -> None:
     if not isinstance(values, tuple):
         raise type_error(name, values, tuple)
     errors: tuple[object, ...] = values  # pyright: ignore[reportUnknownVariableType] - isinstance leaves the items unknown
@@ -107,7 +107,7 @@ def expect_error_classes(name: str, values: object) -> None:
             raise TypeError(msg)
 
 
-def expect_positive(
+def validate_positive(
     name: str,
     value: object,
     meaning: str,
@@ -120,7 +120,7 @@ def expect_positive(
         raise InvalidOptionsError(msg)
 
 
-def expect_int64(name: str, value: int) -> None:
+def validate_int64(name: str, value: int) -> None:
     """The counters of every backend are signed 64-bit integers, as Redis keeps them."""
     if not _INT64_MIN <= value <= _INT64_MAX:
         msg = f"{name} is {value}: out of the signed 64-bit range of a counter"
@@ -134,48 +134,13 @@ def parse_counter(backend_name: str, data: bytes) -> int:
         raise WrongTypeError(msg)
     parsed = int(data)
     try:
-        expect_int64(f"{backend_name}.value", parsed)
+        validate_int64(f"{backend_name}.value", parsed)
     except OverflowError as error:  # a value out of the range is not a counter
         raise WrongTypeError(str(error)) from error
     return parsed
 
 
-def _type_parts(form: object) -> Iterator[object]:  # noqa: WPS231 - one walk through every kind of type
-    """Every type a value of form is made of, form first, each once.
-
-    What an alias or a NewType stands for, the arguments of a generic and the fields of
-    a class. A Literal holds values and Annotated metadata, not types; a class whose
-    annotations name what is not defined has no parts.
-    """
-    seen: dict[int, object] = {}  # by id, as an argument such as the [int] of Callable[[int], str] has no hash
-    stack = [form]
-    while stack:
-        part = stack.pop()
-        if id(part) in seen:
-            continue
-        seen[id(part)] = part  # kept, so its id is not reused while the walk lasts
-        if isinstance(part, TypeAliasType | NewType):  # in place of what it stands for
-            stack.append(part.__value__ if isinstance(part, TypeAliasType) else part.__supertype__)
-            continue
-
-        yield part
-        origin = get_origin(part)
-        if origin is Annotated:
-            stack.append(get_args(part)[0])
-        elif origin is not None and origin is not Literal:
-            stack.extend(get_args(part))
-        elif inspect.isclass(part):
-            try:
-                hints = get_type_hints(part)
-            except (NameError, TypeError):
-                continue
-            # a field of data, not one of the class itself, such as __pydantic_extra__ or a ClassVar
-            stack.extend(
-                hint for name, hint in hints.items() if not name.startswith("__") and get_origin(hint) is not ClassVar
-            )
-
-
-def expect_json_type(codec_name: str, form: object) -> None:  # noqa: WPS231 - every part of the type, and the keys of its dicts
+def validate_json_type(codec_name: str, form: object) -> None:  # noqa: WPS231 - every part of the type, and the keys of its dicts
     """Refuse a type with a part a codec of JSON would read back as another one.
 
     JSON gives back dict, list, str, numbers, bool and None, so at any depth a dataclass,
@@ -298,6 +263,45 @@ def duration_seconds(duration: Duration, /) -> float:
     return seconds
 
 
+def is_async(function: Callable[..., object]) -> bool:
+    return inspect.iscoroutinefunction(function) or inspect.iscoroutinefunction(type(function).__call__)
+
+
+def _type_parts(form: object) -> Iterator[object]:  # noqa: WPS231 - one walk through every kind of type
+    """Every type a value of form is made of, form first, each once.
+
+    What an alias or a NewType stands for, the arguments of a generic and the fields of
+    a class. A Literal holds values and Annotated metadata, not types; a class whose
+    annotations name what is not defined has no parts.
+    """
+    seen: dict[int, object] = {}  # by id, as an argument such as the [int] of Callable[[int], str] has no hash
+    stack = [form]
+    while stack:
+        part = stack.pop()
+        if id(part) in seen:
+            continue
+        seen[id(part)] = part  # kept, so its id is not reused while the walk lasts
+        if isinstance(part, TypeAliasType | NewType):  # in place of what it stands for
+            stack.append(part.__value__ if isinstance(part, TypeAliasType) else part.__supertype__)
+            continue
+
+        yield part
+        origin = get_origin(part)
+        if origin is Annotated:
+            stack.append(get_args(part)[0])
+        elif origin is not None and origin is not Literal:
+            stack.extend(get_args(part))
+        elif inspect.isclass(part):
+            try:
+                hints = get_type_hints(part)
+            except (NameError, TypeError):
+                continue
+            # a field of data, not one of the class itself, such as __pydantic_extra__ or a ClassVar
+            stack.extend(
+                hint for name, hint in hints.items() if not name.startswith("__") and get_origin(hint) is not ClassVar
+            )
+
+
 def _seconds(duration: object) -> float | None:
     """A duration in seconds, None for what is not one."""
     if isinstance(duration, timedelta):
@@ -305,10 +309,6 @@ def _seconds(duration: object) -> float | None:
     if isinstance(duration, int | float):
         return float(duration)
     return None
-
-
-def is_async(function: Callable[..., object]) -> bool:
-    return inspect.iscoroutinefunction(function) or inspect.iscoroutinefunction(type(function).__call__)
 
 
 def _name(kind: object) -> str:

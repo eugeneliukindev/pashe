@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final, NamedTuple, Self, final
 
 from pashe._internal.cache.call import Answer
-from pashe._internal.checks import duration_seconds, expect_type, parse_ttl
+from pashe._internal.checks import duration_seconds, parse_ttl, validate_type
 from pashe.errors import InvalidOptionsError, NotFoundError, OverloadedError
 from pashe.hooks import CacheStatus
 from pashe.options import Negative, Stale, Stampede, Store
@@ -45,10 +45,10 @@ class Policy:
     ) -> Self:
         """The options a user gave a cached function, with the names of its arguments."""
         ttl = parse_ttl("ttl", ttl, _TTL_MEANING)
-        expect_type("stale", stale, Stale)
-        expect_type("stampede", stampede, Stampede)
-        expect_type("negative", negative, Negative)
-        expect_type("store", store, Store)
+        validate_type("stale", stale, Stale)
+        validate_type("stampede", stampede, Stampede)
+        validate_type("negative", negative, Negative)
+        validate_type("store", store, Store)
 
         policy = cls(
             ttl=ttl if callable(ttl) else lambda _result: ttl,

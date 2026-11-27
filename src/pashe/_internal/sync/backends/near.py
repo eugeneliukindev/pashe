@@ -8,7 +8,7 @@ import threading
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Final, final, override
 
-from pashe._internal.checks import expect_type, parse_seconds
+from pashe._internal.checks import parse_seconds, validate_type
 from pashe._internal.hooks import Hooks
 from pashe._internal.sync.backends.backend import Backend
 from pashe._internal.sync.backends.memory import MemoryBackend
@@ -157,10 +157,10 @@ class NearCacheBackend(Backend):
             TypeError: an argument is not of the type its annotation names.
             InvalidOptionsError: local_ttl is not positive.
         """
-        expect_type("local", local, MemoryBackend)
-        expect_type("shared", shared, Backend)
+        validate_type("local", local, MemoryBackend)
+        validate_type("shared", shared, Backend)
         local_ttl = parse_seconds("local_ttl", local_ttl, "how long a copy is kept", positive=True)
-        expect_type("bus", bus, InvalidationBus)
+        validate_type("bus", bus, InvalidationBus)
 
         self._local = local
         self._shared = shared

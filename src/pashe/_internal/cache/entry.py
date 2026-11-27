@@ -25,6 +25,42 @@ type Generations = tuple[int, ...]  # of the tags of a result, in the order of i
 
 
 @final
+class Stored(NamedTuple):
+    # an entry with its result; its generations of tags are set where it is stored
+    entry: Entry
+    result: object  # decoded as the return type
+    fresh_seconds: float = 0
+    storage_seconds: float = 0  # how long the backend keeps it: fresh, then the stale windows
+
+
+@final
+class Lookup(NamedTuple):
+    # What a call found under its key: an entry the generations of its tags still match, or none.
+    # A load after it stores with these generations, so a tag invalidated meanwhile makes it a miss.
+    key: str
+    entry: Entry | None
+    tag_generations: Generations = ()
+    from_fallback: bool = False  # the backend failed: the entry is of the fallback, and a store goes there
+
+
+@final
+class Entry(NamedTuple):
+    stale_at: float
+    negative: bool
+    compressed: bool
+    type_fingerprint: int
+    tag_generations: Generations
+    payload: bytes
+
+    @override
+    def __repr__(self) -> str:
+        """The payload by its length: its bytes are too long to read in a repr."""
+        fields = f"stale_at={self.stale_at}, negative={self.negative}, compressed={self.compressed}"
+        tags = f"type_fingerprint={self.type_fingerprint}, tag_generations={self.tag_generations}"
+        return f"Entry({fields}, {tags}, payload=<{len(self.payload)} bytes>)"
+
+
+@final
 class EntryFormat:
     # How the results of one cached function become entries and back. Its policy decides which are
     # stored and for how long, the codec and the compressor make the payload, and the fingerprint
@@ -41,8 +77,6 @@ class EntryFormat:
         compressor: Compressor,
         hooks: Hook,
     ) -> None:
-        codec.check(type_)  # a type the codec gives back as another one is refused here
-
         self._policy = policy
         self._type: Any = type_
         self._codec = codec
@@ -105,7 +139,7 @@ class EntryFormat:
             return None
         if lifetime is None:
             return None
-        # A miss answers with the result itself: a type check took comes back from the codec as it
+        # A miss answers with the result itself: a type validate took comes back from the codec as it
         # went in. One left open by Any, or by no annotation, may come back as another type on a hit.
         try:
             data = self._codec.encode(result)
@@ -126,42 +160,6 @@ class EntryFormat:
             payload=payload,
         )
         return Stored(entry, result, lifetime, self._policy.storage_seconds(lifetime))
-
-
-@final
-class Stored(NamedTuple):
-    # an entry with its result; its generations of tags are set where it is stored
-    entry: Entry
-    result: object  # decoded as the return type
-    fresh_seconds: float = 0
-    storage_seconds: float = 0  # how long the backend keeps it: fresh, then the stale windows
-
-
-@final
-class Lookup(NamedTuple):
-    # What a call found under its key: an entry the generations of its tags still match, or none.
-    # A load after it stores with these generations, so a tag invalidated meanwhile makes it a miss.
-    key: str
-    entry: Entry | None
-    tag_generations: Generations = ()
-    from_fallback: bool = False  # the backend failed: the entry is of the fallback, and a store goes there
-
-
-@final
-class Entry(NamedTuple):
-    stale_at: float
-    negative: bool
-    compressed: bool
-    type_fingerprint: int
-    tag_generations: Generations
-    payload: bytes
-
-    @override
-    def __repr__(self) -> str:
-        """The payload by its length: its bytes are too long to read in a repr."""
-        fields = f"stale_at={self.stale_at}, negative={self.negative}, compressed={self.compressed}"
-        tags = f"type_fingerprint={self.type_fingerprint}, tag_generations={self.tag_generations}"
-        return f"Entry({fields}, {tags}, payload=<{len(self.payload)} bytes>)"
 
 
 def pack(entry: Entry) -> bytes:

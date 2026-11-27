@@ -18,9 +18,10 @@ if TYPE_CHECKING:
     from pashe.hooks import Hook
     from pashe.options import Fallback
 
-type _Read = tuple[bytes | None, Generations]  # an entry as the backend keeps it, and the generations of its tags
-
 _GENERATION_BITS: Final = 62  # leaves room for a counter to count up within 64 bits
+
+
+type _Read = tuple[bytes | None, Generations]  # an entry as the backend keeps it, and the generations of its tags
 
 
 @final

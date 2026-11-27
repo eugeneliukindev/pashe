@@ -16,7 +16,7 @@ import pickle
 from abc import ABC, abstractmethod
 from typing import Final, final, override
 
-from pashe._internal.checks import expect_json_type, parse_secret
+from pashe._internal.checks import parse_secret, validate_json_type
 from pashe.errors import CodecError
 
 __all__ = ["Codec", "JsonCodec", "PickleCodec"]
@@ -91,7 +91,7 @@ class Codec(ABC):
         """
         raise NotImplementedError
 
-    def check(self, type_: object, /) -> None:  # noqa: B027 - optional: a codec that rebuilds any type leaves it
+    def validate(self, type_: object, /) -> None:  # noqa: B027 - optional: a codec that rebuilds any type leaves it
         """Refuse a type the codec cannot give back as it is; it takes every type by default.
 
         The cache calls it once with the return type, when it decorates the function: a type the
@@ -111,8 +111,8 @@ class Codec(ABC):
             >>> @dataclass
             ... class User:
             ...     id: int
-            >>> JsonCodec().check(dict[str, int])
-            >>> JsonCodec().check(User)
+            >>> JsonCodec().validate(dict[str, int])
+            >>> JsonCodec().validate(User)
             Traceback (most recent call last):
             ...
             pashe.errors.InvalidOptionsError: JsonCodec reads User back as another type: ...
@@ -146,8 +146,8 @@ class JsonCodec(Codec):
             raise CodecError(msg) from error
 
     @override
-    def check(self, type_: object, /) -> None:
-        expect_json_type("JsonCodec", type_)
+    def validate(self, type_: object, /) -> None:
+        validate_json_type("JsonCodec", type_)
 
     @override
     def decode[T](self, data: bytes, type_: type[T], /) -> T:

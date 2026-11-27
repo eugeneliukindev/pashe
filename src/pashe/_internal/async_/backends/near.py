@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Final, final, override
 
 from pashe._internal.async_.backends.backend import AsyncBackend
 from pashe._internal.async_.backends.memory import AsyncMemoryBackend
-from pashe._internal.checks import expect_type, parse_seconds
+from pashe._internal.checks import parse_seconds, validate_type
 from pashe._internal.hooks import Hooks
 from pashe.errors import BackendError, ValueTooLargeError
 from pashe.hooks import Failure, Hook, NearRead, Operation
@@ -155,10 +155,10 @@ class AsyncNearCacheBackend(AsyncBackend):
             TypeError: an argument is not of the type its annotation names.
             InvalidOptionsError: local_ttl is not positive.
         """
-        expect_type("local", local, AsyncMemoryBackend)
-        expect_type("shared", shared, AsyncBackend)
+        validate_type("local", local, AsyncMemoryBackend)
+        validate_type("shared", shared, AsyncBackend)
         local_ttl = parse_seconds("local_ttl", local_ttl, "how long a copy is kept", positive=True)
-        expect_type("bus", bus, AsyncInvalidationBus)
+        validate_type("bus", bus, AsyncInvalidationBus)
 
         self._local = local
         self._shared = shared

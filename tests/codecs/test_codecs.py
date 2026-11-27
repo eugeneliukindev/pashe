@@ -97,7 +97,7 @@ def test_a_str_of_broken_utf8_is_a_codec_error(codec: Codec) -> None:
 @pytest.mark.parametrize("form", [tuple[int, int], set[int], frozenset[str]], ids=repr)
 def test_json_refuses_a_generic_it_reads_back_as_a_list(form: object) -> None:
     with pytest.raises(InvalidOptionsError, match="back as another type"):
-        JsonCodec().check(form)
+        JsonCodec().validate(form)
 
 
 type _Pair = tuple[int, int]
@@ -105,7 +105,7 @@ type _Pair = tuple[int, int]
 
 def test_json_refuses_what_a_type_alias_stands_for() -> None:
     with pytest.raises(InvalidOptionsError, match="reads tuple back"):
-        JsonCodec().check(_Pair)
+        JsonCodec().validate(_Pair)
 
 
 class _Point(TypedDict):
@@ -116,13 +116,13 @@ class _Point(TypedDict):
 @pytest.mark.parametrize("form", [list[tuple[int, int]], dict[str, set[int]], tuple[int] | None, _Point], ids=repr)
 def test_json_refuses_what_it_reads_back_as_another_type_at_any_depth(codec: Codec, form: object) -> None:
     with pytest.raises(InvalidOptionsError, match="back as another type"):
-        codec.check(form)
+        codec.validate(form)
 
 
 @pytest.mark.parametrize("codec", json_codecs(), ids=lambda codec: type(codec).__name__)
 def test_json_refuses_a_dict_of_keys_it_reads_back_as_str(codec: Codec) -> None:
     with pytest.raises(InvalidOptionsError, match="reads the keys of dict"):
-        codec.check(dict[int, str])
+        codec.validate(dict[int, str])
 
 
 type _Json = dict[str, _Json] | list[_Json] | str | int | float | bool | None
@@ -131,7 +131,7 @@ type _Json = dict[str, _Json] | list[_Json] | str | int | float | bool | None
 @pytest.mark.parametrize("codec", json_codecs(), ids=lambda codec: type(codec).__name__)
 @pytest.mark.parametrize("form", [dict[str, list[int]], list[Any], Literal["a", 1], UserDict, _Json], ids=repr)
 def test_json_takes_what_it_reads_back_as_it_is(codec: Codec, form: object) -> None:
-    codec.check(form)
+    codec.validate(form)
 
 
 def test_pickle_rejects_what_it_cannot_pickle() -> None:
@@ -187,7 +187,7 @@ class _Plain:
 )
 def test_a_typed_codec_refuses_a_class_it_cannot_rebuild(codec: Codec) -> None:
     with pytest.raises(InvalidOptionsError, match="cannot rebuild"):
-        codec.check(_Plain)
+        codec.validate(_Plain)
 
 
 @pytest.mark.parametrize(

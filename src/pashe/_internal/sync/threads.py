@@ -54,26 +54,6 @@ class SharedLoads:
 
 
 @final
-class _SharedLoad[T]:
-    # the load of a leader its waiters take: lighter than a Future, which makes a Condition per load
-    __slots__ = ("done", "error", "result")
-
-    result: T  # set by the leader before it releases done, unless it raised
-
-    def __init__(self) -> None:
-        self.done = threading.Lock()
-        self.done.acquire()  # held until the leader finished
-        self.error: BaseException | None = None
-
-    def wait(self) -> T:
-        self.done.acquire()  # once the leader released it
-        self.done.release()  # for the other waiters
-        if self.error is not None:
-            raise self.error
-        return self.result
-
-
-@final
 class LoadLimit:
     __slots__ = ("_held", "_semaphore")
 
@@ -132,7 +112,27 @@ class BackgroundTasks:
             executor.shutdown(wait=True)
 
 
-def expect_side(
+@final
+class _SharedLoad[T]:
+    # the load of a leader its waiters take: lighter than a Future, which makes a Condition per load
+    __slots__ = ("done", "error", "result")
+
+    result: T  # set by the leader before it releases done, unless it raised
+
+    def __init__(self) -> None:
+        self.done = threading.Lock()
+        self.done.acquire()  # held until the leader finished
+        self.error: BaseException | None = None
+
+    def wait(self) -> T:
+        self.done.acquire()  # once the leader released it
+        self.done.release()  # for the other waiters
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+
+def validate_sync(
     function: Callable[..., object],
     action: Literal["decorate", "cache"],
     owner: object,

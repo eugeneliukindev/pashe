@@ -17,7 +17,7 @@ import redis.asyncio.cluster  # noqa: WPS301 - it names redis.asyncio and its cl
 import redis.cluster
 
 from pashe._internal.breakers import Breaker, NoOpBreaker
-from pashe._internal.checks import expect_type
+from pashe._internal.checks import validate_type
 from pashe._internal.hooks import Hooks
 from pashe._internal.redis.clients import translated_errors
 from pashe._internal.redis.messages import encode_message
@@ -67,12 +67,12 @@ class RedisPubSubBus(InvalidationBus):
             InvalidOptionsError: client has no pub/sub, as the async RedisCluster of redis-py before 8.
 
         """
-        expect_type("client", client, redis.Redis | redis.cluster.RedisCluster)
+        validate_type("client", client, redis.Redis | redis.cluster.RedisCluster)
         if not hasattr(client, "pubsub"):  # what every write would raise, at once: AttributeError of publish
             msg = "client has no pub/sub, as a RedisCluster of redis-py before 8: take redis-py 8 or later"
             raise InvalidOptionsError(msg)
-        expect_type("channel", channel, str)
-        expect_type("breaker", breaker, Breaker)
+        validate_type("channel", channel, str)
+        validate_type("breaker", breaker, Breaker)
 
         self._client = client
         self._channel = channel
@@ -124,8 +124,8 @@ class RedisTrackingBus(InvalidationBus):
                 one node, such as of a Redis Cluster: a node of a cluster tracks only its own keys,
                 so take RedisPubSubBus there.
         """
-        expect_type("client", client, redis.Redis)
-        expect_type("prefix", prefix, str)
+        validate_type("client", client, redis.Redis)
+        validate_type("prefix", prefix, str)
 
         self._client = client
         self._prefix = prefix

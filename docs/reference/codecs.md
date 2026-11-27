@@ -9,7 +9,7 @@
 
 ::: pashe.codecs.JsonCodec
     options:
-      filters: ["!^_[^_]", "!^__(?!(call|enter|exit|aenter|aexit)__$)", "!^encode$", "!^check$", "!^decode$"]  # its base tells the contract; the library calls the rest
+      filters: ["!^_[^_]", "!^__(?!(call|enter|exit|aenter|aexit)__$)", "!^encode$", "!^validate$", "!^decode$"]  # its base tells the contract; the library calls the rest
 
 ::: pashe.codecs.PickleCodec
     options:

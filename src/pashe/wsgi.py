@@ -16,7 +16,7 @@ from http import HTTPMethod, HTTPStatus
 from typing import TYPE_CHECKING, Final, final
 
 from pashe._internal.cache.call import in_no_cache, no_cache
-from pashe._internal.checks import FUNCTION, expect_type
+from pashe._internal.checks import FUNCTION, validate_type
 from pashe._internal.web.headers import (
     Directive,
     Header,
@@ -86,9 +86,9 @@ class CacheHeadersMiddleware:
             TypeError: app is not an application, or hook not a CacheHeadersHook.
             InvalidOptionsError: cache_control is neither "private" nor "public".
         """
-        expect_type("app", app, FUNCTION)
-        expect_type("hook", hook, CacheHeadersHook)
-        expect_type("honor_no_cache", honor_no_cache, FUNCTION | None)
+        validate_type("app", app, FUNCTION)
+        validate_type("hook", hook, CacheHeadersHook)
+        validate_type("honor_no_cache", honor_no_cache, FUNCTION | None)
 
         self._app = app
         self._cache_control: Directive = parse_cache_control(cache_control)

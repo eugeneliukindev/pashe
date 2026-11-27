@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Final, final, override
 
 from pashe import __version__
-from pashe._internal.checks import expect_type
+from pashe._internal.checks import validate_type
 from pashe.errors import MissingExtraError
 from pashe.hooks import Hook
 
@@ -69,7 +69,7 @@ class OtelMetricsHook(Hook):
         Raises:
             TypeError: meter is not a Meter.
         """
-        expect_type("meter", meter, metrics.Meter | None)
+        validate_type("meter", meter, metrics.Meter | None)
         made = meter or metrics.get_meter("pashe", __version__)
 
         self._calls = made.create_counter(

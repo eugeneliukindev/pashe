@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import final, override
 
-from pashe._internal.checks import expect_json_type
+from pashe._internal.checks import validate_json_type
 from pashe.codecs import Codec
 from pashe.errors import CodecError, MissingExtraError
 
@@ -42,8 +42,8 @@ class OrjsonCodec(Codec):
             raise CodecError(msg) from error
 
     @override
-    def check(self, type_: object, /) -> None:
-        expect_json_type("OrjsonCodec", type_)  # it writes a dataclass, and reads it back as a dict
+    def validate(self, type_: object, /) -> None:
+        validate_json_type("OrjsonCodec", type_)  # it writes a dataclass, and reads it back as a dict
 
     @override
     def decode[T](self, data: bytes, type_: type[T], /) -> T:

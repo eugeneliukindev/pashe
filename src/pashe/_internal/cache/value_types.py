@@ -30,7 +30,7 @@ def return_type(function: Callable[..., object]) -> object:
     return hints.get("return", Any)
 
 
-def item_type(function: Callable[..., object]) -> object:
+def batch_value_type(function: Callable[..., object]) -> object:
     """A batch stores every value of the dict it returns on its own, so the codec rebuilds V of dict[K, V]."""
     form = return_type(function)
     if form is Any:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, final, override
 
-from pashe._internal.checks import expect_item_types, expect_type
+from pashe._internal.checks import validate_item_types, validate_type
 from pashe.hooks import Hook
 
 if TYPE_CHECKING:
@@ -15,8 +15,8 @@ class Hooks(Hook):
 
     def __init__(self, hooks: list[Hook] | tuple[Hook, ...]) -> None:
         """The hooks argument of a public class, checked here, where every one of them comes in."""
-        expect_type("hooks", hooks, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
-        expect_item_types("hooks", hooks, Hook)
+        validate_type("hooks", hooks, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
+        validate_item_types("hooks", hooks, Hook)
 
         self._hooks = tuple(hooks)
 

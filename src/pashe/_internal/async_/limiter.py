@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING, Final, assert_never, final, override
 
 from pashe._internal.async_.backends.backend import AsyncBackend
 from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend
-from pashe._internal.async_.tasks import aexpect_side
+from pashe._internal.async_.tasks import validate_async
 from pashe._internal.cache.keys import CallKeys, KeyPrefix, KeyTemplate, key_name, parse_key
-from pashe._internal.checks import FUNCTION, expect_type, parse_secret
+from pashe._internal.checks import FUNCTION, parse_secret, validate_type
 from pashe._internal.hooks import Hooks
 from pashe._internal.limits import LIMIT, parse_cost
 from pashe.errors import BackendError, RateLimitedError, WrongTypeError
@@ -70,10 +70,9 @@ class AsyncRateLimiter:
             TypeError: an argument is not of the type its annotation names.
             InvalidOptionsError: key_secret is shorter than 16 bytes.
         """
-        expect_type("backend", backend, AsyncBackend)
-        expect_type("prefix", prefix, str)
-        expect_type("key_secret", key_secret, str | bytes | None)
-        expect_type("clock", clock, FUNCTION)
+        validate_type("backend", backend, AsyncBackend)
+        validate_type("prefix", prefix, str)
+        validate_type("clock", clock, FUNCTION)
 
         self._backend = AsyncPrefixedBackend(backend, prefix)
         self._hooks = Hooks(hooks)
@@ -121,10 +120,10 @@ class AsyncRateLimiter:
             >>> state.remaining
             3
         """
-        expect_type("key", key, str)
-        expect_type("limit", limit, LIMIT)
+        validate_type("key", key, str)
+        validate_type("limit", limit, LIMIT)
         cost = parse_cost(limit, cost)
-        expect_type("fail_open", fail_open, bool)
+        validate_type("fail_open", fail_open, bool)
 
         try:
             match limit:
@@ -171,11 +170,11 @@ class AsyncRateLimiter:
             >>> await export(1)
             1
         """
-        expect_type("limit", limit, LIMIT)
+        validate_type("limit", limit, LIMIT)
         key_template = parse_key(key, key_secret=self._key_secret)
 
         def decorator[**P, R](function: Callable[P, Awaitable[R]], /) -> Callable[P, Awaitable[R]]:
-            aexpect_side(function, "decorate", self)
+            validate_async(function, "decorate", self)
             keys = CallKeys(function, key_template or KeyTemplate(key_name(function), key_secret=self._key_secret), ())
 
             @functools.wraps(function)

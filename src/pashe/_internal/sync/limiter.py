@@ -8,12 +8,12 @@ import time
 from typing import TYPE_CHECKING, Final, assert_never, final, override
 
 from pashe._internal.cache.keys import CallKeys, KeyPrefix, KeyTemplate, key_name, parse_key
-from pashe._internal.checks import FUNCTION, expect_type, parse_secret
+from pashe._internal.checks import FUNCTION, parse_secret, validate_type
 from pashe._internal.hooks import Hooks
 from pashe._internal.limits import LIMIT, parse_cost
 from pashe._internal.sync.backends.backend import Backend
 from pashe._internal.sync.backends.prefixed import PrefixedBackend
-from pashe._internal.sync.threads import expect_side
+from pashe._internal.sync.threads import validate_sync
 from pashe.errors import BackendError, RateLimitedError, WrongTypeError
 from pashe.hooks import Failure, Operation, RateLimitDecision
 from pashe.ratelimit import FixedWindow, Limit, RateLimitState, SlidingWindow
@@ -72,10 +72,9 @@ class RateLimiter:
             TypeError: an argument is not of the type its annotation names.
             InvalidOptionsError: key_secret is shorter than 16 bytes.
         """
-        expect_type("backend", backend, Backend)
-        expect_type("prefix", prefix, str)
-        expect_type("key_secret", key_secret, str | bytes | None)
-        expect_type("clock", clock, FUNCTION)
+        validate_type("backend", backend, Backend)
+        validate_type("prefix", prefix, str)
+        validate_type("clock", clock, FUNCTION)
 
         self._backend = PrefixedBackend(backend, prefix)
         self._hooks = Hooks(hooks)
@@ -123,10 +122,10 @@ class RateLimiter:
             >>> state.remaining
             3
         """
-        expect_type("key", key, str)
-        expect_type("limit", limit, LIMIT)
+        validate_type("key", key, str)
+        validate_type("limit", limit, LIMIT)
         cost = parse_cost(limit, cost)
-        expect_type("fail_open", fail_open, bool)
+        validate_type("fail_open", fail_open, bool)
 
         try:
             match limit:
@@ -173,11 +172,11 @@ class RateLimiter:
             >>> export(1)
             1
         """
-        expect_type("limit", limit, LIMIT)
+        validate_type("limit", limit, LIMIT)
         key_template = parse_key(key, key_secret=self._key_secret)
 
         def decorator[**P, R](function: Callable[P, R], /) -> Callable[P, R]:
-            expect_side(function, "decorate", self)
+            validate_sync(function, "decorate", self)
             keys = CallKeys(function, key_template or KeyTemplate(key_name(function), key_secret=self._key_secret), ())
 
             @functools.wraps(function)

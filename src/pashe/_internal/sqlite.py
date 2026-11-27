@@ -11,7 +11,7 @@ import time
 from typing import TYPE_CHECKING, Final, final, override
 
 from pashe._internal.async_.backends.backend import AsyncBackend
-from pashe._internal.checks import FUNCTION, expect_int64, expect_type, parse_counter
+from pashe._internal.checks import FUNCTION, parse_counter, validate_int64, validate_type
 from pashe._internal.sync.backends.backend import Backend
 from pashe.errors import BackendError
 
@@ -94,8 +94,8 @@ class SQLiteBackend(Backend):
             TypeError: an argument is not of the type its annotation names.
             BackendError: the file cannot be opened or written.
         """
-        expect_type("path", path, str | os.PathLike)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
-        expect_type("clock", clock, FUNCTION)
+        validate_type("path", path, str | os.PathLike)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
+        validate_type("clock", clock, FUNCTION)
 
         self._clock = clock
 
@@ -155,13 +155,13 @@ class SQLiteBackend(Backend):
         *,
         ttl: float | None = None,
     ) -> int:
-        expect_int64("sqlite.by", by)
+        validate_int64("sqlite.by", by)
         with self._lock, _translated_errors(), self._transaction():
             now = self._clock()
             row = self._connection.execute(_GET_WITH_EXPIRY, (key, now)).fetchone()
             value, expires_at = (b"0", _expires_at(now, ttl)) if row is None else row
             new = parse_counter("sqlite", value) + by
-            expect_int64("sqlite.result", new)
+            validate_int64("sqlite.result", new)
             self._connection.execute(_SET, (key, str(new).encode(), expires_at))
             return new
 

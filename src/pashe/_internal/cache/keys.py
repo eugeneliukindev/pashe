@@ -13,7 +13,7 @@ import string
 import uuid
 from typing import TYPE_CHECKING, Final, NamedTuple, final, override
 
-from pashe._internal.checks import expect_item_types, expect_type
+from pashe._internal.checks import validate_item_types, validate_type
 from pashe.errors import InvalidOptionsError
 
 if TYPE_CHECKING:
@@ -25,16 +25,40 @@ _SHA256: Final = "sha256"  # for where only FIPS algorithms are allowed
 _HMAC: Final = "hmac"  # HMAC-SHA256 under the secret of the cache
 _DIGESTS: Final = frozenset((_BLAKE2B, _SHA256, _HMAC))
 _COMPACT: Final = (",", ":")
+
 # The text of these is stable: no address of an object, no order of a set.
 _STABLE_TYPES: Final = (str, int, float, bool, type(None), dt.date, dt.time, uuid.UUID, decimal.Decimal)
 _BOUND_NAMES: Final = frozenset(("self", "cls"))
 _LOCALS: Final = "<locals>"  # what a qualified name has for a function defined in a function
 _LAMBDA: Final = "<lambda>"  # the qualified name of every lambda
 
+
+@final
+@enum.unique
+class KeyPrefix(enum.StrEnum):
+    # What the cache puts before a key of its own, under the prefix of the cache. The values are
+    # the format of keys already in backends: renaming a member is fine, changing a value is not.
+    TAG = "__tag:"  # the generation counter of a tag
+    STAMPEDE_LOCK = "__stampede:"  # the Stampede.lock_for lock of an entry
+    REVALIDATION_LOCK = "__revalidation:"  # the lock of the one revalidation of an entry
+    LOCK = "__lock:"  # a lock of Locks: lock, try_lock and locked
+    SLIDING_WINDOW = "__rate:sliding:"  # the counters of a SlidingWindow
+    FIXED_WINDOW = "__rate:fixed:"  # the counter of a FixedWindow
+
+
 type _Parsed = tuple[str, str | None, str | None, str | None]  # what Formatter.parse gives a part
+
+
 type _Part = tuple[
     str, int | str | None, str, str | None
 ]  # a part read once: its field as a position, or a name or a path
+
+
+@final
+class KeyAndTags(NamedTuple):
+    # what the arguments of a call make: its key, and its tags filled in
+    key: str
+    tags: tuple[str, ...]
 
 
 @final
@@ -126,26 +150,6 @@ class ItemKeys:
 
 
 @final
-class KeyAndTags(NamedTuple):
-    # what the arguments of a call make: its key, and its tags filled in
-    key: str
-    tags: tuple[str, ...]
-
-
-def parse_key(key: str | None, *, key_secret: bytes | None) -> KeyTemplate | None:
-    """The key= of a decorator: a template, or None for the name of the function and its arguments."""
-    expect_type("key", key, str | None)
-    return None if key is None else KeyTemplate(key, key_secret=key_secret)
-
-
-def parse_tags(tags: list[str] | tuple[str, ...], *, key_secret: bytes | None) -> tuple[KeyTemplate, ...]:
-    """The tags= of a decorator: not a str, which would split into one tag per letter."""
-    expect_type("tags", tags, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
-    expect_item_types("tags", tags, str)
-    return tuple(KeyTemplate(tag, key_secret=key_secret) for tag in tags)
-
-
-@final
 class KeyTemplate:
     # a str.format template of a key or a tag, checked when it is made: only a checked one renders
     __slots__ = ("_formatter", "_parts", "_text", "names")
@@ -214,50 +218,6 @@ class KeyTemplate:
 
 
 @final
-@enum.unique
-class KeyPrefix(enum.StrEnum):
-    # What the cache puts before a key of its own, under the prefix of the cache. The values are
-    # the format of keys already in backends: renaming a member is fine, changing a value is not.
-    TAG = "__tag:"  # the generation counter of a tag
-    STAMPEDE_LOCK = "__stampede:"  # the Stampede.lock_for lock of an entry
-    REVALIDATION_LOCK = "__revalidation:"  # the lock of the one revalidation of an entry
-    LOCK = "__lock:"  # a lock of Locks: lock, try_lock and locked
-    SLIDING_WINDOW = "__rate:sliding:"  # the counters of a SlidingWindow
-    FIXED_WINDOW = "__rate:fixed:"  # the counter of a FixedWindow
-
-
-def qualified_name(function: Callable[..., object]) -> str:
-    name = getattr(function, "__qualname__", None)
-    if name is None:
-        msg = f"{function!r} has no name for its keys: decorate a def that calls it"
-        raise TypeError(msg)
-    return f"{function.__module__}.{name}"
-
-
-def key_name(function: Callable[..., object]) -> str:
-    """The qualified name a key starts with when no template names it: a lambda has none of its own."""
-    name = qualified_name(function)
-    if name.endswith(_LAMBDA):
-        msg = f"{name} is a lambda, and every lambda of its module would share its keys: pass key="
-        raise InvalidOptionsError(msg)
-    return name
-
-
-def canonical(value: object) -> bytes:
-    try:
-        text = _CANONICAL.encode(value)
-    except (TypeError, ValueError) as error:
-        msg = f"cannot hash a {type(value).__name__} into a key: {error}"
-        raise TypeError(msg) from error
-    return text.encode()
-
-
-def has_stable_text(value: object) -> bool:
-    plain = value.value if isinstance(value, enum.Enum) else value
-    return isinstance(plain, _STABLE_TYPES)
-
-
-@final
 class _KeyFormatter(string.Formatter):
     # formats the fields of the keys of one cache, with its key_secret for hmac: digests, and the
     # text of a value only when it is stable
@@ -290,6 +250,50 @@ class _KeyFormatter(string.Formatter):
         if spec not in _DIGESTS and spec.isidentifier() and len(spec) > 1:
             msg = f"{template!r} uses {spec!r}: the digests are blake2b, sha256 and hmac"
             raise InvalidOptionsError(msg)
+
+
+def parse_key(key: str | None, *, key_secret: bytes | None) -> KeyTemplate | None:
+    """The key= of a decorator: a template, or None for the name of the function and its arguments."""
+    validate_type("key", key, str | None)
+    return None if key is None else KeyTemplate(key, key_secret=key_secret)
+
+
+def parse_tags(tags: list[str] | tuple[str, ...], *, key_secret: bytes | None) -> tuple[KeyTemplate, ...]:
+    """The tags= of a decorator: not a str, which would split into one tag per letter."""
+    validate_type("tags", tags, list | tuple)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
+    validate_item_types("tags", tags, str)
+    return tuple(KeyTemplate(tag, key_secret=key_secret) for tag in tags)
+
+
+def qualified_name(function: Callable[..., object]) -> str:
+    name = getattr(function, "__qualname__", None)
+    if name is None:
+        msg = f"{function!r} has no name for its keys: decorate a def that calls it"
+        raise TypeError(msg)
+    return f"{function.__module__}.{name}"
+
+
+def key_name(function: Callable[..., object]) -> str:
+    """The qualified name a key starts with when no template names it: a lambda has none of its own."""
+    name = qualified_name(function)
+    if name.endswith(_LAMBDA):
+        msg = f"{name} is a lambda, and every lambda of its module would share its keys: pass key="
+        raise InvalidOptionsError(msg)
+    return name
+
+
+def canonical(value: object) -> bytes:
+    try:
+        text = _CANONICAL.encode(value)
+    except (TypeError, ValueError) as error:
+        msg = f"cannot hash a {type(value).__name__} into a key: {error}"
+        raise TypeError(msg) from error
+    return text.encode()
+
+
+def has_stable_text(value: object) -> bool:
+    plain = value.value if isinstance(value, enum.Enum) else value
+    return isinstance(plain, _STABLE_TYPES)
 
 
 def _part(name: str, value: object) -> str:

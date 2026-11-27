@@ -13,7 +13,7 @@ from pashe._internal.async_.cache.cached_batch import AsyncCachedBatchFunction
 from pashe._internal.async_.cache.function_cache import AsyncFunctionCache
 from pashe._internal.async_.cache.storage import AsyncStorage
 from pashe._internal.async_.locks.locking import AsyncLoadLocks
-from pashe._internal.async_.tasks import AsyncBackgroundTasks, aexpect_side
+from pashe._internal.async_.tasks import AsyncBackgroundTasks, validate_async
 from pashe._internal.cache.call import CallReporter
 from pashe._internal.cache.entry import EntryFormat
 from pashe._internal.cache.keys import (
@@ -26,8 +26,8 @@ from pashe._internal.cache.keys import (
     qualified_name,
 )
 from pashe._internal.cache.policy import Policy
-from pashe._internal.cache.value_types import item_type, return_type
-from pashe._internal.checks import FUNCTION, expect_item_types, expect_type, parse_secret
+from pashe._internal.cache.value_types import batch_value_type, return_type
+from pashe._internal.checks import FUNCTION, parse_secret, validate_item_types, validate_type
 from pashe._internal.hooks import Hooks
 from pashe.codecs import Codec, JsonCodec
 from pashe.compressors import Compressor, NoOpCompressor
@@ -134,15 +134,14 @@ class AsyncCache:
             ...     hooks=[PrintErrors()],
             ... )
         """
-        expect_type("backend", backend, AsyncBackend)
-        expect_type("prefix", prefix, str)
-        expect_type("codec", codec, Codec)
-        expect_type("fallback", fallback, Fallback | None)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
+        validate_type("backend", backend, AsyncBackend)
+        validate_type("prefix", prefix, str)
+        validate_type("codec", codec, Codec)
+        validate_type("fallback", fallback, Fallback | None)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
         if fallback is not None:
-            expect_type("Fallback.backend", fallback.backend, AsyncBackend)
-        expect_type("compressor", compressor, Compressor)
-        expect_type("key_secret", key_secret, str | bytes | None)
-        expect_type("clock", clock, FUNCTION)
+            validate_type("Fallback.backend", fallback.backend, AsyncBackend)
+        validate_type("compressor", compressor, Compressor)
+        validate_type("clock", clock, FUNCTION)
 
         self._backend = AsyncPrefixedBackend(backend, prefix)
         self._codec = codec
@@ -339,9 +338,12 @@ class AsyncCache:
         tag_templates = parse_tags(tags, key_secret=self._key_secret)
 
         def decorator[K: Hashable, V](function: AsyncBatchFunction[K, V], /) -> AsyncCachedBatchFunction[K, V]:
-            aexpect_side(function, "cache", self)
+            validate_async(function, "cache", self)
+            value_type = batch_value_type(function)
+            self._codec.validate(value_type)  # as for a cached function, of the type of an item
+
             entry_format = EntryFormat(
-                policy, item_type(function), codec=self._codec, compressor=self._compressor, hooks=self._hooks
+                policy, value_type, codec=self._codec, compressor=self._compressor, hooks=self._hooks
             )
             keys = ItemKeys(function, key_template, tag_templates)
             batch_cache = AsyncBatchCache[K, V](
@@ -392,7 +394,7 @@ class AsyncCache:
             ... )
             True
         """
-        expect_type("template", template, str)
+        validate_type("template", template, str)
         return KeyTemplate(template, key_secret=self._key_secret).render(args, kwargs)
 
     async def invalidate_tags(self, *tags: str) -> None:
@@ -413,7 +415,7 @@ class AsyncCache:
             ...     return {"id": user_id}
             >>> await cache.invalidate_tags("user:1")
         """
-        expect_item_types("tags", tags, str)
+        validate_item_types("tags", tags, str)
         await self._storage.invalidate_tags(tags)
 
     def invalidates(self, *, tags: list[str] | tuple[str, ...]) -> AsyncDecorator:
@@ -450,7 +452,7 @@ class AsyncCache:
         tag_templates = parse_tags(tags, key_secret=self._key_secret)
 
         def decorator[**P, R](function: Callable[P, Awaitable[R]], /) -> Callable[P, Awaitable[R]]:
-            aexpect_side(function, "decorate", self)
+            validate_async(function, "decorate", self)
             keys = CallKeys(function, None, tag_templates)
 
             @functools.wraps(function)
@@ -525,13 +527,15 @@ class AsyncCache:
         tag_templates: tuple[KeyTemplate, ...],
     ) -> tuple[CallKeys, AsyncFunctionCache[R]]:
         """What a cached function or a value of function finds and keeps its results with."""
-        aexpect_side(function, "cache", self)
+        validate_async(function, "cache", self)
         if key_template is None:
             key_name(function)  # refuses a lambda, whose name is no key of its own
         keys = CallKeys(function, key_template, tag_templates)
+        value_type = return_type(function)
+        self._codec.validate(value_type)  # a type the codec gives back as another one is refused when decorated
 
         entry_format = EntryFormat(
-            policy, return_type(function), codec=self._codec, compressor=self._compressor, hooks=self._hooks
+            policy, value_type, codec=self._codec, compressor=self._compressor, hooks=self._hooks
         )
         function_cache = AsyncFunctionCache[R](
             policy,

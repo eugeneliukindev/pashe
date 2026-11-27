@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final, final, override
 
-from pashe._internal.checks import expect_type
+from pashe._internal.checks import validate_type
 from pashe.errors import MissingExtraError
 from pashe.hooks import Hook
 
@@ -51,7 +51,7 @@ class SentryHook(Hook):
         Raises:
             TypeError: capture_errors is not a bool.
         """
-        expect_type("capture_errors", capture_errors, bool)
+        validate_type("capture_errors", capture_errors, bool)
 
         self._capture_errors = capture_errors
 
