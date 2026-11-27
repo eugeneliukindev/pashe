@@ -1,0 +1,19 @@
+{#- Each section of a docstring, such as Parameters or Raises, gets an entry of the table of contents,
+with the headings of its items, such as each parameter, nested under it. The base renders the section. -#}
+{% for section in docstring_sections %}
+  {% set kind = section.kind.value %}
+  {% if kind in ("text", "admonition") or not config["show_docstring_" ~ kind.replace(" ", "_")] %}
+    {% with docstring_sections = [section] %}{% include "_base/docstring.html.jinja" with context %}{% endwith %}
+  {% else %}
+    {{ "" | heading(
+        heading_level + 1,
+        hidden=True,
+        id=html_id ~ "--" ~ kind.replace(" ", "-"),
+        toc_label=section.title or kind | capitalize,
+        skip_inventory=True,
+      ) }}
+    {% with docstring_sections = [section], heading_level = heading_level + 1 %}
+      {% include "_base/docstring.html.jinja" with context %}
+    {% endwith %}
+  {% endif %}
+{% endfor %}

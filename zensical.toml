@@ -178,8 +178,13 @@ pymdownx.tabbed.combine_header_slug = true
 
 [project.plugins.search]
 
+[project.plugins.mkdocstrings]
+custom_templates = "docs/.templates"  # each section of a docstring in the table of contents
+
 [project.plugins.mkdocstrings.handlers.python]
 paths = ["src"]
+# the types of Python and redis-py in a signature link to their own docs
+inventories = ["https://docs.python.org/3/objects.inv", "https://redis.readthedocs.io/en/stable/objects.inv"]
 
 [project.plugins.mkdocstrings.handlers.python.options]
 extensions = ["griffe_inherited_docstrings"]  # an override without a docstring shows the docstring of the contract
@@ -197,9 +202,24 @@ show_source = false
 show_symbol_type_heading = true
 show_symbol_type_toc = true
 signature_crossrefs = true
+summary = true  # a class opens with a table of its methods
 parameter_headings = true  # a guide links a parameter, [`ttl`][pashe.Cache.value(ttl)], instead of retelling it
 backlinks = "tree"  # each object lists the guides that link it
 scoped_crossrefs = true
+
+# Old URL -> new page, such as "guides/failures/stale.md" = "guides/stale.md", once a published page moves
+[project.plugins.redirects]
+redirect_maps = {}
+
+# The description of a page for search engines and link previews, from its first paragraph
+[project.plugins.meta-descriptions]
+
+# The fonts served from the site itself, with no request to Google Fonts
+[project.plugins.privacy]
+assets_include = [
+    "fonts.googleapis.com/*",
+    "fonts.gstatic.com/*"
+]  # not the players, the ads SDK and pyodide the theme bundle names
 
 [project.plugins.social]
 # Cards for link previews in the brand blue, around the darker disc of the logo
