@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final, Self, final
 
-from pashe._internal.checks import expect_positive
+from pashe._internal.checks import expect_positive, parse_int
 
 __all__ = ["FixedWindow", "Limit", "RateLimitState", "SlidingWindow"]
 
@@ -45,7 +45,7 @@ class SlidingWindow:
             TypeError: an option is not of the type its annotation names.
             InvalidOptionsError: calls or per is not positive.
         """
-        expect_positive("SlidingWindow.calls", self.calls, "how many calls the window allows, 1 or more", kind=int)
+        parse_int("SlidingWindow.calls", self.calls, low=1, meaning="how many calls the window allows, 1 or more")
         expect_positive("SlidingWindow.per", self.per, "the span of the window, more than 0 seconds")
 
     @classmethod
@@ -141,7 +141,7 @@ class FixedWindow:
             TypeError: an option is not of the type its annotation names.
             InvalidOptionsError: calls, per or ban_for is not positive.
         """
-        expect_positive("FixedWindow.calls", self.calls, "how many calls the window allows, 1 or more", kind=int)
+        parse_int("FixedWindow.calls", self.calls, low=1, meaning="how many calls the window allows, 1 or more")
         expect_positive("FixedWindow.per", self.per, "the length of the window, more than 0 seconds")
         if self.ban_for is not None:
             expect_positive(

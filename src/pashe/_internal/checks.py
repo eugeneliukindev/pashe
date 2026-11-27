@@ -29,7 +29,8 @@ if TYPE_CHECKING:
     from pashe.options import Duration
 
 # What a user gives is checked here, once, where it comes in. expect_* checks and returns None;
-# parse_* checks and returns the value in the form the code inside trusts, such as seconds.
+# parse_* checks and returns the value in the form the code inside trusts, such as seconds. A check
+# that the lines after it rely on uses isinstance itself, which the type checkers see, and type_error.
 __all__ = [
     "DURATION",
     "FUNCTION",
@@ -46,6 +47,7 @@ __all__ = [
     "parse_secret",
     "parse_timeout",
     "parse_ttl",
+    "type_error",
 ]
 
 DURATION: Final = int | float | timedelta  # what isinstance checks a Duration as
@@ -72,11 +74,18 @@ def expect_type(
     kind: type | types.UnionType,
 ) -> None:
     """``kind`` is a class or a union of classes as isinstance takes it, such as str | None."""
-    if isinstance(value, kind):
-        return
+    if not isinstance(value, kind):
+        raise type_error(name, value, kind)
+
+
+def type_error(
+    name: str,
+    value: object,
+    kind: type | types.UnionType,
+) -> TypeError:
+    """The error of a value that is not of kind, for the caller to raise."""
     names = " or ".join(_name(member) for member in get_args(kind) or (kind,))
-    msg = f"{name} must be {names}, not {type(value).__name__}"
-    raise TypeError(msg)
+    return TypeError(f"{name} must be {names}, not {type(value).__name__}")
 
 
 def expect_item_types(
@@ -89,8 +98,9 @@ def expect_item_types(
 
 
 def expect_error_classes(name: str, values: object) -> None:
-    expect_type(name, values, tuple)
-    errors: tuple[object, ...] = values  # type: ignore[assignment]  # a tuple: expect_type just checked it
+    if not isinstance(values, tuple):
+        raise type_error(name, values, tuple)
+    errors: tuple[object, ...] = values  # pyright: ignore[reportUnknownVariableType] - isinstance leaves the items unknown
     for index, value in enumerate(errors):
         if not (isinstance(value, type) and issubclass(value, Exception)):
             msg = f"{name}[{index}] must be a class of exceptions, such as ValueError, not {value!r}"
@@ -101,11 +111,11 @@ def expect_positive(
     name: str,
     value: object,
     meaning: str,
-    *,
-    kind: type | types.UnionType = _NUMBER,
 ) -> None:
-    expect_type(name, value, kind)
-    if not value > 0:  # type: ignore[operator]  # a number: expect_type just checked it
+    """A number more than 0; an int with a bound is parse_int."""
+    if not isinstance(value, int | float):
+        raise type_error(name, value, _NUMBER)
+    if not value > 0:
         msg = f"{name} is {value}: {meaning}"
         raise InvalidOptionsError(msg)
 
@@ -197,12 +207,13 @@ def expect_json_type(codec_name: str, form: object) -> None:  # noqa: WPS231 - e
 
 def parse_secret(name: str, secret: object) -> bytes:
     """A key of HMAC-SHA256, as bytes: shorter than 16 it is too easy to guess."""
-    expect_type(name, secret, str | bytes)
+    if not isinstance(secret, str | bytes):
+        raise type_error(name, secret, str | bytes)
     key = secret.encode() if isinstance(secret, str) else secret
-    if len(key) < _MIN_SECRET:  # type: ignore[arg-type]  # bytes: expect_type just checked it
+    if len(key) < _MIN_SECRET:
         msg = f"{name} needs at least {_MIN_SECRET} bytes"
         raise InvalidOptionsError(msg)
-    return key  # type: ignore[return-value]  # as above
+    return key
 
 
 def parse_seconds(
@@ -213,8 +224,9 @@ def parse_seconds(
     positive: bool = False,
 ) -> float:
     """A duration as seconds, 0 or more, or with positive more than 0; meaning says what it is for."""
-    expect_type(name, value, DURATION)
-    seconds = duration_seconds(value)  # type: ignore[arg-type]  # a Duration: expect_type just checked it
+    seconds = _seconds(value)
+    if seconds is None:
+        raise type_error(name, value, DURATION)
     if seconds < 0 or (positive and not seconds):
         bound = "more than 0" if positive else "0 or more"
         msg = f"{name} is {value!r}: {meaning}, {bound} seconds"
@@ -237,10 +249,12 @@ def parse_ttl(
     meaning: str,
 ) -> float | Callable[[Any], Duration]:
     """How long a result is fresh: a duration, or a function of the result that returns one."""
-    expect_type(name, value, DURATION | FUNCTION)
     if callable(value):
         return value  # pyright: ignore[reportReturnType]  # its result is checked when it returns one
-    return parse_seconds(name, value, meaning)
+    try:
+        return parse_seconds(name, value, meaning)
+    except TypeError:  # a ttl may be a function too, which the error names
+        raise type_error(name, value, DURATION | FUNCTION) from None
 
 
 def parse_int(
@@ -252,12 +266,12 @@ def parse_int(
     meaning: str,
 ) -> int:
     """An int from low to high; with no high, any from low up."""
-    expect_type(name, value, int)
-    number: int = value  # type: ignore[assignment]  # an int: expect_type just checked it
-    if number < low or (high is not None and number > high):
-        msg = f"{name} is {number}: {meaning}"
+    if not isinstance(value, int):
+        raise type_error(name, value, int)
+    if value < low or (high is not None and value > high):
+        msg = f"{name} is {value}: {meaning}"
         raise InvalidOptionsError(msg)
-    return number
+    return value
 
 
 def duration_seconds(duration: Duration, /) -> float:
@@ -278,8 +292,19 @@ def duration_seconds(duration: Duration, /) -> float:
         >>> duration_seconds(timedelta(minutes=1)), duration_seconds(30)
         (60.0, 30.0)
     """
-    expect_type("duration", duration, DURATION)
-    return duration.total_seconds() if isinstance(duration, timedelta) else float(duration)
+    seconds = _seconds(duration)
+    if seconds is None:
+        raise type_error("duration", duration, DURATION)  # noqa: EM101 - the name of the argument, not a message
+    return seconds
+
+
+def _seconds(duration: object) -> float | None:
+    """A duration in seconds, None for what is not one."""
+    if isinstance(duration, timedelta):
+        return duration.total_seconds()
+    if isinstance(duration, int | float):
+        return float(duration)
+    return None
 
 
 def is_async(function: Callable[..., object]) -> bool:
