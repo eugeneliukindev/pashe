@@ -117,6 +117,7 @@ test = [
     "pyleak>=0.2.0,<0.3",
     "pytest>=9.2.0,<10",
     "pytest-asyncio>=1.5.0,<2",
+    "pytest-benchmark>=5.3.1,<6",
     "pytest-cov>=7.1.0,<8",
     "pytest-deadfixtures>=4.0.0,<5",
     "pytest-flakefinder>=1.1.0,<2",
@@ -332,7 +333,7 @@ skip-checking-raises = true  # Raises lists what a caller sees, raised deeper as
 allow-init-docstring = true  # the Args of a constructor are in __init__
 
 [tool.pyrefly]
-project-includes = ["src", "tests", "docs/examples", "noxfile.py"]
+project-includes = ["src", "tests", "benchmarks", "docs/examples", "noxfile.py"]
 search-path = [
     "src",
     ".",
@@ -351,7 +352,7 @@ unused-ignore = true
 [tool.pyright]
 venvPath = "."
 venv = ".venv"
-include = ["src", "tests", "docs/examples", "noxfile.py"]
+include = ["src", "tests", "benchmarks", "docs/examples", "noxfile.py"]
 extraPaths = ["docs"]  # as pytest puts the examples of the docs on the path
 # The tests in standard mode: mypy checks them strictly, and strict here flags every value of the
 # untyped redis-py and every lambda.
@@ -360,7 +361,12 @@ strict = ["src"]
 
 [tool.pytest]
 # importlib keeps the tests off the path, so they cannot import each other; their helpers are on it
-addopts = ["--import-mode=importlib", "-ra", "--durations=5"]
+addopts = [
+    "--import-mode=importlib",
+    "-ra",
+    "--durations=5",
+    "--benchmark-disable"
+]  # a benchmark runs once as a test; just bench measures
 doctest_optionflags = ["ELLIPSIS"]  # an example shows a digest as "..."
 filterwarnings = ["error"]  # a warning is a bug the tests found
 markers = [
@@ -369,7 +375,7 @@ markers = [
 ]
 pythonpath = [".", "docs"]  # the harness of the tests as tests.harness, and the examples of the docs as a package
 strict = true
-testpaths = ["tests"]
+testpaths = ["benchmarks", "tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 timeout = "20"  # a hung test fails instead of holding the run
@@ -409,6 +415,8 @@ typing-extensions = false
 [tool.ruff.lint.per-file-ignores]
 # The helpers of tests drive both sides of one call, so they take and return Any.
 "tests/**" = ["ANN401", "D", "INP001", "PLR0917", "PLR2004", "S101", "S105", "S106"]
+# The benchmarks, which run once as tests: they check what they measured.
+"benchmarks/**" = ["D", "PLR0917", "S101", "S106"]
 # The tests of the examples of the docs, as the tests of pashe.
 "docs/examples/**/test_*.py" = ["ANN401", "D", "PLR2004", "S101", "S105"]
 # The examples of the testing guide are tests of yours.

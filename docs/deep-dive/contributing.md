@@ -22,6 +22,7 @@ codespell and tombi.
 | `just test-fast` | the tests over memory and SQLite alone: no Docker, no coverage, one process |
 | `just test` | every test, with Redis and a Redis Cluster in Docker; reports in `coverage/` |
 | `just doctest` | the examples of the docstrings |
+| `just bench` | the benchmarks of `benchmarks/`: the codecs, the compressors and a call of a cache over each backend, with Redis in Docker |
 | `just test-flaky` | the tests of races and timing, 100 times each over xdist: after a change to them |
 | `just test-lowest` | the tests with the lowest versions the floors of `pyproject.toml` allow, on Python 3.12 over Redis 6.2, in `.nox` |
 | `just test-highest` | the tests with the newest versions the upper bounds allow, past `uv.lock`, on Python 3.15, in `.nox` |

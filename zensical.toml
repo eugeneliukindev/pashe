@@ -96,6 +96,7 @@ nav = [
     { "Deep dive" = [
         { "pashe and other libraries" = "deep-dive/comparison.md" },
         { "What a call costs" = "deep-dive/cost.md" },
+        { "Benchmarks" = "deep-dive/benchmarks.md" },
         { "What is in Redis" = "deep-dive/storage.md" },
         { "What pashe does not do" = "deep-dive/non-goals.md" },
         { "Security" = "deep-dive/security.md" },

@@ -129,7 +129,7 @@ types: mypy pyright pyrefly
 [doc('Check the types with mypy, strict')]
 [group('types')]
 mypy:
-    uv run mypy src tests docs/examples noxfile.py
+    uv run mypy src tests benchmarks docs/examples noxfile.py
 
 [doc('Check the types with pyright')]
 [group('types')]
@@ -177,6 +177,13 @@ doctest:
 [group('testing')]
 test-flaky runs='100' *args='':
     uv run pytest -n {{ processes }} --no-cov -p no:randomly --flake-finder --flake-runs={{ runs }} -k '{{ races }}' {{ args }}
+
+[doc('Measure the codecs, the compressors and a call of a cache over each backend; Redis starts in Docker')]
+[group('testing')]
+bench *args='':
+    # one process and no coverage, which would be measured too; every other run takes each benchmark once, as a test
+    uv run pytest -n 0 --no-cov -p no:randomly --benchmark-enable --benchmark-columns=median,iqr,rounds \
+        --benchmark-sort=name benchmarks {{ args }}
 
 [doc('Run the tests with the lowest versions the dependencies allow, on Python 3.12 over Redis 6.2, in .nox: .venv and uv.lock stay')]
 [group('testing')]

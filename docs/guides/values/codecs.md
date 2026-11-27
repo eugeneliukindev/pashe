@@ -82,7 +82,7 @@ to rebuild.
 | `PydanticCodec` | `pashe.contrib.pydantic` | pydantic models and anything a `TypeAdapter` validates |
 
 A codec of your own subclasses `Codec` of `pashe.codecs`: `encode` turns a value into bytes,
-`decode` gives it back as the type it is asked for, and `check` refuses, when a function is
+`decode` gives it back as the type it is asked for, and `validate` refuses, when a function is
 decorated, a type it cannot give back as it is; it takes every type by default.
 
 !!! warning "A type JSON does not give back is refused when the function is decorated"
@@ -102,22 +102,21 @@ decorated, a type it cannot give back as it is; it takes every type by default.
 
 ## How they compare
 
-A list of 100 products, encoded and decoded once; Python 3.15 on one machine. Your numbers will
-differ, the ratios hold:
+| Codec | Rebuilds your types | Readable by other languages |
+| --- | --- | --- |
+| `MsgspecMsgpackCodec` | yes | MessagePack |
+| `MsgspecJsonCodec` | yes | JSON |
+| `OrjsonCodec` | no, `dict`s and `list`s | JSON |
+| `JsonCodec`, the default | no, `dict`s and `list`s | JSON |
+| `PydanticCodec` | yes, pydantic models | JSON |
+| `PickleCodec` | yes, any object | no, Python only |
 
-| Codec | Bytes | Encode, us | Decode, us | Rebuilds your types | Readable by other languages |
-| --- | ---: | ---: | ---: | --- | --- |
-| `MsgspecMsgpackCodec` | 10 178 | 19 | 42 | yes | MessagePack |
-| `MsgspecJsonCodec` | 12 985 | 21 | 48 | yes | JSON |
-| `OrjsonCodec` | 12 985 | 11 | 40 | no, `dict`s and `list`s | JSON |
-| `JsonCodec`, the default | 12 985 | 75 | 96 | no, `dict`s and `list`s | JSON |
-| `PydanticCodec` | 12 985 | 62 | 122 | yes, pydantic models | JSON |
-| `PickleCodec` | 7 685 | 98 | 98 | yes, any object | no, Python only |
+What each one costs in bytes and microseconds: [Benchmarks](../../deep-dive/benchmarks.md#codecs).
 
 !!! tip "The default is the one with no dependency, not the fastest"
 
-    `JsonCodec` needs nothing installed. For a service that caches a lot, msgspec is four times
-    faster to encode and twice to decode, and gives you your dataclasses back.
+    `JsonCodec` needs nothing installed. For a service that caches a lot, msgspec is almost four
+    times faster to encode and twice to decode, and gives you your dataclasses back.
 
 ---
 
