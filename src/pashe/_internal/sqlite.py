@@ -48,10 +48,11 @@ _SET: Final = (
     "INSERT INTO pashe_entries VALUES (?, ?, ?)"
     " ON CONFLICT (key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at"
 )
-_SET_IF_ABSENT: Final = (  # the update runs only over an expired entry
+_SET_IF_ABSENT: Final = (  # the update runs only over an expired entry or the same value
     "INSERT INTO pashe_entries VALUES (?, ?, ?)"
     " ON CONFLICT (key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at"
-    " WHERE pashe_entries.expires_at IS NOT NULL AND pashe_entries.expires_at <= ?"
+    " WHERE pashe_entries.value = excluded.value"
+    " OR (pashe_entries.expires_at IS NOT NULL AND pashe_entries.expires_at <= ?)"
 )
 _PURGE: Final = "DELETE FROM pashe_entries WHERE expires_at <= ?"
 _DELETE: Final = "DELETE FROM pashe_entries WHERE key = ? AND (expires_at IS NULL OR expires_at > ?)"

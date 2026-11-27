@@ -34,6 +34,15 @@ if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("PEXPIRE", KEYS[
 return 0
 """
 
+# SET NX, but a key that holds this very value takes it again: a client retries a SET whose answer
+# a dropped connection lost, and NX alone would answer that the key is taken, by the caller itself.
+SET_IF_ABSENT: Final = """
+local current = redis.call("GET", KEYS[1])
+if current and current ~= ARGV[1] then return 0 end
+if ARGV[2] == "" then redis.call("SET", KEYS[1], ARGV[1]) else redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2]) end
+return 1
+"""
+
 # Count in a key made with a TTL when it is missing: one key, so on a cluster one node runs it whole.
 INCR_WITH_TTL: Final = """
 redis.call("SET", KEYS[1], "0", "PX", ARGV[2], "NX")

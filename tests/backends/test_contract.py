@@ -112,6 +112,15 @@ async def test_set_if_absent(backend: AsyncBackend) -> None:
     assert await backend.get("k") == b"1"
 
 
+async def test_set_if_absent_takes_its_own_value_again(backend: AsyncBackend) -> None:
+    await backend.set_if_absent("k", b"1", ttl=60)
+
+    again = await backend.set_if_absent("k", b"1", ttl=60)  # a retry whose first answer was lost
+
+    assert again
+    assert await backend.get("k") == b"1"
+
+
 async def test_set_replaces_ttl(backend: AsyncBackend) -> None:
     await backend.set("k", b"1", ttl=3600)
     await backend.set("k", b"2")

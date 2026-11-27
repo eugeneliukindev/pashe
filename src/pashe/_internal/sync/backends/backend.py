@@ -110,7 +110,11 @@ class Backend(ABC):
         *,
         ttl: float | None = None,
     ) -> bool:
-        """Store value only if key has no live entry.
+        """Store value unless key holds another live value.
+
+        A key that already holds this very value takes it again, as a repeat of a call whose
+        answer was lost, such as one a client retried after a dropped connection, must not see
+        its own write as someone else's; callers that compete make their values unique.
 
         Args:
             key: the key of the entry.
@@ -118,7 +122,7 @@ class Backend(ABC):
             ttl: seconds the entry lives, positive; None means no expiry.
 
         Returns:
-            Whether it stored value.
+            Whether key holds value now.
 
         Examples:
             >>> from pashe.backends import MemoryBackend

@@ -24,6 +24,7 @@ from pashe._internal.redis.clients import (  # noqa: WPS235 - what both sides sh
     DELETE_IF_EQUALS,
     EXPIRE_IF_EQUALS,
     INCR_WITH_TTL,
+    SET_IF_ABSENT,
     check_client,
     milliseconds,
     px,
@@ -47,7 +48,15 @@ class RedisBackend(Backend):
     commands of many keys are split by node, as pashe needs no atomicity across keys.
     """
 
-    __slots__ = ("_breaker", "_client", "_delete_if_equals", "_expire_if_equals", "_get_many", "_incr_with_ttl")
+    __slots__ = (
+        "_breaker",
+        "_client",
+        "_delete_if_equals",
+        "_expire_if_equals",
+        "_get_many",
+        "_incr_with_ttl",
+        "_set_if_absent",
+    )
 
     def __init__(
         self, client: redis.Redis | redis.cluster.RedisCluster, /, *, breaker: Breaker = NoOpBreaker()
@@ -75,6 +84,7 @@ class RedisBackend(Backend):
         # a cluster refuses MGET across slots; mget_nonatomic sends one MGET per node instead
         self._get_many = client.mget_nonatomic if isinstance(client, redis.cluster.RedisCluster) else client.mget
 
+        self._set_if_absent = client.register_script(SET_IF_ABSENT)
         self._delete_if_equals = client.register_script(DELETE_IF_EQUALS)
         self._expire_if_equals = client.register_script(EXPIRE_IF_EQUALS)
         self._incr_with_ttl = client.register_script(INCR_WITH_TTL)
@@ -123,7 +133,7 @@ class RedisBackend(Backend):
         ttl: float | None = None,
     ) -> bool:
         with self._breaker.guarding(), translated_errors():
-            return bool(self._client.set(key, value, px=px(ttl), nx=True))
+            return bool(self._set_if_absent(keys=[key], args=[value, px(ttl) or ""]))
 
     @override
     def delete(self, key: str, /) -> bool:

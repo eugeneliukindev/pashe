@@ -20,6 +20,7 @@ from pashe._internal.redis.clients import (  # noqa: WPS235 - what both sides sh
     DELETE_IF_EQUALS,
     EXPIRE_IF_EQUALS,
     INCR_WITH_TTL,
+    SET_IF_ABSENT,
     check_client,
     milliseconds,
     px,
@@ -42,7 +43,15 @@ class AsyncRedisBackend(AsyncBackend):
     commands of many keys are split by node, as pashe needs no atomicity across keys.
     """
 
-    __slots__ = ("_breaker", "_client", "_delete_if_equals", "_expire_if_equals", "_get_many", "_incr_with_ttl")
+    __slots__ = (
+        "_breaker",
+        "_client",
+        "_delete_if_equals",
+        "_expire_if_equals",
+        "_get_many",
+        "_incr_with_ttl",
+        "_set_if_absent",
+    )
 
     def __init__(
         self, client: redis.asyncio.Redis | redis.asyncio.cluster.RedisCluster, /, *, breaker: Breaker = NoOpBreaker()
@@ -72,6 +81,7 @@ class AsyncRedisBackend(AsyncBackend):
             client.mget_nonatomic if isinstance(client, redis.asyncio.cluster.RedisCluster) else client.mget
         )
 
+        self._set_if_absent = client.register_script(SET_IF_ABSENT)
         self._delete_if_equals = client.register_script(DELETE_IF_EQUALS)
         self._expire_if_equals = client.register_script(EXPIRE_IF_EQUALS)
         self._incr_with_ttl = client.register_script(INCR_WITH_TTL)
@@ -120,7 +130,7 @@ class AsyncRedisBackend(AsyncBackend):
         ttl: float | None = None,
     ) -> bool:
         with self._breaker.guarding(), translated_errors():
-            return bool(await self._client.set(key, value, px=px(ttl), nx=True))
+            return bool(await self._set_if_absent(keys=[key], args=[value, px(ttl) or ""]))
 
     @override
     async def delete(self, key: str, /) -> bool:

@@ -153,7 +153,8 @@ class MemoryBackend(Backend):
         ttl: float | None = None,
     ) -> bool:
         with self._lock:
-            if self._live(key) is not None:
+            live = self._live(key)
+            if live is not None and live.data != value:
                 return False
             expires_at = self._expires_at(ttl)
             self._put(key, value, expires_at, pinned=expires_at is not None)
