@@ -10,7 +10,6 @@ from tests.harness.helpers import call
 from pashe.errors import NotFoundError, RateLimitedError
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
     from types import ModuleType
 
 
@@ -30,13 +29,11 @@ class Shop:
 
 
 @pytest.fixture(params=["sync", "async"])
-async def shop(request: pytest.FixtureRequest) -> AsyncIterator[Shop]:
+async def shop(request: pytest.FixtureRequest) -> Shop:
     opened = Shop(request.param)
     if opened.side == "async":
         await opened.data.start()
-    yield opened
-    if opened.side == "async":
-        await opened.data.db.close()
+    return opened  # fresh_examples closes the database
 
 
 async def test_a_product_is_read_from_the_database_once(shop: Shop) -> None:

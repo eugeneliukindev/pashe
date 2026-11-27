@@ -38,7 +38,9 @@ partner = httpx.AsyncClient(base_url="https://partner.example", transport=httpx.
 payments = httpx.AsyncClient(base_url="https://payments.example", transport=httpx.MockTransport(_payments))
 
 
-def close() -> None:
+async def close() -> None:
     if db in _opened:  # its thread holds the run open until it stops
         _opened.discard(db)
-        db.stop()
+        await db.close()
+    await partner.aclose()
+    await payments.aclose()

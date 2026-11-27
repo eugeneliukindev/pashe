@@ -60,7 +60,7 @@ bytes on the network; it costs CPU on every read and write.
     value is stored as it is, in the same cache. `min_size=0` compresses every value.
 
     ```python
-    Cache(backend, compressor=GzipCompressor(min_size=4096))
+    --8<-- "codecs/min_size.py"
     ```
 
 ---

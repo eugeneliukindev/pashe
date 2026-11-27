@@ -6,9 +6,7 @@ under the `prefix` of the cache; the examples use `prefix="shop:"`.
 ## A cached result
 
 ```python
-@cache(ttl=300, key="user:{user_id}", tags=["users"], stale=Stale(while_revalidate=60))
-def get_user(user_id: int) -> User:
-    return User(id=1, name="Ada")
+--8<-- "storage/cached_result.py:show"
 ```
 
 `get_user(1)` at the moment `1764000000` keeps 49 bytes under `shop:user:1`:

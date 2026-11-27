@@ -28,7 +28,7 @@ to answer in the format of your API.
 === "FastAPI"
 
     ```python
-    app.add_middleware(RateLimitMiddleware, limiter=limiter, limit=SlidingWindow.per_minute(100), key=client)
+    --8<-- "web/rate_limit_fastapi.py"
     ```
 
 The 101st request within the minute:
@@ -56,13 +56,13 @@ API reference: [`RateLimitMiddleware`](../../reference/http.md#pashe.asgi.RateLi
 === "Starlette"
 
     ```python
-    Route("/login", login, middleware=[Middleware(RateLimitMiddleware, limiter=limiter, limit=logins, key=client)])
+    --8<-- "web/rate_limit_route_starlette.py:show"
     ```
 
 === "FastAPI"
 
     ```python
-    @app.get("/login", dependencies=[Depends(rate_limit(limiter, logins, key=client_key))])
+    --8<-- "web/rate_limit_route_fastapi.py:show"
     ```
 
 !!! note "mypy and Litestar"

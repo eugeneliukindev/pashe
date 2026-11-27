@@ -7,7 +7,10 @@ from examples.web import (
     fastapi_async,
     headers_fastapi,
     no_cache_fastapi,
+    rate_limit_fastapi,
     rate_limit_litestar,
+    rate_limit_route_fastapi,
+    rate_limit_route_starlette,
     rate_limit_starlette,
 )
 
@@ -83,6 +86,40 @@ async def test_the_whole_starlette_application_takes_the_rate_limit() -> None:
     assert (first.headers["ratelimit-limit"], first.headers["ratelimit-remaining"]) == ("100", "99")
     assert (refused.status_code, refused.text) == (429, "Too Many Requests")
     assert "retry-after" in refused.headers
+
+
+async def test_the_whole_fastapi_application_takes_the_rate_limit() -> None:
+    transport = httpx.ASGITransport(app=rate_limit_fastapi.app)
+    async with httpx.AsyncClient(transport=transport, base_url=_ADDRESS) as client:
+        first = await client.get("/search", headers=_CLIENT)
+        for _ in range(99):
+            await client.get("/search", headers=_CLIENT)
+
+        refused = await client.get("/search", headers=_CLIENT)
+
+    assert (first.headers["ratelimit-limit"], first.headers["ratelimit-remaining"]) == ("100", "99")
+    assert (refused.status_code, refused.text) == (429, "Too Many Requests")
+    assert "retry-after" in refused.headers
+
+
+async def test_one_route_of_starlette_takes_the_rate_limit() -> None:
+    transport = httpx.ASGITransport(app=rate_limit_route_starlette.app)
+    async with httpx.AsyncClient(transport=transport, base_url=_ADDRESS) as client:
+        logins = [(await client.get("/login", headers=_CLIENT)).status_code for _ in range(6)]
+        catalog = await client.get("/catalog", headers=_CLIENT)
+
+    assert logins == [200, 200, 200, 200, 200, 429]
+    assert (catalog.status_code, "ratelimit-limit" in catalog.headers) == (200, False)
+
+
+async def test_one_route_of_fastapi_takes_the_rate_limit() -> None:
+    transport = httpx.ASGITransport(app=rate_limit_route_fastapi.app)
+    async with httpx.AsyncClient(transport=transport, base_url=_ADDRESS) as client:
+        logins = [(await client.get("/login", headers=_CLIENT)).status_code for _ in range(6)]
+        catalog = await client.get("/catalog", headers=_CLIENT)
+
+    assert logins == [200, 200, 200, 200, 200, 429]
+    assert (catalog.status_code, "ratelimit-limit" in catalog.headers) == (200, False)
 
 
 async def test_one_route_of_litestar_takes_the_rate_limit() -> None:
