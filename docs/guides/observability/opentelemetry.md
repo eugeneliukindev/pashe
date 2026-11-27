@@ -1,11 +1,21 @@
 # OpenTelemetry
 
-`pashe.contrib.opentelemetry`, the `opentelemetry` extra, has two hooks: `OtelMetricsHook`
-records metrics, and `OtelSpanEventsHook` adds every cached call to the current span.
+[`pashe.contrib.opentelemetry`][pashe.contrib.opentelemetry], the `opentelemetry` extra, has two
+hooks: [`OtelMetricsHook`][pashe.contrib.opentelemetry.OtelMetricsHook] records metrics, and
+[`OtelSpanEventsHook`][pashe.contrib.opentelemetry.OtelSpanEventsHook] adds every cached call to
+the current span.
 
-```python
---8<-- "observability/opentelemetry.py:show"
-```
+=== "Sync"
+
+    ```python hl_lines="6 7"
+    --8<-- "observability/opentelemetry_sync.py:show"
+    ```
+
+=== "Async"
+
+    ```python hl_lines="6 7"
+    --8<-- "observability/opentelemetry_async.py:show"
+    ```
 
 The extra brings the API only, as OpenTelemetry asks of a library: the application sets up the
 SDK and its exporters, and without them the hooks record nothing and cost next to nothing.
@@ -29,8 +39,6 @@ the Prometheus column, which [`PrometheusMetricsHook`](prometheus.md) writes too
 The key of a call is never a label, as each key would make series of its own; the key of a rate
 limit neither, so its calls count by result only.
 
-API reference: [`OtelMetricsHook`](../../reference/contrib/opentelemetry.md#pashe.contrib.opentelemetry.OtelMetricsHook).
-
 ## Span events
 
 `OtelSpanEventsHook` adds every cached call to the current span as the event `pashe.call`, with
@@ -43,7 +51,3 @@ as the cache answered.
 
     Give the templates of keys that hold personal data a digest, such as `{email:hmac}`: the
     trace goes to the service that keeps it.
-
----
-
-API reference: [`pashe.contrib.opentelemetry`](../../reference/contrib/opentelemetry.md).

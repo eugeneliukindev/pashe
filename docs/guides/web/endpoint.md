@@ -2,8 +2,9 @@
 
 Decorate the endpoint itself with `@cache(...)`, under the decorator of its route: the
 framework still routes, validates and serializes, and the body of the endpoint runs once per key
-and TTL. `CacheHeadersMiddleware` with `cache_control="public"` tells clients, proxies and CDNs
-how long the response stays fresh, from the TTL of the cached call.
+and TTL. [`CacheHeadersMiddleware`][pashe.asgi.CacheHeadersMiddleware] of `pashe.asgi`, or of
+`pashe.wsgi`, with [`cache_control`][pashe.asgi.CacheHeadersMiddleware(cache_control)] set to
+`"public"` tells clients, proxies and CDNs how long the response stays fresh, from the TTL of the cached call.
 
 ```python hl_lines="18 19 21 25 26 32"
 --8<-- "web/endpoint_async.py:show"
@@ -14,8 +15,10 @@ how long the response stays fresh, from the TTL of the cached call.
   `Request`, stays out of it.
 - `stale`, `stampede`, `negative`, tags and a `Fallback` work as for any cached function, and the
   hooks see every call.
-- The codec of the cache stores what the endpoint returns: `PydanticCodec` for pydantic models,
-  `MsgspecJsonCodec` for dataclasses; `JsonCodec`, the default, holds plain `dict`s and `list`s.
+- The codec of the cache stores what the endpoint returns:
+  [`PydanticCodec`][pashe.contrib.pydantic.PydanticCodec] for pydantic models,
+  [`MsgspecJsonCodec`][pashe.contrib.msgspec.MsgspecJsonCodec] for dataclasses;
+  [`JsonCodec`][pashe.codecs.JsonCodec], the default, holds plain `dict`s and `list`s.
 
 !!! warning "Public only when it is the same for every user"
 
@@ -57,7 +60,3 @@ pashe caches what endpoints return, not HTTP responses. To keep whole responses,
 rendered HTML, put a proxy or a CDN in front of the service, such as nginx, Varnish or Cloudflare:
 it keeps a response as long as its `Cache-Control` says, which `CacheHeadersMiddleware` sets. Or
 take the cache of your framework: `cache_page` of Django, `cache=` of a route in Litestar.
-
----
-
-API reference: [`pashe.asgi` and `pashe.wsgi`](../../reference/http.md), [`pashe`](../../reference/caches.md).

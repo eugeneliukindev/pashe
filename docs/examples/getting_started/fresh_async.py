@@ -6,7 +6,7 @@ from redis.asyncio import Redis
 from pashe import AsyncCache
 from pashe.contrib.redis import AsyncRedisBackend
 
-cache = AsyncCache(AsyncRedisBackend(Redis.from_url("redis://localhost:6379/0", socket_timeout=1)), prefix="app:")
+cache = AsyncCache(AsyncRedisBackend(Redis.from_url("redis://localhost:6379/0")), prefix="app:")
 
 
 class User(TypedDict):

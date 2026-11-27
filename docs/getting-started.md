@@ -84,6 +84,12 @@ tests and on a single process it can be memory:
     --8<-- "getting_started/cache_async.py"
     ```
 
+!!! warning "redis-py before 8: pass `socket_timeout`"
+
+    A client of redis-py 8 or later waits 5 seconds at most for Redis, so the examples of these
+    docs leave the timeout out. Before 8 a client waits forever, and the backend refuses it:
+    create it as `Redis.from_url(url, socket_timeout=1)`.
+
 `prefix` goes in front of every key, so several services can share one Redis. Close the cache
 when the application stops, or use it as a context manager: it closes its backend and its
 fallback, each even when another fails to close. A script takes the block of `with`; an
@@ -161,16 +167,19 @@ Results change at the source. Drop them when you change the data, or let them ex
 
 ## Next
 
-The guides run in the order you meet the API, each built on those before it:
+The guides run in the order you meet the API, a page for each part of it:
 
 - [Core concepts](concepts.md): how a cached call is answered, and where each feature works.
-- [Glossary](glossary.md): the words these docs use, one for each thing.
-- [Caching functions](guides/caching/decorator.md): the decorator, keys, what is stored, types, batches, values.
-- [Freshness](guides/failures/stale.md): stale results, and stampedes of callers that miss at once.
-- [Invalidation](guides/invalidation/tags.md): tags, and invalidating on a write.
-- [Backends](guides/backends/index.md): memory, SQLite, Redis, a cluster, near caches, and a backend that fails.
-- [Encoding](guides/values/codecs.md): codecs and compressors.
-- [Locks](guides/locks/locks.md) and [rate limits](guides/locks/rate-limits.md), of calls and of HTTP requests.
-- [Observability](guides/observability/hooks.md): hooks, logs, OpenTelemetry, Prometheus and Sentry.
-- [Web](guides/web/headers.md): HTTP caching headers, whole responses, FastAPI.
-- [In production](guides/choosing.md): what to choose for each part, and the recommended setup.
+- [What to choose](guides/choosing.md): the part for each need, and where it works.
+- [Caching functions](guides/caching/decorator.md): the decorator, keys, the TTL, types, batches, values.
+- [Tags and invalidation](guides/tags.md): drop a group of results, and invalidate on a write.
+- [Stale results](guides/stale.md), [stampede protection](guides/stampedes.md),
+  [negative caching](guides/negative.md) and [storing only some results](guides/store.md): the
+  options of `@cache`, each a page.
+- [Fallback and breaker](guides/fallback.md): when the backend fails.
+- [Backends](guides/backends/index.md) and the [near cache](guides/near-cache.md): memory, SQLite, Redis, a cluster, copies in memory.
+- [Codecs](guides/codecs.md) and [compressors](guides/compressors.md): how values are stored.
+- [Locks](guides/locks.md) and [rate limits](guides/rate-limits.md): of calls and of HTTP requests.
+- [Hooks](guides/observability/hooks.md): logs, OpenTelemetry, Prometheus and Sentry.
+- [HTTP](guides/web/headers.md): caching headers, whole responses, FastAPI.
+- [In production](guides/recommended-setup.md): the recommended setup, a whole shop as an example, troubleshooting.

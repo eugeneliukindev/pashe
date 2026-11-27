@@ -1,16 +1,20 @@
 # FastAPI
 
-`rate_limit` of `pashe.contrib.fastapi`, the `fastapi` extra, is a dependency that counts the
-requests of a route with a `RateLimiter` of `pashe`, an `AsyncRateLimiter`.
+[`rate_limit`][pashe.contrib.fastapi.rate_limit] of `pashe.contrib.fastapi`, the `fastapi` extra,
+is a dependency that counts the requests of a route with an
+[`AsyncRateLimiter`][pashe.AsyncRateLimiter] of `pashe`.
 
-```python hl_lines="10 27 29 31 39 40 43"
+```python hl_lines="10 29 31 33 41 42 45"
 --8<-- "web/fastapi_async.py:show"
 ```
 
 `rate_limit` counts every request of the route and tells what is left in `RateLimit-Limit`,
-`RateLimit-Remaining` and `RateLimit-Reset`. Over the limit it raises `RateLimitedError`, and
-`OverloadedError` comes from `Stampede.max_loads`: answer them with handlers of your own, in the
-format of errors your API already has; above they are `429` with `Retry-After`, and `503`.
+`RateLimit-Remaining` and `RateLimit-Reset`. Over the limit it raises
+[`RateLimitedError`][pashe.errors.RateLimitedError], and
+[`OverloadedError`][pashe.errors.OverloadedError] comes from
+[`Stampede.max_loads`][pashe.options.Stampede(max_loads)]: answer them with handlers of your
+own, in the format of errors your API already has; above they are `429` with `Retry-After`, and
+`503`.
 
 A request within the limit says what is left of it:
 
@@ -41,13 +45,9 @@ content-type: application/json
 !!! tip "The whole application"
 
     To limit every request, take `RateLimitMiddleware` of `pashe.asgi` with
-    `app.add_middleware(...)`: see [Rate limits for HTTP](rate-limits.md).
+    `app.add_middleware(...)`: see [Rate limits for HTTP](../rate-limits.md#rate-limits-of-http-requests).
 
 !!! warning "`key` is required"
 
-    Behind a proxy the address of the connection is the address of the proxy: take the client
-    from a header your proxy sets.
-
----
-
-API reference: [`rate_limit`](../../reference/contrib/fastapi.md#pashe.contrib.fastapi.rate_limit).
+    Behind a proxy the address of the connection is the address of the proxy: let
+    [`key`][pashe.contrib.fastapi.rate_limit(key)] take the client from a header your proxy sets.

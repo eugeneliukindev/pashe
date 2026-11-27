@@ -1,17 +1,28 @@
 # Keys
 
-The key of a call is the `prefix` of the cache followed by the key of the function: its default
-key, or the template of `key=` filled with the arguments. The keys below are of a cache with
-`prefix="shop:"`, and of functions in the file `app/users.py`: the module `app.users`.
+The key of a call names its entry in the backend: the `prefix` of the cache followed by the key
+of the function, its default key or the template of [`key`][pashe.Cache.__call__(key)] filled
+with the arguments.
+
+The keys below are of a cache with `prefix="shop:"`, and of functions in the file `app/users.py`:
+the module `app.users`.
 
 ## The default key
 
 Without `key=`, the key is the module and the qualified name of the function, then the `repr`
 of every argument, joined by `:`. Each call shows its key:
 
-```python title="app/users.py"
---8<-- "caching_functions/default_key.py:show"
-```
+=== "Sync"
+
+    ```python title="app/users.py" hl_lines="4 13 23 31"
+    --8<-- "caching_functions/default_key_sync.py:show"
+    ```
+
+=== "Async"
+
+    ```python title="app/users.py" hl_lines="4 9 15 20"
+    --8<-- "caching_functions/default_key_async.py:show"
+    ```
 
 - Arguments are bound to the signature first, so a positional and a keyword call share a key,
   and a default value is in the key as if it was passed.
@@ -26,17 +37,26 @@ of every argument, joined by `:`. Each call shows its key:
 
     The default key holds the name and the module of the function. After a deploy that renames
     or moves it, its old entries are misses and expire with their TTL. Give a template, such as
-    `key="user:{user_id}"`, when the key must outlive a rename, or when another service, a tag
-    or `redis-cli` uses it. A template is shorter in the backend too.
+    `key="user:{user_id}"`, when the key must outlive a rename, or when another service or
+    `redis-cli` uses it. A template is shorter in the backend too.
 
 ## A template
 
-`key=` is a `str.format` template over the arguments by name. A field can reach into an
-argument and take a format spec:
+A key that must outlive a rename, or that another service reads, is a template. `key=` is a
+`str.format` template over the arguments by name; a field can reach into an argument and take a
+format spec:
 
-```python title="app/users.py"
---8<-- "caching_functions/template_key.py:show"
-```
+=== "Sync"
+
+    ```python title="app/users.py" hl_lines="4 12 23 31"
+    --8<-- "caching_functions/template_key_sync.py:show"
+    ```
+
+=== "Async"
+
+    ```python title="app/users.py" hl_lines="4 9 17 22"
+    --8<-- "caching_functions/template_key_async.py:show"
+    ```
 
 A field puts the text of the value, as `str.format` does: no quotes, so `{lang}` is `ru`. It
 takes only values whose text is the same in every process: `str`, `int`, `float`, `bool`,
@@ -60,7 +80,8 @@ on a cache without `key_secret`, raises `InvalidOptionsError` at once.
 
 ## Digests and `cache.key_for`
 
-A field can be a digest of the argument instead of the argument itself:
+An argument too long for a key, with no plain form, or that must not be readable in the backend
+goes in the key as a digest instead of the argument itself:
 
 | Template | Puts in the key | For |
 | --- | --- | --- |
@@ -68,31 +89,39 @@ A field can be a digest of the argument instead of the argument itself:
 | `{query:sha256}` | 128 bits of SHA-256 | the same, where only FIPS algorithms are allowed |
 | `{email:hmac}` | 128 bits of HMAC-SHA256 under `key_secret` | data that must not be readable in the backend |
 
-Take `blake2b` by default; `sha256` where a policy allows only FIPS algorithms; `hmac` for
-personal data.
-
-A digest is of the value as canonical JSON, so equal values give one key in every process.
+`hmac` needs the [`key_secret`][pashe.Cache(key_secret)] of the cache, 16 bytes or more.
+[`cache.key_for`][pashe.Cache.key_for] fills a template as the cache does, digests too, to find
+an entry as with `redis-cli`.
 
 === "Sync"
 
-    ```python
+    ```python hl_lines="6 15 20 27"
     --8<-- "caching_functions/digests_sync.py:show"
     --8<-- "caching_functions/digests_sync.py:calls"
     ```
 
 === "Async"
 
-    ```python
+    ```python hl_lines="6 15 20 27"
     --8<-- "caching_functions/digests_async.py:show"
     --8<-- "caching_functions/digests_async.py:calls"
     ```
 
-```python title="app/users.py"
---8<-- "caching_functions/digest_keys.py:show"
-```
+=== "Sync"
 
-The second call passes the set in another order and gets the same key: a set is sorted before
-the digest.
+    ```python title="app/users.py" hl_lines="4 13"
+    --8<-- "caching_functions/digest_keys_sync.py:show"
+    ```
+
+=== "Async"
+
+    ```python title="app/users.py" hl_lines="4 9"
+    --8<-- "caching_functions/digest_keys_async.py:show"
+    ```
+
+A digest is of the value as canonical JSON, so equal values give one key in every process. The
+second call passes the set in another order and gets the same key: a set is sorted before the
+digest.
 
 Canonical JSON holds:
 
@@ -115,14 +144,3 @@ find the entry as calls do.
 
     A digest of an email is found again by hashing a list of emails. For personal data use
     `hmac`: without the secret the digest says nothing.
-
-!!! tip "Hashed tags"
-
-    `invalidate_tags` takes tags as they are stored. `cache.key_for(template, ...)` fills a template
-    as the cache does, digests included.
-
-API reference: [`Cache.key_for`](../../reference/caches.md#pashe.Cache.key_for).
-
----
-
-API reference: [`pashe`](../../reference/caches.md), [`pashe.options`](../../reference/options.md).

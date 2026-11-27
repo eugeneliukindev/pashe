@@ -1,16 +1,14 @@
 # --8<-- [start:show]
+from datetime import timedelta
+
 from pashe import AsyncCache
 from pashe.backends import AsyncMemoryBackend
-from pashe.hooks import Outcome
 from pashe.options import Store
 
-from examples.recorded import Record
-
-outcomes: list[Outcome] = []  # how every call was answered, for the test
-cache = AsyncCache(AsyncMemoryBackend(), hooks=[Record(outcomes)])
+cache = AsyncCache(AsyncMemoryBackend())
 
 
-@cache(ttl=3600, key="order:{order_id}", store=Store(when=lambda order: order["status"] == "done"))
+@cache(ttl=timedelta(hours=1), key="order:{order_id}", store=Store(when=lambda order: order["status"] == "done"))
 async def get_order(order_id: int) -> dict[str, str]:
     return {"status": "done" if order_id == 1 else "pending"}
 

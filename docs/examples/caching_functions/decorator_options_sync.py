@@ -1,4 +1,5 @@
 # --8<-- [start:show]
+from datetime import timedelta
 from typing import TypedDict
 
 from pashe import Cache
@@ -20,16 +21,13 @@ def worth_keeping(user: User) -> bool:
     return user["active"]
 
 
-# --8<-- [start:stale]
 stale = Stale(
     while_revalidate=30,  # answer at once, reload behind
-    if_error=600,  # answer the errors of if_error_on
+    if_error=timedelta(minutes=10),  # answer the errors of if_error_on
     if_error_on=(ConnectionError,),  # the errors it answers; every Exception by default
     if_slow=60,  # answer a load slower than slow_after
     slow_after=0.5,  # how long a call waits for the load
 )
-# --8<-- [end:stale]
-# --8<-- [start:stampede]
 stampede = Stampede(
     revalidate_before=10,  # reload before the ttl ends
     lock_for=5,  # one load in every process
@@ -37,19 +35,14 @@ stampede = Stampede(
     max_loads=10,  # loads at once in this process
     share_loads=True,  # one load per key in this process
 )
-# --8<-- [end:stampede]
-# --8<-- [start:negative]
 negative = Negative(
     on=(UserNotFoundError,),  # errors that mean not found
     ttl=30,  # how long one is kept
 )
-# --8<-- [end:negative]
-# --8<-- [start:store]
 store = Store(
     when=worth_keeping,  # store only what it is true of
     slower_than=0,  # store only loads this slow
 )
-# --8<-- [end:store]
 
 
 @cache(

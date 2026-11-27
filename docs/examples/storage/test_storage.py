@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-from examples.storage import cached_result
+import importlib
+
+import pytest
+from tests.harness.helpers import call
 
 
-def test_a_cached_result_keeps_the_bytes_the_page_shows() -> None:
-    cached_result.get_user(1)
+@pytest.mark.parametrize("side", ["sync", "async"])
+async def test_a_cached_result_keeps_the_bytes_the_page_shows(side: str) -> None:
+    example = importlib.import_module(f"examples.storage.cached_result_{side}")
+    await call(example.get_user, 1)
 
-    raw = cached_result.backend.get("shop:user:1")
+    raw = await call(example.backend.get, "shop:user:1")
 
     assert raw is not None
     assert len(raw) == 49

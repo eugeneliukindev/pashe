@@ -1,5 +1,7 @@
 # ruff: noqa: ARG001 - partner_id names the key of the limit, not the query
 # --8<-- [start:imports]
+from datetime import timedelta
+
 from pashe.ratelimit import FixedWindow, SlidingWindow
 
 # --8<-- [end:imports]
@@ -21,7 +23,7 @@ async def search_catalogue(partner_id: str, query: str) -> list[Product]:
 
 
 async def nightly_export() -> None:
-    lock = await locks.try_lock("job:nightly-export", ttl=600)
+    lock = await locks.try_lock("job:nightly-export", ttl=timedelta(minutes=10))
     if lock is None:
         return  # another server runs it
     async with lock:

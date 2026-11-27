@@ -1,15 +1,13 @@
 # --8<-- [start:show]
-from dataclasses import dataclass
+from typing import TypedDict
 
 from pashe import AsyncCache
 from pashe.backends import AsyncMemoryBackend
-from pashe.contrib.msgspec import MsgspecJsonCodec
 
-cache = AsyncCache(AsyncMemoryBackend(), codec=MsgspecJsonCodec())  # a codec that rebuilds dataclasses
+cache = AsyncCache(AsyncMemoryBackend())
 
 
-@dataclass
-class User:
+class User(TypedDict):
     id: int
     name: str
 
@@ -22,7 +20,7 @@ async def get_user(user_id: int) -> User:  # the annotation is what a stored res
 # --8<-- [end:show]
 async def main() -> None:
     # --8<-- [start:calls]
-    user = await get_user(1)  # User(id=1, name='Ann'): a type checker sees a User too
-    cached = await get_user(1)  # decoded from the backend: a User again, not a dict
+    user = await get_user(1)  # {'id': 1, 'name': 'Ann'}: a type checker sees a User
+    cached = await get_user(1)  # decoded from the backend as a User: the same dict
     # --8<-- [end:calls]
     del user, cached

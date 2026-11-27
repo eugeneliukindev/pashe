@@ -181,6 +181,12 @@ get_prices([1, 2, 3])  1 query
 The payment provider hands out access tokens and says how long each is valid. Keep each that
 long, less a minute of margin:
 
+<div class="pashe-timeline">
+<div class="pashe-timeline__fresh" style="flex: 3540" data-start="0"><b>HIT</b><br>the same token for every call</div>
+<div class="pashe-timeline__source" style="flex: 60" data-start="59 min"><b>MISS</b><br>a new token, the old one still valid</div>
+<div class="pashe-timeline__stale" data-start="60 min"><b>the old token</b><br>expires, used by no call</div>
+</div>
+
 === "Sync"
 
     ```python
@@ -240,14 +246,14 @@ sequenceDiagram
 
 === "Sync"
 
-    ```python hl_lines="6 12 25"
+    ```python hl_lines="6 11 24"
     --8<-- "shop/web_sync.py:imports"
     --8<-- "shop/web_sync.py:show"
     ```
 
 === "Async"
 
-    ```python hl_lines="6 12 25"
+    ```python hl_lines="6 11 24"
     --8<-- "shop/web_async.py:imports"
     --8<-- "shop/web_async.py:show"
     ```

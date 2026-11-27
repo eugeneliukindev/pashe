@@ -1,7 +1,7 @@
 # Recommended setup
 
 What to install and configure for the common cases. The numbers behind the choices are on the pages of
-[codecs](values/codecs.md#how-they-compare) and [compressors](values/compressors.md#how-they-compare).
+[codecs](codecs.md#how-they-compare) and [compressors](compressors.md#how-they-compare).
 
 ## In short
 

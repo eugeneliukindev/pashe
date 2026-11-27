@@ -10,36 +10,45 @@ import pytest
 from tests.harness.helpers import call, recording_calls
 
 import pashe
-from pashe import Cache
+from pashe import AsyncCache, Cache
 from pashe.backends import MemoryBackend
 from pashe.errors import InvalidOptionsError
-from pashe.hooks import CacheStatus, Outcome
+from pashe.hooks import CacheStatus, Hook, Outcome
 
 from examples.recorded import Record
 
 _KEY = re.compile(r"# (shop:.+)$", re.MULTILINE)  # the key a call of the page says it has
 
 
+@pytest.mark.parametrize("side", ["sync", "async"])
 @pytest.mark.parametrize("name", ["default_key", "template_key", "digest_keys"])
-def test_every_call_has_the_key_the_page_says(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    said = _KEY.findall((Path(__file__).parent / f"{name}.py").read_text())
+async def test_every_call_has_the_key_the_page_says(name: str, side: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    said = _KEY.findall((Path(__file__).parent / f"{name}_{side}.py").read_text())
     outcomes: list[Outcome] = []
-    monkeypatch.setattr(pashe, "Cache", functools.partial(Cache, hooks=[Record(outcomes)]))  # the page leaves it out
+    record: list[Hook] = [Record(outcomes)]  # the page leaves it out
+    monkeypatch.setattr(pashe, "Cache", functools.partial(Cache, hooks=record))
+    monkeypatch.setattr(pashe, "AsyncCache", functools.partial(AsyncCache, hooks=record))
 
-    importlib.import_module(f"examples.caching_functions.{name}")
+    example = importlib.import_module(f"examples.caching_functions.{name}_{side}")
+    if side == "async":
+        await call(example.main)  # an async page calls its functions in main, not as it is imported
 
     assert [outcome.key for outcome in outcomes] == said
 
 
 @pytest.mark.parametrize("side", ["sync", "async"])
-async def test_store_when_keeps_only_a_done_order(side: str) -> None:
+async def test_store_when_keeps_only_a_done_order(side: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    outcomes: list[Outcome] = []
+    record: list[Hook] = [Record(outcomes)]  # the page leaves it out
+    monkeypatch.setattr(pashe, "Cache", functools.partial(Cache, hooks=record))
+    monkeypatch.setattr(pashe, "AsyncCache", functools.partial(AsyncCache, hooks=record))
     example = importlib.import_module(f"examples.caching_functions.store_when_{side}")
     await call(example.main)
 
     await call(example.get_order, 1)
     await call(example.get_order, 2)
 
-    statuses = [outcome.status for outcome in example.outcomes]
+    statuses = [outcome.status for outcome in outcomes]
     assert statuses == [CacheStatus.MISS, CacheStatus.MISS, CacheStatus.HIT, CacheStatus.MISS]
 
 
@@ -68,10 +77,10 @@ async def test_a_write_that_invalidates_makes_the_next_read_load(side: str) -> N
 @pytest.mark.parametrize("side", ["sync", "async"])
 async def test_a_one_time_code_checks_once(side: str) -> None:
     example = importlib.import_module(f"examples.caching_functions.value_{side}")
-    await call(example.send_code, "ada@example.com", 1)
+    await call(example.send_code, "ada@example.com")
 
-    first = await call(example.check_code, "ada@example.com", 1, "482913")
-    second = await call(example.check_code, "ada@example.com", 1, "482913")
+    first = await call(example.check_code, "ada@example.com", "482913")
+    second = await call(example.check_code, "ada@example.com", "482913")
 
     assert (first, second) == (True, False)
 

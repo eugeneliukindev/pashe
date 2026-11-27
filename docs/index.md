@@ -15,10 +15,10 @@ social:
 [![Tests](https://github.com/eugeneliukindev/pashe/actions/workflows/test.yml/badge.svg)](https://github.com/eugeneliukindev/pashe/actions/workflows/test.yml)
 [![Docs](https://github.com/eugeneliukindev/pashe/actions/workflows/docs.yml/badge.svg)](https://github.com/eugeneliukindev/pashe/actions/workflows/docs.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-2b5b84?logo=python&logoColor=white)](https://www.python.org)
-[![Typed: mypy strict](https://img.shields.io/badge/typed-mypy%20strict-2b5b84)](https://mypy-lang.org)
-[![Typed: pyright strict](https://img.shields.io/badge/typed-pyright%20strict-2b5b84)](https://microsoft.github.io/pyright)
-[![Lint: ruff](https://img.shields.io/badge/lint-ruff-2b5b84)](https://docs.astral.sh/ruff)
-[![Format: ruff format](https://img.shields.io/badge/format-ruff%20format-2b5b84)](https://docs.astral.sh/ruff/formatter)
+[![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org)
+[![Checked with pyright](https://microsoft.github.io/pyright/img/pyright_badge.svg)](https://microsoft.github.io/pyright)
+[![Lint: ruff](https://img.shields.io/badge/lint-ruff-2b5b84?logo=ruff&logoColor=white)](https://docs.astral.sh/ruff)
+[![Format: ruff format](https://img.shields.io/badge/format-ruff%20format-2b5b84?logo=ruff&logoColor=white)](https://docs.astral.sh/ruff/formatter)
 [![License: MIT](https://img.shields.io/badge/license-MIT-f7b500)](https://opensource.org/license/mit)
 
 ```sh
@@ -26,7 +26,6 @@ pip install "pashe[redis]"
 ```
 
 [Get started](getting-started.md){ .md-button .md-button--primary }
-[What to choose](guides/choosing.md){ .md-button }
 
 </div>
 
@@ -117,5 +116,3 @@ Do you write code with an AI assistant? These files give it the docs as context:
 - [`llms.txt`](llms.txt): an index with a link to every page;
 - [`llms-full.txt`](llms-full.txt): the complete docs in one file;
 - every page as Markdown: press **Copy as Markdown** next to its title.
-
-Next: [Getting started](getting-started.md).

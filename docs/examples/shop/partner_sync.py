@@ -1,4 +1,6 @@
 # --8<-- [start:imports]
+from datetime import timedelta
+
 import httpx
 
 from pashe.options import Negative, Stale
@@ -15,8 +17,8 @@ class UnknownCurrencyError(LookupError):
 
 @cache(
     ttl=600,
-    stale=Stale(if_error=3_600, if_error_on=(httpx.HTTPError,)),
-    negative=Negative(on=(UnknownCurrencyError,), ttl=600),
+    stale=Stale(if_error=timedelta(hours=1), if_error_on=(httpx.HTTPError,)),
+    negative=Negative(on=(UnknownCurrencyError,), ttl=timedelta(minutes=10)),
 )
 def get_rate(currency: str) -> float:
     response = partner.get(f"/rates/{currency}")

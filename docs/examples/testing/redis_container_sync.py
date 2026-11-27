@@ -16,5 +16,5 @@ def redis_url() -> Iterator[str]:
 
 
 def test_the_cache_over_redis(redis_url: str) -> None:
-    with Cache(RedisBackend(Redis.from_url(redis_url, socket_timeout=1))) as cache:
+    with Cache(RedisBackend(Redis.from_url(redis_url))) as cache:
         cache.ping()

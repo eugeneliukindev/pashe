@@ -476,7 +476,15 @@ tables = false  # a row is one line, however long
 code-blocks = false  # a console line is as long as it is
 
 [tool.rumdl.MD033]
-allowed-elements = ["a", "b", "br", "div", "img", "p"]  # the head of the README and the cards of the home page
+allowed-elements = [
+    "a",
+    "b",
+    "br",
+    "div",
+    "img",
+    "p",
+    "span"
+]  # the head of the README, the cards of the home page, the marks of the benchmarks
 
 [tool.slotscheck]
 strict-imports = true

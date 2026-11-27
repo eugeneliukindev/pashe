@@ -9,6 +9,6 @@ from pashe.contrib.redis import RedisBackend
 
 def main() -> RedisBackend:  # a cluster client meets its nodes when it is made
     # --8<-- [start:calls]
-    backend = RedisBackend(RedisCluster.from_url("redis://node-1:7000", socket_timeout=1))
+    backend = RedisBackend(RedisCluster.from_url("redis://node-1:7000"))
     # --8<-- [end:calls]
     return backend

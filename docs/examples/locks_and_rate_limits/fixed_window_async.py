@@ -5,7 +5,7 @@ from pashe.ratelimit import FixedWindow
 
 limiter = AsyncRateLimiter(AsyncMemoryBackend())
 
-logins = FixedWindow(calls=5, per=60, ban_for=300)  # 5 a window from the first call; the 6th bans for 5 min
+logins = FixedWindow(calls=5, per=60, ban_for=300)  # the 6th call bans for 5 min
 same = FixedWindow.per_minute(5, ban_for=300)  # also per_second and per_hour
 
 

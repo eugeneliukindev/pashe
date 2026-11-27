@@ -12,61 +12,53 @@ nav = [
     { "Start here" = [
         { "Getting started" = "getting-started.md" },
         { "Core concepts" = "concepts.md" },
+        { "What to choose" = "guides/choosing.md" },
         { "Glossary" = "glossary.md" },
     ] },
+    # A page or a group for each object of the API: everything about it in one place.
     { "Caching functions" = [
         { "Caching a function" = "guides/caching/decorator.md" },
         { "Keys" = "guides/caching/keys.md" },
-        { "What is stored, and for how long" = "guides/caching/what-is-stored.md" },
+        { "TTL" = "guides/caching/ttl.md" },
         { "Types" = "guides/caching/types.md" },
         { "Batches" = "guides/caching/batches.md" },
         { "Values no function loads" = "guides/caching/value.md" },
-        { "Reusing options" = "guides/caching/reusing-options.md" },
     ] },
-    { "Freshness" = [
-        { "Stale results" = "guides/failures/stale.md" },
-        { "Stampede protection" = "guides/failures/stampedes.md" },
-    ] },
-    { "Invalidation" = [
-        { "Tags" = "guides/invalidation/tags.md" },
-        { "Invalidating on writes" = "guides/invalidation/on-a-write.md" },
-    ] },
+    { "Tags and invalidation" = "guides/tags.md" },
+    { "Stale results" = "guides/stale.md" },
+    { "Stampede protection" = "guides/stampedes.md" },
+    { "Negative caching" = "guides/negative.md" },
+    { "Storing only some results" = "guides/store.md" },
+    { "Fallback and breaker" = "guides/fallback.md" },
     { "Backends" = [
         { "Choosing a backend" = "guides/backends/index.md" },
         { "Memory" = "guides/backends/memory.md" },
         { "SQLite" = "guides/backends/sqlite.md" },
         { "Redis and Valkey" = "guides/backends/redis.md" },
         { "Redis Cluster" = "guides/backends/cluster.md" },
-        { "Near cache" = "guides/backends/near-cache.md" },
-        { "A failing backend" = "guides/failures/failing-backend.md" },
         { "Writing your own backend" = "guides/backends/your-own.md" },
     ] },
-    { "Encoding" = [
-        { "Codecs" = "guides/values/codecs.md" },
-        { "Compressors" = "guides/values/compressors.md" },
-    ] },
-    { "Locks" = "guides/locks/locks.md" },
-    { "Rate limits" = [
-        { "Rate limits" = "guides/locks/rate-limits.md" },
-        { "Rate limits for HTTP" = "guides/web/rate-limits.md" },
-    ] },
-    { "Observability" = [
+    { "Near cache" = "guides/near-cache.md" },
+    { "Codecs" = "guides/codecs.md" },
+    { "Compressors" = "guides/compressors.md" },
+    { "Locks" = "guides/locks.md" },
+    { "Rate limits" = "guides/rate-limits.md" },
+    { "Hooks" = [
         { "How hooks work" = "guides/observability/hooks.md" },
         { "Logging" = "guides/observability/logging.md" },
         { "OpenTelemetry" = "guides/observability/opentelemetry.md" },
         { "Prometheus" = "guides/observability/prometheus.md" },
         { "Sentry" = "guides/observability/sentry.md" },
     ] },
-    { "Web" = [
+    { "HTTP" = [
         { "HTTP caching headers" = "guides/web/headers.md" },
         { "Caching an endpoint" = "guides/web/endpoint.md" },
         { "FastAPI" = "guides/web/fastapi.md" },
     ] },
     { "Testing" = "guides/testing.md" },
     { "In production" = [
-        { "What to choose" = "guides/choosing.md" },
         { "Recommended setup" = "guides/recommended-setup.md" },
-        { "Examples" = "examples.md" },
+        { "Examples: a shop" = "examples.md" },
         { "Troubleshooting" = "guides/troubleshooting.md" },
     ] },
     { "API reference" = [
@@ -205,11 +197,9 @@ show_source = false
 show_symbol_type_heading = true
 show_symbol_type_toc = true
 signature_crossrefs = true
-
-# The date a page last changed, from git; a page not committed yet shows the date of the build.
-[project.plugins.git-revision-date-localized]
-fallback_to_build_date = true
-strict = false  # a page not in git yet, as a new one before its commit, is not an error
+parameter_headings = true  # a guide links a parameter, [`ttl`][pashe.Cache.value(ttl)], instead of retelling it
+backlinks = "tree"  # each object lists the guides that link it
+scoped_crossrefs = true
 
 [project.plugins.social]
 # Cards for link previews in the brand blue, around the darker disc of the logo

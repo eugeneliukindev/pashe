@@ -16,7 +16,6 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false  # nothing pushes back to the repository
-          fetch-depth: 0  # the whole history, for the date each page last changed
       - uses: astral-sh/setup-uv@v10.4.0
       - name: Install just
         run: uv tool install rust-just

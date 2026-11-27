@@ -1,8 +1,8 @@
 # How hooks work
 
 A cache tells its hooks how every call was answered and every error it worked around, for
-metrics and logs. A hook subclasses `Hook` of `pashe.hooks` and overrides the methods it needs; the
-others do nothing, so a hook keeps working when pashe tells of more. A cache calls its hooks in
+metrics and logs. A hook subclasses [`Hook`][pashe.hooks.Hook] and overrides the methods it
+needs; the others do nothing, so a hook keeps working when pashe tells of more. A cache calls its hooks in
 the order of the list, in the task or thread of the call.
 
 === "Sync"
@@ -17,23 +17,22 @@ the order of the list, in the task or thread of the call.
     --8<-- "observability/hooks_async.py:show"
     ```
 
-| Method | Gets | When |
-| --- | --- | --- |
-| `on_call` | an `Outcome`: the function, the key, the `CacheStatus`, the seconds of the load, how long the result stays fresh | every cached call, and every item of a batch |
-| `on_error` | a `Failure`: the `Operation`, the key and the error, as the backend or the function raised it | every error the cache works around instead of raising it |
-| `on_rate_limit` | a `RateLimitDecision`: the key, and whether the call went through; `label` is `"allowed"` or `"refused"` | every call a rate limit counted |
-| `on_near_read` | a `NearRead`: the keys its copies answered, and those read from the shared backend; `sources` counts them by source | every read of a near cache given the hook |
-| `on_near_flush` | nothing | a near cache given the hook dropped every copy |
-| `on_circuit` | a `Circuit`: whether it opened or closed, and the failures in a row that opened it; `state` is `"open"` or `"closed"` | the `CircuitBreaker` of a backend, given the hook, opened or closed |
+A cache tells [`on_call`][pashe.hooks.Hook.on_call] of every call and
+[`on_error`][pashe.hooks.Hook.on_error] of every error it works around. A rate limit tells
+[`on_rate_limit`][pashe.hooks.Hook.on_rate_limit], a near cache
+[`on_near_read`][pashe.hooks.Hook.on_near_read] and `on_near_flush`, and a circuit breaker
+[`on_circuit`][pashe.hooks.Hook.on_circuit].
 
-`label`, `sources` and `state` are labels for metrics, as they take a few values. The function of
-an `Outcome`, such as `app.users.get_user`, is the same for every call of it, a label for metrics;
-the key is not, so keep it out of labels. The operation of a `Failure`, such as
+A field that takes a few values is a label for metrics, such as `label` of a
+[`RateLimitDecision`][pashe.hooks.RateLimitDecision], `sources` of a
+[`NearRead`][pashe.hooks.NearRead] and `state` of a [`Circuit`][pashe.hooks.Circuit]. The function
+of an [`Outcome`][pashe.hooks.Outcome], such as `app.users.get_user`, is the same for every call of
+it, a label too; the key is not, so keep it out of labels. The operation of a [`Failure`][pashe.hooks.Failure], such as
 `get` or `publish`, tells what the cache was doing; its `error_type`, such as
 `httpx.ConnectError` for a function that failed, is a label too.
 
-A near cache is a backend, not a cache: it takes `hooks=` of its own, for its reads and flushes.
-Give it the hooks of the cache over it.
+A near cache is a backend, not a cache: it takes hooks of its own, for its reads and flushes.
+Give it the hooks of the cache over it: see [The hooks of a near cache](#the-hooks-of-a-near-cache).
 
 !!! warning "An error a hook raises goes up"
 
@@ -44,6 +43,26 @@ Ready hooks: [`LoggingHook`](logging.md) for the errors, [OpenTelemetry](opentel
 [`PrometheusMetricsHook`](prometheus.md) for metrics, and the `CacheHeadersHook` of the
 [`CacheHeadersMiddleware`](../web/headers.md).
 
----
+## The hooks of a near cache
 
-API reference: [`Hook`](../../reference/hooks.md#pashe.hooks.Hook).
+A near cache answers some reads in memory and sends the rest to the shared backend; its hooks
+tell how many went each way.
+
+=== "Sync"
+
+    ```python hl_lines="13 14 16"
+    --8<-- "backends/near_cache_hooks_sync.py:show"
+    ```
+
+=== "Async"
+
+    ```python hl_lines="13 14 16"
+    --8<-- "backends/near_cache_hooks_async.py:show"
+    ```
+
+Give [`hooks`][pashe.backends.NearCacheBackend(hooks)] the hooks of the cache, such as the
+metrics of `pashe.contrib.opentelemetry`: a near cache with none tells nothing. It drops every copy
+when it starts listening to its bus, and whenever messages of the bus may have been lost, and
+tells [`on_near_flush`][pashe.hooks.Hook.on_near_flush] each time. A Redis bus takes
+[`hooks`][pashe.contrib.redis.RedisPubSubBus(hooks)] too: it tells `on_error` of an error while it
+listens other than a lost connection, such as of a hook, and listens again.

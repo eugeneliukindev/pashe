@@ -10,7 +10,7 @@ from pashe.options import Stale
 # --8<-- [end:imports]
 
 # --8<-- [start:show]
-cache = Cache(RedisBackend(Redis.from_url("redis://localhost:6379/0", socket_timeout=1)), prefix="users:")
+cache = Cache(RedisBackend(Redis.from_url("redis://localhost:6379/0")), prefix="users:")
 
 
 class User(TypedDict):

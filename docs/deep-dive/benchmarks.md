@@ -5,9 +5,20 @@ measures them. Run them with `just bench`: it prints the times, then the bytes e
 compressor made. Every other run of the tests takes each benchmark once, as a test. Your numbers
 will differ, the ratios hold.
 
-The numbers below: the median of many rounds, in microseconds. Python 3.15.1 on an Intel Core
-i9-9900KF, Linux; Redis 8 and a Redis Cluster in Docker on the same machine; msgspec 0.22,
-orjson 3.13, pydantic 2.14, redis-py 8.1.
+## The machine
+
+| Part | This run |
+| --- | --- |
+| CPU | Intel Core i9-9900KF, 3.6 GHz, 8 cores, 16 threads |
+| OS | Linux 7.3 (CachyOS) |
+| Python | 3.15.1 |
+| Redis | Redis 8 and a Redis Cluster of 3 nodes, in Docker on the same machine |
+| Libraries | msgspec 0.22, orjson 3.13, pydantic 2.14, redis-py 8.1 |
+| How | the median of many rounds of pytest-benchmark, in one process |
+
+Times are in microseconds (us, a millionth of a second), sizes in bytes. In each column the
+<span class="pashe-best">best</span> is green, the <span class="pashe-second">second</span> yellow
+and the <span class="pashe-worst">worst</span> red; lower is better in every table.
 
 ## What is stored
 
@@ -23,52 +34,84 @@ entry; 100, a page or a list; and 10 000, a big report, about the most worth cac
 Each codec encodes the products and decodes them back as the type of the cached function:
 `list[Product]` for a codec that rebuilds your types, a list of `dict`s for one of plain JSON.
 
-| Codec | Bytes: 1 | 100 | 10 000 |
-| --- | ---: | ---: | ---: |
-| `MsgspecMsgpackCodec` | 87 | 8 693 | 908 509 |
-| `PickleCodec` | 198 | 5 734 | 588 868 |
-| the codecs of JSON | 117 | 11 715 | 1 212 405 |
+### Bytes
 
-| Codec | Encode, us: 1 | 100 | 10 000 | Decode, us: 1 | 100 | 10 000 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `OrjsonCodec` | 0.25 | 11 | 984 | 0.64 | 38 | 5 492 |
-| `MsgspecMsgpackCodec` | 0.34 | 18 | 1 682 | 1.0 | 41 | 5 575 |
-| `MsgspecJsonCodec` | 0.41 | 18 | 1 711 | 1.0 | 45 | 6 022 |
-| `PydanticCodec` | 0.96 | 63 | 6 492 | 1.5 | 97 | 12 374 |
-| `JsonCodec`, the default | 1.8 | 67 | 7 416 | 1.6 | 86 | 10 797 |
-| `PickleCodec` | 4.4 | 76 | 7 791 | 4.7 | 80 | 9 803 |
+| Codec | 1 product | 100 products | 10 000 products |
+| --- | ---: | ---: | ---: |
+| `MsgspecMsgpackCodec` | <span class="pashe-best">87</span> | <span class="pashe-second">8 693</span> | <span class="pashe-second">908 509</span> |
+| `PickleCodec` | <span class="pashe-worst">198</span> | <span class="pashe-best">5 734</span> | <span class="pashe-best">588 868</span> |
+| `OrjsonCodec` | <span class="pashe-second">117</span> | <span class="pashe-worst">11 715</span> | <span class="pashe-worst">1 212 405</span> |
+| `MsgspecJsonCodec` | <span class="pashe-second">117</span> | <span class="pashe-worst">11 715</span> | <span class="pashe-worst">1 212 405</span> |
+| `PydanticCodec` | <span class="pashe-second">117</span> | <span class="pashe-worst">11 715</span> | <span class="pashe-worst">1 212 405</span> |
+| `JsonCodec`, the default | <span class="pashe-second">117</span> | <span class="pashe-worst">11 715</span> | <span class="pashe-worst">1 212 405</span> |
+
+### Encode, us
+
+| Codec | 1 product | 100 products | 10 000 products |
+| --- | ---: | ---: | ---: |
+| `OrjsonCodec` | <span class="pashe-best">0.25</span> | <span class="pashe-best">11</span> | <span class="pashe-best">984</span> |
+| `MsgspecMsgpackCodec` | <span class="pashe-second">0.34</span> | <span class="pashe-second">18</span> | <span class="pashe-second">1 682</span> |
+| `MsgspecJsonCodec` | 0.41 | <span class="pashe-second">18</span> | 1 711 |
+| `PydanticCodec` | 0.96 | 63 | 6 492 |
+| `JsonCodec`, the default | 1.8 | 67 | 7 416 |
+| `PickleCodec` | <span class="pashe-worst">4.4</span> | <span class="pashe-worst">76</span> | <span class="pashe-worst">7 791</span> |
+
+### Decode, us
+
+| Codec | 1 product | 100 products | 10 000 products |
+| --- | ---: | ---: | ---: |
+| `OrjsonCodec` | <span class="pashe-best">0.64</span> | <span class="pashe-best">38</span> | <span class="pashe-best">5 492</span> |
+| `MsgspecMsgpackCodec` | <span class="pashe-second">1</span> | <span class="pashe-second">41</span> | <span class="pashe-second">5 575</span> |
+| `MsgspecJsonCodec` | <span class="pashe-second">1</span> | 45 | 6 022 |
+| `PydanticCodec` | 1.5 | <span class="pashe-worst">97</span> | <span class="pashe-worst">12 374</span> |
+| `JsonCodec`, the default | 1.6 | 86 | 10 797 |
+| `PickleCodec` | <span class="pashe-worst">4.7</span> | 80 | 9 803 |
 
 ## Compressors
 
-Each compressor shrinks the products as MessagePack, 87, 8 693 and 908 509 bytes, and restores
-them. One product grows: the header of the format outweighs what it saves, which is why a
-compressor leaves a value under its `min_size` as it is.
+Each compressor shrinks the products as MessagePack and restores them. One product grows: the
+header of the format outweighs what it saves, which is why a compressor leaves a value under its
+`min_size` as it is.
 
-| Compressor | Bytes: 1 | 100 | 10 000 |
+### Bytes
+
+| Compressor | 1 product | 100 products | 10 000 products |
 | --- | ---: | ---: | ---: |
-| none | 87 | 8 693 | 908 509 |
-| `ZstdCompressor(level=3)` | 96 | 631 | 54 034 |
-| `GzipCompressor(level=1)` | 105 | 958 | 83 574 |
-| `GzipCompressor(level=6)` | 105 | 844 | 91 126 |
+| none, as MessagePack | 87 | 8 693 | 908 509 |
+| `ZstdCompressor(level=3)` | <span class="pashe-best">96</span> | <span class="pashe-best">631</span> | <span class="pashe-best">54 034</span> |
+| `GzipCompressor(level=1)` | <span class="pashe-worst">105</span> | <span class="pashe-worst">958</span> | <span class="pashe-second">83 574</span> |
+| `GzipCompressor(level=6)` | <span class="pashe-worst">105</span> | <span class="pashe-second">844</span> | <span class="pashe-worst">91 126</span> |
 
-| Compressor | Compress, us: 1 | 100 | 10 000 | Decompress, us: 1 | 100 | 10 000 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `ZstdCompressor(level=3)` | 4.1 | 16 | 870 | 0.78 | 6.5 | 427 |
-| `GzipCompressor(level=1)` | 4.8 | 21 | 1 836 | 0.69 | 9.0 | 803 |
-| `GzipCompressor(level=6)` | 5.0 | 55 | 4 886 | 0.69 | 8.7 | 729 |
+### Compress, us
+
+| Compressor | 1 product | 100 products | 10 000 products |
+| --- | ---: | ---: | ---: |
+| `ZstdCompressor(level=3)` | <span class="pashe-best">4.1</span> | <span class="pashe-best">16</span> | <span class="pashe-best">870</span> |
+| `GzipCompressor(level=1)` | <span class="pashe-second">4.8</span> | <span class="pashe-second">21</span> | <span class="pashe-second">1 836</span> |
+| `GzipCompressor(level=6)` | <span class="pashe-worst">5</span> | <span class="pashe-worst">55</span> | <span class="pashe-worst">4 886</span> |
+
+### Decompress, us
+
+| Compressor | 1 product | 100 products | 10 000 products |
+| --- | ---: | ---: | ---: |
+| `ZstdCompressor(level=3)` | <span class="pashe-worst">0.78</span> | <span class="pashe-best">6.5</span> | <span class="pashe-best">427</span> |
+| `GzipCompressor(level=1)` | <span class="pashe-best">0.69</span> | <span class="pashe-worst">9</span> | <span class="pashe-worst">803</span> |
+| `GzipCompressor(level=6)` | <span class="pashe-best">0.69</span> | <span class="pashe-second">8.7</span> | <span class="pashe-second">729</span> |
 
 ## A call of the cache
 
 A cached function of one argument returns a small `TypedDict`, over each backend of `Cache`: a hit
 answers from the cache, a miss runs the function and stores what it returned.
 
-| Backend | Hit, us | Miss, us |
+### One call, us
+
+| Backend | Hit | Miss |
 | --- | ---: | ---: |
-| `MemoryBackend` | 10 | 24 |
-| `SQLiteBackend` | 24 | 61 |
-| `RedisBackend` | 93 | 225 |
-| `RedisBackend` over a Redis Cluster | 95 | 213 |
+| `MemoryBackend` | <span class="pashe-best">10</span> | <span class="pashe-best">24</span> |
+| `SQLiteBackend` | <span class="pashe-second">24</span> | <span class="pashe-second">61</span> |
+| `RedisBackend` | 93 | <span class="pashe-worst">225</span> |
+| `RedisBackend` over a Redis Cluster | <span class="pashe-worst">95</span> | 213 |
 
 Most of a call over Redis is its round trips, one for a hit and two for a miss: see
 [What a call costs](cost.md). A near cache answers a hit from memory:
-[Near cache](../guides/backends/near-cache.md).
+[Near cache](../guides/near-cache.md).

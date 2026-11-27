@@ -7,8 +7,10 @@ import importlib
 import importlib.util
 import inspect
 from pathlib import Path
+from typing import Final
 
 import pytest
+import redis
 from tests.harness.helpers import call
 
 from pashe import AsyncCache, AsyncLocks, AsyncRateLimiter, Cache, Locks, RateLimiter
@@ -25,6 +27,9 @@ _EXAMPLES = sorted(
 _REACH_REDIS = frozenset(
     ("backends/cluster_sync", "backends/cluster_async", "index/quick_start_sync", "index/quick_start_async")
 )
+# redis-py 8 gives a client a socket_timeout of 5 seconds, so the examples leave it out; the backend
+# refuses a client of an older one without it
+_NO_DEFAULT_TIMEOUT: Final = int(redis.__version__.partition(".")[0]) < 8
 _OPTION_MODULES = ("pashe.options", "pashe.ratelimit")  # whose classes an example of every option spells out
 _OPTIONS = sorted(
     _ROOT.glob("*/*_options_*.py")
@@ -37,6 +42,8 @@ def _name(path: Path) -> str:
 
 @pytest.mark.parametrize("path", _EXAMPLES, ids=_name)
 def test_an_example_imports(path: Path) -> None:
+    if _NO_DEFAULT_TIMEOUT and ".from_url(" in (text := path.read_text()) and "socket_timeout" not in text:
+        pytest.skip("before redis-py 8 a client has no timeout: the page tells to pass socket_timeout")
     module = f"examples.{path.parent.name}.{path.stem}"
 
     importlib.import_module(module)

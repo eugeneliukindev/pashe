@@ -4,6 +4,7 @@ import inspect
 import sys
 from typing import TYPE_CHECKING
 
+import prometheus_client
 import pytest
 
 from pashe import AsyncCache, Cache
@@ -18,8 +19,15 @@ async def fresh_examples(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[None]
     monkeypatch.setenv("CACHE_SECRET", "a secret of sixteen bytes or more")  # what PickleCodec of a page reads
     for name in [name for name in sys.modules if name.startswith("examples.")]:
         monkeypatch.delitem(sys.modules, name)
+    # the hook of Prometheus registers its metrics in the global registry, which a page of each side
+    # fills again: the collectors a test adds go after it. The registry lists them only privately.
+    registry = prometheus_client.REGISTRY
+    collectors = set(registry._collector_to_names)  # noqa: SLF001
 
     yield
+
+    for collector in set(registry._collector_to_names) - collectors:  # noqa: SLF001
+        registry.unregister(collector)
 
     examples = [module for name, module in sys.modules.items() if name.startswith("examples.")]
     # by id: a page imports the cache of the stubs, so one cache is a name of several modules

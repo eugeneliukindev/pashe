@@ -5,9 +5,17 @@ under the `prefix` of the cache; the examples use `prefix="shop:"`.
 
 ## A cached result
 
-```python
---8<-- "storage/cached_result.py:show"
-```
+=== "Sync"
+
+    ```python hl_lines="16"
+    --8<-- "storage/cached_result_sync.py:show"
+    ```
+
+=== "Async"
+
+    ```python hl_lines="16"
+    --8<-- "storage/cached_result_async.py:show"
+    ```
 
 `get_user(1)` at the moment `1764000000` keeps 49 bytes under `shop:user:1`:
 

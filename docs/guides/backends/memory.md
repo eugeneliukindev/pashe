@@ -1,6 +1,6 @@
 # Memory
 
-`MemoryBackend` keeps the entries in the memory of the process.
+[`MemoryBackend`][pashe.backends.MemoryBackend] keeps the entries in the memory of the process.
 
 === "Sync"
 
@@ -14,13 +14,10 @@
     --8<-- "backends/memory_async.py"
     ```
 
-An LRU in the memory of this process, safe for threads. Other processes do not see its entries:
+Other processes do not see its entries:
 use it for tests, for a single process, as a fallback and as the local side of a near cache.
 
-`max_entries` and `max_bytes` bound it: past either, the least recently used entries go first, a
-live lock or counter only once nothing else is left, and a value larger than `max_bytes` alone
-raises `ValueTooLargeError` instead of being stored.
-
----
-
-API reference: [`MemoryBackend`](../../reference/backends.md#pashe.backends.MemoryBackend).
+[`max_entries`][pashe.backends.MemoryBackend(max_entries)] and
+[`max_bytes`][pashe.backends.MemoryBackend(max_bytes)] bound it: past either, the least recently
+used entries go first, a live lock or counter only once nothing else is left, and a value larger
+than `max_bytes` alone raises `ValueTooLargeError` instead of being stored.

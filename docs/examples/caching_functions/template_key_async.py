@@ -1,0 +1,65 @@
+# ruff: noqa: ARG001 - a parameter there makes the key, as the page shows
+import enum
+from typing import TypedDict
+
+from pashe import AsyncCache
+from pashe.backends import AsyncMemoryBackend
+
+__name__ = "app.users"  # the module of the page, so the keys read as it says
+
+
+class User(TypedDict):
+    id: int
+
+
+class Page(TypedDict):
+    id: int
+
+
+class Report(TypedDict):
+    id: int
+
+
+class Price(TypedDict):
+    cents: int
+
+
+class Plan(enum.Enum):
+    FREE = "free"
+
+
+# --8<-- [start:show]
+cache = AsyncCache(AsyncMemoryBackend(), prefix="shop:")  # every key starts with the prefix
+
+
+@cache(ttl=60, key="user:{user_id}")
+async def get_user(user_id: int) -> User:
+    return User(id=user_id)  # your query to the database
+
+
+@cache(ttl=60, key="page:{team_id}:{lang}")
+async def get_page(team_id: int, lang: str = "ru") -> Page:
+    return Page(id=team_id)
+
+
+class Teams:
+    team_id = 7
+
+    @cache(ttl=60, key="team:{self.team_id}:user:{user_id}")
+    async def get(self, user_id: int) -> User:
+        return User(id=user_id)
+
+
+@cache(ttl=60, key="price:{amount:.2f}:{user[id]}")
+async def price(amount: float, user: dict[str, int]) -> Price:
+    return Price(cents=round(amount * 100))
+
+
+async def main() -> None:
+    await get_user(1)  # shop:user:1
+    await get_page(1)  # shop:page:1:ru
+    await Teams().get(1)  # shop:team:7:user:1
+    await price(9.9, {"id": 7})  # shop:price:9.90:7
+
+
+# --8<-- [end:show]

@@ -14,8 +14,4 @@ if lock is not None:
         build_report()
 
 
-@locks.locked(ttl=30, key="report:{report_id}")  # every call under the lock of its key
-def build(report_id: int) -> None: ...  # the work of yours for report_id
-
-
 # --8<-- [end:show]

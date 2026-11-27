@@ -364,10 +364,10 @@ body {
 
 
 
-/* Code in a table breaks between words only: a name or a default split in the middle reads as two */
+/* Code in a table stays on one line: a call or a default split in the middle reads as two; the
+   text around it wraps instead, and a table too wide for the page scrolls */
 .md-typeset table:not([class]) code {
-  word-break: normal;
-  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 /* Code in a heading or in the table of contents reads as the heading: no box of its own */
@@ -398,4 +398,120 @@ body {
 .md-typeset .md-code__button:hover,
 .md-typeset .md-clipboard:hover {
   color: var(--md-accent-fg-color);
+}
+
+/* A timeline of the windows of a result: an axis of time with an arrow, a tick and its time under
+   each boundary, and over each stretch, as wide as its seconds, a bar in the colors of the diagrams
+   and what happens in it */
+.md-typeset .pashe-timeline {
+  --pashe-axis: var(--md-default-fg-color--light);
+  position: relative;
+  display: flex;
+  align-items: flex-end;  /* every stretch stands on the axis, however many lines it says */
+  margin: 1.2em 0 2.6em;
+  padding-right: 1.4rem;  /* room for the arrow past the last stretch */
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.md-typeset .pashe-timeline::before {  /* the axis */
+  position: absolute;
+  right: 0.3rem;
+  bottom: 0;
+  left: 0;
+  border-bottom: 1px solid var(--pashe-axis);
+  content: "";
+}
+
+.md-typeset .pashe-timeline::after {  /* its arrow */
+  position: absolute;
+  right: 0;
+  bottom: -0.3rem;
+  border-top: 0.3rem solid transparent;
+  border-bottom: 0.3rem solid transparent;
+  border-left: 0.55rem solid var(--pashe-axis);
+  content: "";
+}
+
+.md-typeset .pashe-timeline > div {
+  position: relative;
+  min-width: 6rem;  /* a short stretch keeps room for its words; the long ones keep their share */
+  padding: 0 0.6em 0.5em;
+  text-align: center;  /* what happens stands over the middle of its stretch */
+  border-bottom: 0.35rem solid;
+  overflow-wrap: anywhere;
+}
+
+.md-typeset .pashe-timeline > div::before {  /* the tick at its start */
+  position: absolute;
+  bottom: -0.45rem;
+  left: 0;
+  height: 0.9rem;
+  border-left: 1px solid var(--md-default-fg-color);
+  content: "";
+}
+
+.md-typeset .pashe-timeline > div::after {  /* the time of the tick */
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.55rem;
+  color: var(--md-default-fg-color--light);
+  white-space: nowrap;
+  transform: translateX(-50%);
+  content: attr(data-start);
+}
+
+.md-typeset .pashe-timeline > .pashe-timeline__fresh {
+  border-bottom-color: #f7b500;
+}
+
+.md-typeset .pashe-timeline > .pashe-timeline__stale {
+  border-bottom-color: #f7b50066;
+}
+
+.md-typeset .pashe-timeline > .pashe-timeline__source {
+  flex: 0 0 auto;
+  border-bottom-color: #2b5b84;
+}
+
+/* The best, the second and the worst of a column of the benchmarks: green, yellow and red that read on
+   both schemes */
+.md-typeset .pashe-best {
+  color: #1b7f3b;
+  font-weight: 600;
+}
+
+.md-typeset .pashe-second {
+  color: #9a6b00;
+  font-weight: 600;
+}
+
+.md-typeset .pashe-worst {
+  color: #c62828;
+  font-weight: 600;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .pashe-best {
+  color: #5fd38a;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .pashe-second {
+  color: #f7c948;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .pashe-worst {
+  color: #ff7b72;
+}
+
+/* A highlighted line of an example, such as the one that turns an option on: seen on the dark code */
+.md-typeset .highlight .hll {
+  background-color: #f7b50024;
+  box-shadow: inset 0.2rem 0 0 #f7b500;
+}
+
+/* A wider page than the theme's 61rem: tables of four or five columns get room to keep a cell on
+   one or two lines, and a line of text stays short enough to read */
+.md-grid {
+  max-width: 72rem;
 }

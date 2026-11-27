@@ -1,6 +1,6 @@
 # Redis Cluster
 
-`RedisBackend` works over a Redis Cluster as well.
+[`RedisBackend`][pashe.contrib.redis.RedisBackend] works over a Redis Cluster as well.
 
 === "Sync"
 
@@ -22,7 +22,3 @@ by node: a cached call reads its entry and the counters of its tags with one `MG
 live on, and a batch writes with one pipeline per node. pashe needs no atomicity across keys, so
 nothing else changes: tags, batches, locks, rate limits and a near cache with `RedisPubSubBus`
 work as on one node.
-
----
-
-API reference: [`RedisBackend`](../../reference/contrib/redis.md#pashe.contrib.redis.RedisBackend).

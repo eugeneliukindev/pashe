@@ -12,9 +12,11 @@ class Report(TypedDict):
     id: int
 
 
-@cache(ttl=60, stampede=Stampede(lock_for=5, max_loads=10))
+@cache(ttl=60, stampede=Stampede(lock_for=5))  # one process loads, the others wait
 async def get_report(report_id: int) -> Report:
     return Report(id=report_id)  # the slow query of yours
 
 
 # --8<-- [end:show]
+async def main() -> None:
+    await get_report(1)

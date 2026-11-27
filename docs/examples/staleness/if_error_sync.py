@@ -1,4 +1,5 @@
 # --8<-- [start:show]
+from datetime import timedelta
 from typing import TypedDict
 
 from pashe import Cache
@@ -12,7 +13,7 @@ class Rates(TypedDict):
     id: int
 
 
-@cache(ttl=60, stale=Stale(if_error=600, if_error_on=(ConnectionError, TimeoutError)))
+@cache(ttl=60, stale=Stale(if_error=timedelta(minutes=10), if_error_on=(ConnectionError, TimeoutError)))
 def get_rates() -> Rates:
 
     # --8<-- [end:show]
