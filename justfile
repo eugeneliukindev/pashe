@@ -198,7 +198,8 @@ test-highest *args='':
 [doc('Run the tests over every server and its cluster, or one, such as valkey-9, with the locked versions, in .nox')]
 [group('testing')]
 test-servers server='' *args='':
-    uv run nox -s servers{{ if server == '' { '' } else { '(' + server + ')' } }} -- {{ args }}
+    # quoted: bash reads the parentheses of servers(valkey-9) as a subshell
+    uv run nox -s 'servers{{ if server == '' { '' } else { '(' + server + ')' } }}' -- {{ args }}
 
 [doc('Run the tests on Python without the GIL, 3.14t or 3.15t or both, with the locked versions, in .nox')]
 [group('testing')]
