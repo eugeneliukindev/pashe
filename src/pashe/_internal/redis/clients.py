@@ -16,10 +16,7 @@ from pashe.errors import BackendError, InvalidOptionsError, WrongTypeError
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    from redis import Redis
-    from redis.asyncio import Redis as AsyncRedis
-    from redis.asyncio.cluster import RedisCluster as AsyncRedisCluster
-    from redis.cluster import RedisCluster
+    import redis.asyncio  # noqa: WPS301 - it names redis and its asyncio package too
 
 _MILLISECONDS: Final = 1000
 _NO_KEY: Final = -2  # what PTTL answers for a missing key
@@ -62,7 +59,7 @@ def translate_error(error: RedisError) -> OverflowError | WrongTypeError | Backe
     return BackendError(msg)
 
 
-def check_client(client: Redis | AsyncRedis | RedisCluster | AsyncRedisCluster) -> None:
+def check_client(client: redis.Redis | redis.RedisCluster | redis.asyncio.Redis | redis.asyncio.RedisCluster) -> None:
     settings = client.get_connection_kwargs()
     if settings.get("decode_responses"):
         msg = "redis: a backend needs a client without decode_responses: it stores bytes"

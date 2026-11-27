@@ -7,8 +7,7 @@ import asyncio
 import contextlib
 from typing import TYPE_CHECKING, final
 
-from redis import asyncio as redis_asyncio
-from redis.asyncio.cluster import RedisCluster as AsyncRedisCluster
+import redis.asyncio  # noqa: WPS301 - it names redis and its asyncio package too
 
 from pashe._internal.redis.listening import (
     INVALIDATE_CHANNEL,
@@ -21,7 +20,6 @@ from pashe._internal.redis.listening import (
 from pashe._internal.redis.messages import decode_message, read_invalidation
 
 if TYPE_CHECKING:
-    from redis.asyncio import Redis
     from redis.asyncio.client import PubSub
     from redis.asyncio.connection import AbstractConnection
 
@@ -35,7 +33,7 @@ class AsyncPubSubListener:
 
     def __init__(
         self,
-        client: Redis | AsyncRedisCluster,
+        client: redis.asyncio.Redis | redis.asyncio.RedisCluster,
         channel: str,
         on_invalidate: AsyncInvalidationHandler,
         *,
@@ -56,12 +54,12 @@ class AsyncPubSubListener:
     async def _listen(self) -> None:
         while True:
             try:
-                if isinstance(self._client, AsyncRedisCluster):
+                if isinstance(self._client, redis.asyncio.RedisCluster):
                     # the same client back: a cluster not used yet knows no slots, so subscribe would fail
                     self._client = await self._client.initialize()
                 async with self._client.pubsub(ignore_subscribe_messages=True) as pubsub:
                     await self._relay(pubsub)
-            except redis_asyncio.RedisError:
+            except redis.asyncio.RedisError:
                 await self._on_invalidate(None)  # messages may have been lost meanwhile
                 await asyncio.sleep(self._retries.next_delay())
             except Exception as error:  # noqa: BLE001 - told through on_error; the next subscription drops every copy
@@ -83,7 +81,7 @@ class AsyncTrackingListener:
 
     def __init__(
         self,
-        client: Redis,
+        client: redis.asyncio.Redis,
         prefix: str,
         on_invalidate: AsyncInvalidationHandler,
         *,
@@ -105,7 +103,7 @@ class AsyncTrackingListener:
         while True:
             try:
                 await self._listen()
-            except redis_asyncio.RedisError:
+            except redis.asyncio.RedisError:
                 await self._on_invalidate(None)  # messages may have been lost meanwhile
                 await asyncio.sleep(self._retries.next_delay())
             except Exception as error:  # noqa: BLE001 - told through on_error; the next tracking drops every copy

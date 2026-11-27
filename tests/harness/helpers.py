@@ -11,9 +11,8 @@ import inspect
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final, overload, override
 
+import redis.asyncio
 from redis import Redis
-from redis.asyncio import Redis as AsyncRedis
-from redis.asyncio.cluster import RedisCluster as AsyncRedisCluster
 from redis.cluster import RedisCluster
 
 from pashe import AsyncCache, AsyncLocks, AsyncRateLimiter, Cache, Locks, RateLimiter
@@ -253,13 +252,13 @@ class Side:
     def redis(self, url: str) -> RedisBackend | AsyncRedisBackend:
         """Return a Redis backend of the side, with a client of its own to the server at url."""
         if self.is_async:
-            return AsyncRedisBackend(AsyncRedis.from_url(url, socket_timeout=1))
+            return AsyncRedisBackend(redis.asyncio.Redis.from_url(url, socket_timeout=1))
         return RedisBackend(Redis.from_url(url, socket_timeout=1))
 
     def redis_cluster(self, url: str) -> RedisBackend | AsyncRedisBackend:
         """Return a Redis backend of the side, with a client of its own to the cluster of the node at url."""
         if self.is_async:
-            return AsyncRedisBackend(AsyncRedisCluster.from_url(url, socket_timeout=1))
+            return AsyncRedisBackend(redis.asyncio.RedisCluster.from_url(url, socket_timeout=1))
         return RedisBackend(RedisCluster.from_url(url, socket_timeout=1))
 
     def near(self) -> NearCacheBackend | AsyncNearCacheBackend:

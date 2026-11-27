@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Never, override
 import pytest
 import redis.asyncio
 from redis import Redis
-from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import ResponseError
 
 from pashe import Cache
@@ -65,7 +64,7 @@ def test_failures_in_a_row_open_it_and_then_no_call_reaches_redis(
     backend = RedisBackend(
         client, breaker=CircuitBreaker(failure_threshold=3, open_for=10, hooks=[told], clock=Clock())
     )
-    reached = _down(monkeypatch, client, RedisConnectionError("down"))
+    reached = _down(monkeypatch, client, redis.ConnectionError("down"))
     for _ in range(3):
         with pytest.raises(BackendError):
             backend.get("k")
@@ -82,7 +81,7 @@ def test_a_call_after_open_for_tries_redis_and_closes_it_if_redis_answers(
 ) -> None:
     clock, told = Clock(), _Circuits()
     backend = RedisBackend(client, breaker=CircuitBreaker(failure_threshold=1, open_for=10, hooks=[told], clock=clock))
-    _down(monkeypatch, client, RedisConnectionError("down"))
+    _down(monkeypatch, client, redis.ConnectionError("down"))
     with pytest.raises(BackendError):
         backend.get("k")
     monkeypatch.undo()  # Redis is up again
@@ -97,7 +96,7 @@ def test_a_call_after_open_for_tries_redis_and_closes_it_if_redis_answers(
 def test_a_try_that_fails_opens_it_again(client: Redis, monkeypatch: pytest.MonkeyPatch) -> None:
     clock = Clock()
     backend = RedisBackend(client, breaker=CircuitBreaker(failure_threshold=1, open_for=10, clock=clock))
-    reached = _down(monkeypatch, client, RedisConnectionError("down"))
+    reached = _down(monkeypatch, client, redis.ConnectionError("down"))
     with pytest.raises(BackendError):
         backend.get("k")
     clock.now += 10
@@ -127,7 +126,7 @@ def test_a_cached_call_answers_from_the_source_while_it_is_open(client: Redis, m
     cache = Cache(backend, hooks=[RecordingHook(failures=failures)])
     source = Source()
     get_user = cached_function(cache, source, ttl=60)
-    _down(monkeypatch, client, RedisConnectionError("down"))
+    _down(monkeypatch, client, redis.ConnectionError("down"))
     get_user(1)
 
     user = get_user(1)
@@ -154,7 +153,7 @@ async def test_an_async_backend_skips_redis_once_it_is_open(redis_url: str, monk
 
     async def get(_key: str) -> Never:
         msg = "down"
-        raise RedisConnectionError(msg)
+        raise redis.ConnectionError(msg)
 
     monkeypatch.setattr(client, "get", get)
     with pytest.raises(BackendError):
