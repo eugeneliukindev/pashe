@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any, override
 import pytest
 
 import pashe
-from pashe import AsyncCache, AsyncRateLimiter, Cache
+from pashe import AsyncCache, AsyncRateLimiter, Cache, Locks, RateLimiter
 from pashe.backends import AsyncMemoryBackend, MemoryBackend, SQLiteBackend
 from pashe.compressors import Compressor, GzipCompressor
 from pashe.contrib.msgspec import MsgspecJsonCodec
@@ -752,9 +752,6 @@ async def test_a_waiter_loads_when_the_caller_it_waited_for_is_cancelled(new_pro
     assert await get_user(1) == 2
 
 
-@pytest.mark.filterwarnings(
-    "ignore::pashe.errors.OneProcessWarning"
-)  # lock_for over memory, on purpose: the processes are its callers
 async def test_lock_for_loads_once_for_all_processes() -> None:
     backend = AsyncMemoryBackend()
     loads = 0
@@ -1581,6 +1578,27 @@ def test_a_lock_across_processes_over_a_memory_backend_warns(side: Side) -> None
 
     with pytest.warns(OneProcessWarning, match="share_loads already shares it"):
         cache(ttl=60, stampede=Stampede(lock_for=5))
+
+
+def test_locks_over_a_memory_backend_warn(side: Side) -> None:
+    with pytest.warns(OneProcessWarning, match="a lock one worker holds doesn't hold off another"):
+        side.new_locks()
+
+
+def test_a_rate_limiter_over_a_memory_backend_warns(side: Side) -> None:
+    with pytest.warns(OneProcessWarning, match="each worker lets the whole limit through"):
+        side.new_limiter()
+
+
+def test_locks_and_a_rate_limiter_over_a_shared_backend_are_taken_as_they_are(tmp_path: Path) -> None:
+    backend = SQLiteBackend(tmp_path / "cache.db")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # any warning fails the test
+        Locks(backend)
+        RateLimiter(backend)
+
+    backend.close()
 
 
 def test_a_lock_across_processes_over_sqlite_in_memory_warns() -> None:

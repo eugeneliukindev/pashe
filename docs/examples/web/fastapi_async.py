@@ -1,21 +1,23 @@
 # ruff: noqa: ARG001 - a handler takes the request whether it reads it or not
 # --8<-- [start:show]
 import math
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from pashe import AsyncCache, AsyncRateLimiter
 from pashe.asgi import CacheHeadersMiddleware
-from pashe.backends import AsyncMemoryBackend
+from pashe.backends import AsyncSQLiteBackend
 from pashe.contrib.fastapi import rate_limit
 from pashe.errors import OverloadedError, RateLimitedError
 from pashe.hooks import CacheHeadersHook
 from pashe.ratelimit import SlidingWindow
 
 headers = CacheHeadersHook()
-backend = AsyncMemoryBackend()
+backend = AsyncSQLiteBackend(Path(tempfile.gettempdir()) / "my-app-cache.db")  # every process of the machine
 cache = AsyncCache(backend, hooks=[headers])
 limiter = AsyncRateLimiter(backend)
 

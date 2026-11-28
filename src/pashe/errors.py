@@ -285,7 +285,9 @@ class MissingExtraError(PasheError, ModuleNotFoundError):
 class OneProcessWarning(UserWarning):
     """An option that shares across processes, over a backend that lives in one process.
 
-    It works, but adds nothing there, such as ``Stampede.lock_for`` over a MemoryBackend, where
-    ``share_loads`` already shares the load. Tests that swap the shared backend for memory can
+    It works, but only within this process, which a service of many processes doesn't expect:
+    ``Stampede.lock_for``, whose load ``share_loads`` already shares here, a near cache whose copies
+    add nothing, and locks and rate limits, which hold off and count the callers of this process
+    alone. A service of one process, and tests that swap the shared backend for memory, can
     silence it alone: ``filterwarnings = ["ignore::pashe.errors.OneProcessWarning"]``.
     """

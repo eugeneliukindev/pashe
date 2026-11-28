@@ -1,39 +1,58 @@
-# The servers the tests run against: pytest --redis-server picks one by its name, and noxfile.py
-# runs each in CI. A new server is one table here.
+# The servers the tests run against, a family each: pytest --redis-server or --memcached-server
+# picks one by its name, and noxfile.py runs each in CI. A new server is one table here.
 #
+# Each family has the same keys:
+# default: what a run takes without the option, and every job of CI but nox -s servers and lowest
+# lowest: the oldest one pashe works with, which nox -s lowest takes
+# servers: one table per server, by name
+#
+# A server of Redis has:
 # image: the image of the server, which starts it with no command: each test process gets a container
 # cluster_image: the image of its cluster, of Redis or Valkey: Dragonfly has no cluster of its own
 # cluster_program: what serves in cluster_image, redis or valkey, which names its commands such as redis-cli
+#
+# A server of memcached has its image alone.
 
-default = "redis-8"  # what a run takes without --redis-server, and every job of CI but the servers
+[redis]
+default = "redis-8"
+lowest = "redis-6.2"  # the oldest Redis with CLIENT TRACKING, still offered by clouds
 
-# The oldest Redis with CLIENT TRACKING, still offered by clouds, to the newest Redis and Valkey.
-[servers."redis-6.2"]
+[redis.servers."redis-6.2"]
 image = "redis:6.2-alpine"
 cluster_image = "redis:6.2-alpine"
 cluster_program = "redis"
 
-[servers."redis-7.4"]
+[redis.servers."redis-7.4"]
 image = "redis:7.4-alpine"
 cluster_image = "redis:7.4-alpine"
 cluster_program = "redis"
 
-[servers."redis-8"]
+[redis.servers."redis-8"]
 image = "redis:8-alpine"
 cluster_image = "redis:8-alpine"
 cluster_program = "redis"
 
-[servers."valkey-8"]
+[redis.servers."valkey-8"]
 image = "valkey/valkey:8-alpine"
 cluster_image = "valkey/valkey:8-alpine"
 cluster_program = "valkey"
 
-[servers."valkey-9"]
+[redis.servers."valkey-9"]
 image = "valkey/valkey:9-alpine"
 cluster_image = "valkey/valkey:9-alpine"
 cluster_program = "valkey"
 
-[servers.dragonfly]
+[redis.servers.dragonfly]
 image = "docker.dragonflydb.io/dragonflydb/dragonfly:latest"
 cluster_image = "redis:8-alpine"
 cluster_program = "redis"
+
+[memcached]
+default = "memcached-1.6"
+lowest = "memcached-1.6.13"  # before it a delete under a CAS token always fails
+
+[memcached.servers."memcached-1.6"]
+image = "memcached:1.6-alpine"
+
+[memcached.servers."memcached-1.6.13"]
+image = "memcached:1.6.13-alpine"

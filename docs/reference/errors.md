@@ -30,3 +30,7 @@
 ::: pashe.errors.OverloadedError
 
 ::: pashe.errors.MissingExtraError
+
+## Warnings
+
+::: pashe.errors.OneProcessWarning

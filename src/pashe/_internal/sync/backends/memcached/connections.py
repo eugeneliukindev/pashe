@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import socket
 import threading
-from typing import IO, TYPE_CHECKING, final
+import time
+from typing import TYPE_CHECKING, Final, final
 
 from pashe._internal.memcached.protocol import Answer, read_header
 from pashe.errors import BackendError
@@ -12,7 +13,8 @@ from pashe.errors import BackendError
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    type _Connection = tuple[socket.socket, IO[bytes]]  # the socket, and the reader of its answers
+_CHUNK: Final = 65536  # bytes a read asks the socket for at most
+_LINE_END: Final = b"\r\n"
 
 
 @final
@@ -34,35 +36,34 @@ class MemcachedConnections:
         self._host = host
         self._port = port
         self._timeout = timeout
-        self._idle: list[_Connection] = []
+        self._idle: list[_Stream] = []
         self._lock = threading.Lock()  # over _idle and _closed: each connection serves one thread at a time
         self._closed = False
 
     def send(self, commands: Sequence[bytes]) -> list[Answer]:
         """Send commands at once and read an answer for each, in their order, within the timeout.
 
-        A memcached that can't be reached, takes longer or fails a command raises BackendError; the
-        connection of a call that raised is closed, as an answer may be left unread on it.
+        The timeout bounds the whole call, as on the async side. A memcached that can't be reached,
+        takes longer or fails a command raises BackendError; the connection of a call that raised
+        is closed, as an answer may be left unread on it.
         """
-        sock, reader = self._reusable() or self._open()
+        deadline = time.monotonic() + self._timeout
+        stream = self._reusable() or self._open()
         try:
-            sock.sendall(b"".join(commands))  # the timeout of the socket bounds each send and read
-            answers = [_read_answer(reader) for _ in commands]
+            stream.send(b"".join(commands), deadline)
+            answers = [_read_answer(stream, deadline) for _ in commands]
         except BaseException as error:
             # a connection left in the middle of an answer would read it as the answer of the next call
-            reader.close()
-            sock.close()
+            stream.close()
             if isinstance(error, OSError | EOFError):  # TimeoutError is an OSError
                 msg = f"memcached: {error!r}"
                 raise BackendError(msg) from error
             raise
         with self._lock:
             if not self._closed:
-                self._idle.append((sock, reader))
+                self._idle.append(stream)
                 return answers
-        # a call that ran on as the backend closed keeps nothing open
-        reader.close()
-        sock.close()
+        stream.close()  # a call that ran on as the backend closed keeps nothing open
         return answers
 
     def close(self) -> None:
@@ -71,50 +72,98 @@ class MemcachedConnections:
             self._closed = True
             idle = self._idle
             self._idle = []
-        for sock, reader in idle:
-            reader.close()
-            sock.close()
+        for stream in idle:
+            stream.close()
 
-    def _reusable(self) -> _Connection | None:
+    def _reusable(self) -> _Stream | None:
         """An idle connection memcached still keeps open; one it closed, as on a restart, is dropped."""
         with self._lock:
             while self._idle:
-                sock, reader = self._idle.pop()
-                if _is_idle(sock, self._timeout):
-                    return sock, reader
-                reader.close()
-                sock.close()
+                stream = self._idle.pop()
+                if stream.is_idle():
+                    return stream
+                stream.close()
         return None
 
-    def _open(self) -> _Connection:
+    def _open(self) -> _Stream:
         try:
             sock = socket.create_connection((self._host, self._port), timeout=self._timeout)
         except OSError as error:
             msg = f"memcached: can't connect to {self._host}:{self._port}: {error!r}"
             raise BackendError(msg) from error
-        return sock, sock.makefile("rb")
+        return _Stream(sock)
 
 
-def _read_answer(reader: IO[bytes]) -> Answer:
-    answer, size = read_header(reader.readline())
+@final
+class _Stream:
+    """A socket and what it read past the last answer, each send and read bounded by one deadline."""
+
+    __slots__ = ("_buffer", "_sock")
+
+    def __init__(self, sock: socket.socket) -> None:
+        self._sock = sock
+        self._buffer = bytearray()
+
+    def send(self, data: bytes, deadline: float) -> None:
+        self._sock.settimeout(_left(deadline))
+        self._sock.sendall(data)  # the timeout bounds sendall as a whole
+
+    def read_line(self, deadline: float) -> bytes:
+        """A line with its line end; EOFError if the connection closes before its end."""
+        end = self._buffer.find(_LINE_END)
+        while end == -1:
+            self._fill(deadline)
+            end = self._buffer.find(_LINE_END)
+        return self._take(end + len(_LINE_END))
+
+    def read_exactly(self, size: int, deadline: float) -> bytes:
+        """Size bytes; EOFError if the connection closes before them."""
+        while len(self._buffer) < size:
+            self._fill(deadline)
+        return self._take(size)
+
+    def is_idle(self) -> bool:
+        """Whether the socket is open with nothing to read: a closed one reads b"" at once, a desync reads bytes."""
+        if self._buffer:
+            return False
+        self._sock.settimeout(0)
+        try:
+            self._sock.recv(1, socket.MSG_PEEK)
+        except BlockingIOError:
+            return True
+        except OSError:
+            return False
+        return False
+
+    def close(self) -> None:
+        self._sock.close()
+
+    def _fill(self, deadline: float) -> None:
+        self._sock.settimeout(_left(deadline))
+        chunk = self._sock.recv(_CHUNK)
+        if not chunk:
+            msg = "memcached: the connection closed in the middle of an answer"
+            raise EOFError(msg)
+        self._buffer += chunk
+
+    def _take(self, size: int) -> bytes:
+        taken = bytes(self._buffer[:size])
+        self._buffer = self._buffer[size:]
+        return taken
+
+
+def _read_answer(stream: _Stream, deadline: float) -> Answer:
+    answer, size = read_header(stream.read_line(deadline))
     if size is None:
         return answer
-    data = reader.read(size + 2)  # the value and its \r\n
-    if len(data) < size + 2:
-        msg = "memcached: the connection closed in the middle of a value"
-        raise EOFError(msg)
+    data = stream.read_exactly(size + 2, deadline)  # the value and its \r\n
     return Answer(code=answer.code, flags=answer.flags, value=data[:-2])
 
 
-def _is_idle(sock: socket.socket, timeout: float) -> bool:
-    """Whether sock is open with nothing to read: a closed one reads b"" at once, a desync reads bytes."""
-    sock.settimeout(0)
-    try:
-        sock.recv(1, socket.MSG_PEEK)
-    except BlockingIOError:
-        return True
-    except OSError:
-        return False
-    finally:
-        sock.settimeout(timeout)
-    return False
+def _left(deadline: float) -> float:
+    """The seconds left until deadline: none left is a timeout, before the call waits at all."""
+    left = deadline - time.monotonic()
+    if left <= 0:
+        msg = "memcached took longer than the timeout"
+        raise TimeoutError(msg)
+    return left

@@ -7,6 +7,7 @@ import socket
 import socketserver
 import sys
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, override
 
@@ -54,6 +55,28 @@ class _AnswersOnceThenHangsUp(socketserver.StreamRequestHandler):
 def hanging_up_port() -> Iterator[int]:
     """A port whose server closes every connection after its first answer."""
     with socketserver.ThreadingTCPServer(("127.0.0.1", 0), _AnswersOnceThenHangsUp) as server:
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        yield server.server_address[1]
+        server.shutdown()
+
+
+class _AnswersByTheByte(socketserver.StreamRequestHandler):
+    """A memcached that answers a byte at a time: each byte in time, the whole answer late."""
+
+    @override
+    def handle(self) -> None:
+        self.rfile.readline()
+        for byte in b"VA 5 \r\nhello\r\n":
+            self.wfile.write(bytes([byte]))
+            self.wfile.flush()
+            time.sleep(0.05)
+
+
+@pytest.fixture
+def trickling_port() -> Iterator[int]:
+    """A port whose server takes 0.05 s for each byte of an answer."""
+    with socketserver.ThreadingTCPServer(("127.0.0.1", 0), _AnswersByTheByte) as server:
+        server.daemon_threads = True
         threading.Thread(target=server.serve_forever, daemon=True).start()
         yield server.server_address[1]
         server.shutdown()
@@ -159,3 +182,18 @@ async def test_a_call_after_close_leaves_no_socket_open(side: Side, memcached_ad
     await call(backend.ping)  # as a call that was still running when the backend closed
 
     assert open_sockets() == before
+
+
+async def test_the_timeout_bounds_a_whole_call_however_its_answer_trickles(side: Side, trickling_port: int) -> None:
+    backend = (
+        AsyncMemcachedBackend("127.0.0.1", port=trickling_port, timeout=0.2)
+        if side.is_async
+        else MemcachedBackend("127.0.0.1", port=trickling_port, timeout=0.2)
+    )
+    started = time.monotonic()
+
+    with pytest.raises(BackendError):
+        await call(backend.get, "k")  # the answer takes 0.8 s, 0.05 s a byte
+
+    assert time.monotonic() - started < 0.5
+    await close(backend)

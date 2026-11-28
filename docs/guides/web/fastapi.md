@@ -4,7 +4,7 @@
 extra, is a dependency. It counts a route's requests with an
 [`AsyncRateLimiter`][pashe.AsyncRateLimiter] from `pashe`.
 
-```python hl_lines="10 29 31 33 41 42 45"
+```python hl_lines="12 31 33 35 43 44 47"
 --8<-- "web/fastapi_async.py:show"
 ```
 

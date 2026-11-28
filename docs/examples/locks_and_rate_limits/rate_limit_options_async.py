@@ -1,10 +1,14 @@
 # ruff: noqa: F841 - the page shows how to read what is left of the limit
 # --8<-- [start:show]
+import tempfile
+from pathlib import Path
+
 from pashe import AsyncRateLimiter
-from pashe.backends import AsyncMemoryBackend
+from pashe.backends import AsyncSQLiteBackend
 from pashe.ratelimit import FixedWindow, SlidingWindow
 
-limiter = AsyncRateLimiter(AsyncMemoryBackend())
+backend = AsyncSQLiteBackend(Path(tempfile.gettempdir()) / "my-app-cache.db")  # every process of the machine
+limiter = AsyncRateLimiter(backend)
 
 exports = SlidingWindow(
     calls=10,  # calls that pass

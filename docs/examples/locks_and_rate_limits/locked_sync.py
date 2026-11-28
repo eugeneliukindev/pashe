@@ -1,8 +1,12 @@
 # --8<-- [start:show]
-from pashe import Locks
-from pashe.backends import MemoryBackend
+import tempfile
+from pathlib import Path
 
-locks = Locks(MemoryBackend())
+from pashe import Locks
+from pashe.backends import SQLiteBackend
+
+backend = SQLiteBackend(Path(tempfile.gettempdir()) / "my-app-cache.db")  # every process of the machine
+locks = Locks(backend)
 
 
 @locks.locked(ttl=30, key="report:{report_id}")  # every call under the lock of its key

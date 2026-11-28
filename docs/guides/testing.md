@@ -20,6 +20,19 @@ in memory. You don't need Redis, and no entries leak from one test into the next
     --8<-- "testing/loaded_once_async.py:show"
     ```
 
+!!! note "A warning about options that share across processes"
+
+    Some options only pay off over a backend that other processes see, such as
+    [`lock_for`][pashe.options.Stampede(lock_for)], or a near cache in front of shared memory. Over a
+    memory backend they still work, but pashe warns with
+    [`OneProcessWarning`][pashe.errors.OneProcessWarning], as in production they'd mean a mistake.
+    In tests that swap Redis for memory on purpose, turn that one warning off, and keep every other:
+
+    ```toml
+    [tool.pytest.ini_options]
+    filterwarnings = ["error", "ignore::pashe.errors.OneProcessWarning"]
+    ```
+
 ## Time without sleeping
 
 A cache asks its `clock` for the wall time, and a memory backend asks its own clock when entries

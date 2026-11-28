@@ -202,6 +202,7 @@ per-file-ignores = [
     "src/pashe/_internal/async_/backends/memcached/backend.py: WPS404, WPS476",
     "src/pashe/_internal/async_/cache/function_cache.py: WPS201",  # get-or-load decides with every part a cached call is made of
     "src/pashe/_internal/async_/limiter.py: WPS201",  # it checks what it is given, counts in both windows, and decorates
+    "src/pashe/_internal/async_/locks/locks.py: WPS201",  # it checks what it is given, warns of one process, takes locks, and decorates
     "src/pashe/errors.py: WPS202",  # every error of pashe in the one module users import them from
     "src/pashe/_internal/checks.py: WPS202",  # every check of what users give in one module: one rule, one place
     "src/pashe/_internal/cache/keys.py: WPS202",  # every rule of what a key is made of in one module
@@ -370,7 +371,9 @@ addopts = [
     "--benchmark-disable"
 ]  # a benchmark runs once as a test; just bench measures
 doctest_optionflags = ["ELLIPSIS"]  # an example shows a digest as "..."
-filterwarnings = ["error"]  # a warning is a bug the tests found
+# a warning is a bug the tests found; a memory backend stands for the shared server in most of them,
+# as testing.md shows users, and the tests of OneProcessWarning catch it with pytest.warns
+filterwarnings = ["error", "ignore::pashe.errors.OneProcessWarning"]
 markers = [
     "memcached: takes the memcached of the run, started in Docker",
     "no_leaks: pyleak fails the test on a task it leaves running or a loop it blocks",

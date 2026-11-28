@@ -126,7 +126,6 @@ def _locked(cache: Cache) -> Callable[[], object]:
     ],
     ids=["miss", "hit", "miss with 2 new tags", "hit with 2 tags", "miss under lock_for"],
 )
-@pytest.mark.filterwarnings("ignore::pashe.errors.OneProcessWarning")  # it counts the calls lock_for makes, over memory
 def test_a_cached_call_makes_the_calls_the_page_tells(
     make: Callable[[Cache], Callable[[], object]],
     *,

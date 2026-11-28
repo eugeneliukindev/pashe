@@ -40,9 +40,10 @@ class MemcachedBackend(Backend):
     """A backend over one memcached of version 1.6.13 or later, through its meta commands.
 
     It needs no extra: pashe speaks the protocol itself. Every process over the same memcached sees
-    the same entries, tags, locks and rate limits. A TTL is rounded up to whole seconds, as
-    memcached keeps them. memcached drops entries when its memory runs out, the least recently used
-    first, and that includes a lock or the count of a rate limit: give it room enough for them.
+    the same entries, tags, locks and rate limits. An entry lives at least its TTL, and up to two
+    seconds longer: memcached keeps whole seconds, and its clock ticks once a second. memcached
+    drops entries when its memory runs out, the least recently used first, and that includes a
+    lock or the count of a rate limit: give it room enough for them.
     """
 
     __slots__ = ("_breaker", "_clock", "_connections")
@@ -162,14 +163,7 @@ class MemcachedBackend(Backend):
 
     @override
     def delete_if_equals(self, key: str, value: bytes, /) -> bool:
-        for _ in range(_TURNS):  # as in set_if_absent
-            current = self._answer(protocol.get(key, b"v c"))
-            if current.code == _MISS or current.value != value:
-                return False
-            deleted = self._answer(protocol.delete(key, b"C%d" % current.cas))
-            if deleted.code != _CHANGED:
-                return deleted.code == _STORED
-        raise _kept_changing(key)
+        return self._if_equals(key, value, lambda cas: protocol.delete(key, b"C%d" % cas))
 
     @override
     def expire_if_equals(
@@ -179,16 +173,10 @@ class MemcachedBackend(Backend):
         ttl: float,
         /,
     ) -> bool:
-        for _ in range(_TURNS):  # as in set_if_absent
-            current = self._answer(protocol.get(key, b"v c"))
-            if current.code == _MISS or current.value != value:
-                return False
-            # memcached has no touch under a CAS token: the same value again, with the new TTL
-            flags = protocol.ttl_flag(ttl, self._clock())
-            stored = self._answer(protocol.store(key, value, b"%b C%d" % (flags, current.cas)))
-            if stored.code != _CHANGED:
-                return stored.code == _STORED
-        raise _kept_changing(key)
+        # memcached has no touch under a CAS token: the same value again, with the new TTL
+        return self._if_equals(
+            key, value, lambda cas: protocol.store(key, value, b"%b C%d" % (protocol.ttl_flag(ttl, self._clock()), cas))
+        )
 
     @override
     def ping(self) -> None:
@@ -197,6 +185,22 @@ class MemcachedBackend(Backend):
     @override
     def close(self) -> None:
         self._connections.close()
+
+    def _if_equals(
+        self,
+        key: str,
+        value: bytes,
+        command: Callable[[int], bytes],
+    ) -> bool:
+        """Send command of the CAS token of key while key holds value; whether memcached took it."""
+        for _ in range(_TURNS):  # as in set_if_absent
+            current = self._answer(protocol.get(key, b"v c"))
+            if current.code == _MISS or current.value != value:
+                return False
+            done = self._answer(command(current.cas))
+            if done.code != _CHANGED:
+                return done.code == _STORED
+        raise _kept_changing(key)
 
     def _answer(self, command: bytes) -> protocol.Answer:
         """Send one command; as _answers."""

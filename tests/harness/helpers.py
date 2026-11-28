@@ -9,7 +9,6 @@ import functools
 import importlib.util
 import inspect
 import pathlib
-import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final, overload, override
 
@@ -34,7 +33,7 @@ from pashe.backends import (
 )
 from pashe.codecs import JsonCodec
 from pashe.contrib.redis import AsyncRedisBackend, RedisBackend
-from pashe.errors import BackendError, OneProcessWarning
+from pashe.errors import BackendError
 from pashe.hooks import Hook
 from pashe.invalidation import InvalidationBus
 from pashe.locks import AsyncLock, Lock
@@ -272,15 +271,10 @@ class Side:
         return MemcachedBackend(host, port=port)
 
     def near(self) -> NearCacheBackend[MemoryBackend] | AsyncNearCacheBackend[AsyncMemoryBackend]:
-        """Return a near cache of the side, with a memory backend as the near store and another as the shared one.
-
-        The shared memory stands for a shared server here, so the OneProcessWarning it gives is left out.
-        """
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", OneProcessWarning)
-            if self.is_async:
-                return AsyncNearCacheBackend(AsyncMemoryBackend(), AsyncMemoryBackend())
-            return NearCacheBackend(MemoryBackend(), MemoryBackend())
+        """Return a near cache of the side, with a memory backend as the near store and another as the shared one."""
+        if self.is_async:
+            return AsyncNearCacheBackend(AsyncMemoryBackend(), AsyncMemoryBackend())
+        return NearCacheBackend(MemoryBackend(), MemoryBackend())
 
     def prefixed(self, backend: EitherBackend, prefix: str) -> PrefixedBackend | AsyncPrefixedBackend:
         """Return backend with every key under prefix. A backend of the other side is a TypeError."""

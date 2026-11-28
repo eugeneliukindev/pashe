@@ -24,7 +24,7 @@ codespell and tombi.
 | `just doctest` | the docstring examples |
 | `just bench` | the benchmarks in `benchmarks/`: the codecs, the compressors and a cache call over each backend, with Redis in Docker |
 | `just test-flaky` | the race and timing tests, 100 times each over xdist; run it after you change them |
-| `just test-lowest` | the tests with the lowest versions that the floors in `pyproject.toml` allow, on Python 3.12 over Redis 6.2 and memcached 1.6.13, in `.nox` |
+| `just test-lowest` | the tests with the lowest versions that the floors in `pyproject.toml` allow, on Python 3.12 over the oldest servers of `tests/harness/servers.toml`, in `.nox` |
 | `just test-highest` | the tests with the newest versions the upper bounds allow, past `uv.lock`, on Python 3.15, in `.nox` |
 | `just test-servers [server]` | the tests over Redis 6.2 and 7.4, Valkey 8 and 9, and Dragonfly, each with a cluster, or over one, such as `valkey-9`, in `.nox` |
 | `just test-free-threaded [python]` | the tests on Python without the GIL, 3.14t or 3.15t or both, with the locked versions, in `.nox`; orjson has no build there |
@@ -114,17 +114,19 @@ Arrange, Act and Assert, with a blank line between the three.
 | `tests/harness/helpers.py` | `Side`, the classes of each side, which the fixture `side` gives a test; fakes of a clock, a backend and a function, and calls of either side |
 | `tests/harness/stores.py` | the stores the tests run over, memory, SQLite, Redis and the cluster: a new store is one entry there |
 | `tests/harness/servers.py` | the plugin that starts a Redis and a cluster in Docker for each test process, when its first test asks for one |
-| `tests/harness/servers.toml` | the servers the tests run against, by name, with the images of each and its cluster, which CI runs one by one: a new server is one table there |
+| `tests/harness/servers.toml` | the servers the tests run against, Redis and memcached, by name: the default and the oldest of each family, and the image of each server, which CI runs one by one; a new server is one table there |
 | `tests/harness/cluster.sh` | the script that starts the nodes of the cluster in their container and joins them |
 
 The tests are the package `tests`, and they import their harness as `tests.harness`, which any
 IDE finds from the project root.
 
 A test that takes the `redis_url` or `redis_cluster_url` fixture, or runs over a store with a
-server, is marked `redis`. `-m "not redis"` leaves those out, as `just test-fast` does.
+server, is marked `redis`, and one that takes memcached is marked `memcached`. `-m "not redis and not memcached"` leaves
+those out, as `just test-fast` does.
 
 `pytest --redis-server valkey-9` runs the tests against another server from `servers.toml` and
-its cluster, as `just test-servers` does. The default is `redis-8`.
+its cluster, as `just test-servers` does. `pytest --memcached-server memcached-1.6.13` runs them
+against the oldest memcached. The defaults are the `default` of each family in `servers.toml`.
 
 ## Documentation
 

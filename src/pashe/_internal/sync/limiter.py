@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import math
 import time
+import warnings
 from typing import TYPE_CHECKING, Final, assert_never, final, override
 
 from pashe._internal.cache.keys import CallKeys, KeyPrefix, KeyTemplate, key_name, parse_key
@@ -14,7 +15,7 @@ from pashe._internal.limits import LIMIT, parse_cost
 from pashe._internal.sync.backends.backend import Backend
 from pashe._internal.sync.backends.prefixed import PrefixedBackend
 from pashe._internal.sync.threads import validate_sync
-from pashe.errors import BackendError, RateLimitedError, WrongTypeError
+from pashe.errors import BackendError, OneProcessWarning, RateLimitedError, WrongTypeError
 from pashe.hooks import Failure, Operation, RateLimitDecision
 from pashe.ratelimit import FixedWindow, Limit, RateLimitState, SlidingWindow
 
@@ -75,6 +76,12 @@ class RateLimiter:
         validate_type("backend", backend, Backend)
         validate_type("prefix", prefix, str)
         validate_type("clock", clock, FUNCTION)
+        if not backend.shared_by_processes:
+            msg = (
+                "the counts live in this process alone, so each worker lets the whole limit through: "
+                "use a shared backend, or silence OneProcessWarning if the service runs one process"
+            )
+            warnings.warn(msg, OneProcessWarning, stacklevel=2)
 
         self._backend = PrefixedBackend(backend, prefix)
         self._hooks = Hooks(hooks)

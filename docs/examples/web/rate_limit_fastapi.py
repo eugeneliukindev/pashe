@@ -1,14 +1,17 @@
+import tempfile
 from collections.abc import MutableMapping
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
 
 from pashe import AsyncRateLimiter
 from pashe.asgi import RateLimitMiddleware
-from pashe.backends import AsyncMemoryBackend
+from pashe.backends import AsyncSQLiteBackend
 from pashe.ratelimit import SlidingWindow
 
-limiter = AsyncRateLimiter(AsyncMemoryBackend())
+backend = AsyncSQLiteBackend(Path(tempfile.gettempdir()) / "my-app-cache.db")  # every process of the machine
+limiter = AsyncRateLimiter(backend)
 
 
 def client(scope: MutableMapping[str, Any]) -> str:

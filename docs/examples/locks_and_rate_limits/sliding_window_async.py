@@ -1,9 +1,13 @@
 # --8<-- [start:show]
+import tempfile
+from pathlib import Path
+
 from pashe import AsyncRateLimiter
-from pashe.backends import AsyncMemoryBackend
+from pashe.backends import AsyncSQLiteBackend
 from pashe.ratelimit import SlidingWindow
 
-limiter = AsyncRateLimiter(AsyncMemoryBackend())
+backend = AsyncSQLiteBackend(Path(tempfile.gettempdir()) / "my-app-cache.db")  # every process of the machine
+limiter = AsyncRateLimiter(backend)
 
 api = SlidingWindow(calls=100, per=60)  # about 100 calls in any 60 seconds
 same = SlidingWindow.per_minute(100)  # also per_second and per_hour

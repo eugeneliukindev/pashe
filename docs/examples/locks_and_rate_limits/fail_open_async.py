@@ -1,9 +1,13 @@
 # --8<-- [start:show]
+import tempfile
+from pathlib import Path
+
 from pashe import AsyncRateLimiter
-from pashe.backends import AsyncMemoryBackend
+from pashe.backends import AsyncSQLiteBackend
 from pashe.ratelimit import FixedWindow
 
-limiter = AsyncRateLimiter(AsyncMemoryBackend())
+backend = AsyncSQLiteBackend(Path(tempfile.gettempdir()) / "my-app-cache.db")  # every process of the machine
+limiter = AsyncRateLimiter(backend)
 logins = FixedWindow(calls=5, per=900, ban_for=3600)  # 5 failures in 15 minutes: an hour of ban
 
 

@@ -1,6 +1,8 @@
 # ruff: noqa: ARG001 - a handler of Starlette takes the request whether it reads it or not
 # --8<-- [start:show]
+import tempfile
 from collections.abc import MutableMapping
+from pathlib import Path
 from typing import Any
 
 from starlette.applications import Starlette
@@ -11,10 +13,11 @@ from starlette.routing import Route
 
 from pashe import AsyncRateLimiter
 from pashe.asgi import RateLimitMiddleware
-from pashe.backends import AsyncMemoryBackend
+from pashe.backends import AsyncSQLiteBackend
 from pashe.ratelimit import FixedWindow
 
-limiter = AsyncRateLimiter(AsyncMemoryBackend())
+backend = AsyncSQLiteBackend(Path(tempfile.gettempdir()) / "my-app-cache.db")  # every process of the machine
+limiter = AsyncRateLimiter(backend)
 
 
 def client(scope: MutableMapping[str, Any]) -> str:

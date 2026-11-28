@@ -1,12 +1,15 @@
 # ruff: noqa: F841 - the page shows how to read what is left of the limit
 # --8<-- [start:show]
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 
 from pashe import AsyncRateLimiter
-from pashe.backends import AsyncMemoryBackend
+from pashe.backends import AsyncSQLiteBackend
 from pashe.ratelimit import SlidingWindow
 
-limiter = AsyncRateLimiter(AsyncMemoryBackend())
+backend = AsyncSQLiteBackend(Path(tempfile.gettempdir()) / "my-app-cache.db")  # every process of the machine
+limiter = AsyncRateLimiter(backend)
 ip = "203.0.113.7"  # the address of the client
 
 

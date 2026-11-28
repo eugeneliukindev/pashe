@@ -11,7 +11,9 @@ cache, blue means the call reaches the source, and a box is a process or Redis, 
 ## The shop
 
 `db` is the connection to the database of the shop: `sqlite3` on the sync side, `aiosqlite` on
-the async one. `partner` and `payments` are `httpx` clients of the APIs the shop calls.
+the async one. `partner` and `payments` are `httpx` clients of the APIs the shop calls. The cache
+keeps its entries in an SQLite file, which every worker on the machine shares, so a lock or a rate
+limit holds across them. Step 9 moves the entries to Redis, for many machines.
 
 === "Sync"
 

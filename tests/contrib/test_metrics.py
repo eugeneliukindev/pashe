@@ -5,7 +5,6 @@ from __future__ import annotations
 import contextlib
 from typing import TYPE_CHECKING
 
-import pytest
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import HistogramDataPoint, InMemoryMetricReader, NumberDataPoint
 from opentelemetry.sdk.trace import TracerProvider
@@ -66,7 +65,6 @@ def _scenario(hook: Hook) -> None:
     breaker.on_success()
 
 
-@pytest.mark.filterwarnings("ignore::pashe.errors.OneProcessWarning")  # a memory backend stands for the shared server
 def test_otel_metrics_count_calls_loads_and_errors() -> None:
     reader = InMemoryMetricReader()
     meter = MeterProvider(metric_readers=[reader]).get_meter("test")
@@ -96,7 +94,6 @@ def test_otel_metrics_count_calls_loads_and_errors() -> None:
     }
 
 
-@pytest.mark.filterwarnings("ignore::pashe.errors.OneProcessWarning")  # a memory backend stands for the shared server
 def test_prometheus_metrics_count_calls_loads_and_errors() -> None:
     registry = CollectorRegistry()
 

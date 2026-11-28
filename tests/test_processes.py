@@ -157,9 +157,6 @@ async def test_a_batch_loads_only_the_missing_items(new_process_cache: NewCache)
 
 
 @pytest.mark.parametrize("side", ["async"], indirect=True)  # the processes of this test are tasks of one event loop
-@pytest.mark.filterwarnings(
-    "ignore::pashe.errors.OneProcessWarning"
-)  # lock_for over memory, on purpose: the processes are its callers
 async def test_lock_for_loads_once_for_all_processes(new_process_cache: NewCache) -> None:
     loads = 0
 

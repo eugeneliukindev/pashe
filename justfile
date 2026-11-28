@@ -185,7 +185,7 @@ bench *args='':
     uv run pytest -n 0 --no-cov -p no:randomly --benchmark-enable --benchmark-columns=median,iqr,rounds \
         --benchmark-sort=name benchmarks {{ args }}
 
-[doc('Run the tests with the lowest versions the dependencies allow, on Python 3.12 over Redis 6.2 and memcached 1.6.13, in .nox: .venv and uv.lock stay')]
+[doc('Run the tests with the lowest versions the dependencies allow, on Python 3.12 over the oldest servers of tests/harness/servers.toml, in .nox: .venv and uv.lock stay')]
 [group('testing')]
 test-lowest *args='':
     uv run nox -s lowest -- {{ args }}

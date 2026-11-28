@@ -1,8 +1,12 @@
 # --8<-- [start:show]
-from pashe import AsyncLocks
-from pashe.backends import AsyncMemoryBackend
+import tempfile
+from pathlib import Path
 
-locks = AsyncLocks(AsyncMemoryBackend())
+from pashe import AsyncLocks
+from pashe.backends import AsyncSQLiteBackend
+
+backend = AsyncSQLiteBackend(Path(tempfile.gettempdir()) / "my-app-cache.db")  # every process of the machine
+locks = AsyncLocks(backend)
 
 
 async def build_report() -> None: ...  # the work of yours that one process at a time may do

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import warnings
 from typing import TYPE_CHECKING, final, override
 
 from pashe._internal.async_.backends.backend import AsyncBackend
@@ -12,6 +13,7 @@ from pashe._internal.cache.keys import CallKeys, KeyPrefix, KeyTemplate, key_nam
 from pashe._internal.checks import parse_secret, validate_type
 from pashe._internal.hooks import Hooks
 from pashe._internal.locks.lock import lock_slots, parse_lock_holders, parse_lock_timeout, parse_lock_ttl
+from pashe.errors import OneProcessWarning
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -61,6 +63,12 @@ class AsyncLocks:
         """
         validate_type("backend", backend, AsyncBackend)
         validate_type("prefix", prefix, str)
+        if not backend.shared_by_processes:
+            msg = (
+                "the locks live in this process alone, so a lock one worker holds doesn't hold off another: "
+                "use a shared backend, or silence OneProcessWarning if the service runs one process"
+            )
+            warnings.warn(msg, OneProcessWarning, stacklevel=2)
 
         self._backend = AsyncPrefixedBackend(backend, prefix + KeyPrefix.LOCK)
         self._hooks = Hooks(hooks)

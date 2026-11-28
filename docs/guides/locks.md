@@ -27,13 +27,13 @@ Say only one process at a time should build a report. Wrap that block in
 
 === "Sync"
 
-    ```python hl_lines="10"
+    ```python hl_lines="14"
     --8<-- "locks_and_rate_limits/lock_sync.py:show"
     ```
 
 === "Async"
 
-    ```python hl_lines="11"
+    ```python hl_lines="15"
     --8<-- "locks_and_rate_limits/lock_async.py:show"
     ```
 
@@ -76,13 +76,13 @@ arguments, the same as for `@cache`. Without a key, all calls of the function sh
 
 === "Sync"
 
-    ```python hl_lines="7"
+    ```python hl_lines="11"
     --8<-- "locks_and_rate_limits/locked_sync.py:show"
     ```
 
 === "Async"
 
-    ```python hl_lines="7"
+    ```python hl_lines="11"
     --8<-- "locks_and_rate_limits/locked_async.py:show"
     ```
 
@@ -101,13 +101,13 @@ If another process is already building the report, there's no need to wait for i
 
 === "Sync"
 
-    ```python hl_lines="10"
+    ```python hl_lines="14"
     --8<-- "locks_and_rate_limits/try_lock_sync.py:show"
     ```
 
 === "Async"
 
-    ```python hl_lines="11"
+    ```python hl_lines="15"
     --8<-- "locks_and_rate_limits/try_lock_async.py:show"
     ```
 
@@ -121,13 +121,13 @@ By default, entering a lock waits as long as someone else holds it, with no limi
 
 === "Sync"
 
-    ```python hl_lines="13"
+    ```python hl_lines="17"
     --8<-- "locks_and_rate_limits/timeout_sync.py:show"
     ```
 
 === "Async"
 
-    ```python hl_lines="13"
+    ```python hl_lines="17"
     --8<-- "locks_and_rate_limits/timeout_async.py:show"
     ```
 
@@ -139,13 +139,13 @@ waits while three hold it.
 
 === "Sync"
 
-    ```python hl_lines="7 12"
+    ```python hl_lines="11 16"
     --8<-- "locks_and_rate_limits/holders_sync.py:show"
     ```
 
 === "Async"
 
-    ```python hl_lines="7 12"
+    ```python hl_lines="11 16"
     --8<-- "locks_and_rate_limits/holders_async.py:show"
     ```
 

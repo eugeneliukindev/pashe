@@ -46,8 +46,6 @@ if TYPE_CHECKING:
     from pashe.hooks import Failure
     from pashe.invalidation import InvalidationHandler
 
-# A memory backend stands for the shared server here, as two near caches over one stand for two processes
-pytestmark = pytest.mark.filterwarnings("ignore::pashe.errors.OneProcessWarning")
 
 _WAIT = 5.0  # seconds a message may take through Redis
 # the async RedisCluster of redis-py has pub/sub from version 8, which the lowest versions run without

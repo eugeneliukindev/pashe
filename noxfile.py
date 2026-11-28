@@ -7,9 +7,15 @@ touches .venv or uv.lock: nox makes each environment under .nox and installs int
 for all of its runs; arguments after ``--`` go to pytest. CI runs every session, each as a job.
 """
 
+import sys
+from pathlib import Path
 from typing import Final, Literal
 
 import nox
+
+# nox puts the project on no path, and the catalog of the servers lives in the harness of the tests
+sys.path.insert(0, str(Path(__file__).parent))
+from tests.harness.catalog import MEMCACHED, REDIS
 
 nox.needs_version = "==2026.10.20"  # the version pyproject.toml pins: another one is refused at once
 nox.options.default_venv_backend = "uv"
@@ -23,11 +29,6 @@ _PYPROJECT: Final = nox.project.load_toml("pyproject.toml")
 _PYTHONS: Final = nox.project.python_versions(_PYPROJECT)  # the classifiers: every Python pashe supports
 _TESTS: Final = ("tests", "docs/examples")
 _PROCESSES: Final = "4"  # as processes in the justfile
-
-_TEST_SERVERS: Final = nox.project.load_toml("tests/harness/servers.toml")  # what --redis-server of pytest takes
-_OTHER_SERVERS: Final = [
-    name for name in _TEST_SERVERS["servers"] if name != _TEST_SERVERS["default"]
-]  # the default runs in every other job
 
 
 def _test(
@@ -46,7 +47,7 @@ def _test(
 @nox.session(python=_PYTHONS[0])
 def lowest(session: nox.Session) -> None:
     """Run the tests with the lowest versions the floors of the dependencies allow, over the oldest servers."""
-    _test(session, "lowest-direct", "--redis-server", "redis-6.2", "--memcached-image", "memcached:1.6.13-alpine")
+    _test(session, "lowest-direct", "--redis-server", REDIS.lowest, "--memcached-server", MEMCACHED.lowest)
 
 
 @nox.session(python=_PYTHONS[-1])
@@ -56,7 +57,7 @@ def highest(session: nox.Session) -> None:
 
 
 @nox.session(python=_PYTHONS[-1])
-@nox.parametrize("server", _OTHER_SERVERS, ids=_OTHER_SERVERS)
+@nox.parametrize("server", REDIS.others, ids=REDIS.others)
 def servers(session: nox.Session, server: str) -> None:
     """Run the tests over a Redis, Valkey or Dragonfly server and its cluster, with the locked versions."""
     _sync(session)

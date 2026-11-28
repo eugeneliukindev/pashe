@@ -31,13 +31,13 @@ Its [`key`][pashe.RateLimiter.limited(key)] is a template over the arguments, th
 
 === "Sync"
 
-    ```python hl_lines="16 22"
+    ```python hl_lines="19 25"
     --8<-- "locks_and_rate_limits/rate_limit_sync.py:show"
     ```
 
 === "Async"
 
-    ```python hl_lines="16 22"
+    ```python hl_lines="19 25"
     --8<-- "locks_and_rate_limits/rate_limit_async.py:show"
     ```
 
@@ -64,13 +64,13 @@ With [`SlidingWindow`][pashe.ratelimit.SlidingWindow], about `calls` calls pass 
 
 === "Sync"
 
-    ```python hl_lines="7"
+    ```python hl_lines="11"
     --8<-- "locks_and_rate_limits/sliding_window_sync.py:show"
     ```
 
 === "Async"
 
-    ```python hl_lines="7"
+    ```python hl_lines="11"
     --8<-- "locks_and_rate_limits/sliding_window_async.py:show"
     ```
 
@@ -86,13 +86,13 @@ window.
 
 === "Sync"
 
-    ```python hl_lines="7"
+    ```python hl_lines="11"
     --8<-- "locks_and_rate_limits/fixed_window_sync.py:show"
     ```
 
 === "Async"
 
-    ```python hl_lines="7"
+    ```python hl_lines="11"
     --8<-- "locks_and_rate_limits/fixed_window_async.py:show"
     ```
 
@@ -109,13 +109,13 @@ Some calls cost your source more than others, such as an exact search. Give such
 
 === "Sync"
 
-    ```python hl_lines="10"
+    ```python hl_lines="14"
     --8<-- "locks_and_rate_limits/cost_sync.py:show"
     ```
 
 === "Async"
 
-    ```python hl_lines="10"
+    ```python hl_lines="14"
     --8<-- "locks_and_rate_limits/cost_async.py:show"
     ```
 
@@ -130,13 +130,13 @@ closed. Turn [`fail_open`][pashe.RateLimiter.count(fail_open)] off, and a failin
 
 === "Sync"
 
-    ```python hl_lines="10"
+    ```python hl_lines="14"
     --8<-- "locks_and_rate_limits/fail_open_sync.py:show"
     ```
 
 === "Async"
 
-    ```python hl_lines="10"
+    ```python hl_lines="14"
     --8<-- "locks_and_rate_limits/fail_open_async.py:show"
     ```
 
@@ -170,7 +170,7 @@ response in your API's format.
 
 === "Starlette"
 
-    ```python hl_lines="18 19 20 29"
+    ```python hl_lines="21 22 23 32"
     --8<-- "web/rate_limit_starlette.py:show"
     ```
 
@@ -196,7 +196,7 @@ Too Many Requests
 
 === "Litestar"
 
-    ```python hl_lines="20 21 29"
+    ```python hl_lines="23 24 32"
     --8<-- "web/rate_limit_litestar.py:show"
     ```
 
