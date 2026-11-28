@@ -290,7 +290,7 @@ class AsyncCache:
         stampede: Stampede = Stampede(),
         store: Store = Store(),
     ) -> AsyncCachedBatchFunctionDecorator:
-        """Cache the results of a batch function ``f(items: list[K]) -> dict[K, V]`` per item.
+        """Cache the results of a batch function ``f(items: list[K]) -> dict[K, R]`` per item.
 
         A call reads every item in one backend call and calls the function once with the missing
         ones; items it leaves out are absent from the result and not stored.
@@ -337,7 +337,7 @@ class AsyncCache:
         key_template = parse_key(key, key_secret=self._key_secret)
         tag_templates = parse_tags(tags, key_secret=self._key_secret)
 
-        def decorator[K: Hashable, V](function: AsyncBatchFunction[K, V], /) -> AsyncCachedBatchFunction[K, V]:
+        def decorator[K: Hashable, R](function: AsyncBatchFunction[K, R], /) -> AsyncCachedBatchFunction[K, R]:
             validate_async(function, "cache", self)
             value_type = batch_value_type(function)
             self._codec.validate(value_type)  # as for a cached function, of the type of an item
@@ -346,7 +346,7 @@ class AsyncCache:
                 policy, value_type, codec=self._codec, compressor=self._compressor, hooks=self._hooks
             )
             keys = ItemKeys(function, key_template, tag_templates)
-            batch_cache = AsyncBatchCache[K, V](
+            batch_cache = AsyncBatchCache[K, R](
                 policy,
                 storage=self._storage,
                 entry_format=entry_format,

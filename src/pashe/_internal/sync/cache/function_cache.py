@@ -22,11 +22,11 @@ if TYPE_CHECKING:
     from pashe._internal.sync.threads import BackgroundTasks
     from pashe.hooks import Hook
 
-type Load[V] = Callable[[], V]  # a call of the cached function with its arguments, run on a miss
+type Load[R] = Callable[[], R]  # a call of the cached function with its arguments, run on a miss
 
 
 @final
-class FunctionCache[V]:
+class FunctionCache[R]:
     # The cache of one function: answers from what its storage finds, or loads and keeps. Its
     # policy decides, its format encodes, and it tells the hooks of what it works around.
     __slots__ = (
@@ -73,8 +73,8 @@ class FunctionCache[V]:
         self,
         key: str,
         tags: tuple[str, ...],
-        load: Load[V],
-    ) -> V:
+        load: Load[R],
+    ) -> R:
         call = Call(key, tags, self._changes, Stopwatch())
         try:
             if in_no_cache():  # it shares no answer: another call may answer from the backend
@@ -97,8 +97,8 @@ class FunctionCache[V]:
         self,
         key: str,
         tags: tuple[str, ...],
-        load: Load[V],
-    ) -> V:
+        load: Load[R],
+    ) -> R:
         call = Call(key, tags, self._changes, Stopwatch())
         lookup = self._storage.lookup(key, tags)
         result = self._run(call, load, has_stale_answer=False)
@@ -107,7 +107,7 @@ class FunctionCache[V]:
             self._storage.replace(lookup, stored)
         return result
 
-    def get(self, key: str, tags: tuple[str, ...]) -> V | None:
+    def get(self, key: str, tags: tuple[str, ...]) -> R | None:
         """The fresh result alone, loading nothing: a failing backend raises, as there is no load to answer with."""
         if in_no_cache():
             self._reporter.report(key, CacheStatus.MISS)
@@ -122,7 +122,7 @@ class FunctionCache[V]:
         self,
         key: str,
         tags: tuple[str, ...],
-        result: V,
+        result: R,
     ) -> None:
         self._changes += 1  # before the write: a load that ends after it must not overwrite it
         self._storage.set(key, tags, self._entry_format.encode(result, key=key))
@@ -131,13 +131,13 @@ class FunctionCache[V]:
         self._changes += 1  # before the delete, as in set
         return self._storage.delete(key)
 
-    def _result(self, key: str, answer: Answer) -> V:
+    def _result(self, key: str, answer: Answer) -> R:
         self._reporter.report(key, answer.status, load_seconds=answer.load_seconds, stale_at=answer.stale_at)
         if answer.status is CacheStatus.NOT_FOUND:
             raise NotFoundError(key)  # kept by an earlier call, as Negative says
         return answer.result  # type: ignore[return-value]  # decoded as the return type
 
-    def _serve(self, call: Call, load: Load[V]) -> Answer:
+    def _serve(self, call: Call, load: Load[R]) -> Answer:
         lookup = self._storage.lookup(call.key, call.tags)
         stored = self._entry_format.decode(lookup)
         answer = self._policy.answer_for(stored, hit=CacheStatus.FALLBACK if lookup.from_fallback else CacheStatus.HIT)
@@ -158,10 +158,10 @@ class FunctionCache[V]:
     def _run(
         self,
         call: Call,
-        load: Load[V],
+        load: Load[R],
         *,
         has_stale_answer: bool,
-    ) -> V:
+    ) -> R:
         """A stale result that can answer skips a full limit of loads."""
         with self._load_limit.slot(wait=not has_stale_answer), call.stopwatch:
             return load()
@@ -170,7 +170,7 @@ class FunctionCache[V]:
         self,
         call: Call,
         lookup: Lookup,
-        load: Load[V],
+        load: Load[R],
         *,
         has_stale_answer: bool = False,
     ) -> Answer:
@@ -204,7 +204,7 @@ class FunctionCache[V]:
         self,
         call: Call,
         lookup: Lookup,
-        load: Load[V],
+        load: Load[R],
     ) -> Answer:
         try:
             lease = self._load_locks.take_load(call.key, self._policy.stampede.lock_for)
@@ -232,7 +232,7 @@ class FunctionCache[V]:
         self,
         call: Call,
         lookup: Lookup,
-        load: Load[V],
+        load: Load[R],
         *,
         stored: Stored,
     ) -> Answer:

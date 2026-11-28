@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 class AsyncCachedFunctionDecorator(Protocol):
     """What ``@cache(...)`` returns: a decorator that caches the results of a function."""
 
-    def __call__[**Q, T](self, function: Callable[Q, Awaitable[T]], /) -> AsyncCachedFunction[Q, T]:
+    def __call__[**P, R](self, function: Callable[P, Awaitable[R]], /) -> AsyncCachedFunction[P, R]:
         """Cache the results of function, of the side of the cache."""
         ...
 
@@ -21,7 +21,7 @@ class AsyncCachedFunctionDecorator(Protocol):
 class AsyncCachedValueDecorator(Protocol):
     """What ``@cache.value(...)`` returns: a decorator that makes a value set by hand of a function."""
 
-    def __call__[**Q, T](self, function: Callable[Q, Awaitable[T]], /) -> AsyncCachedValue[Q, T]:
+    def __call__[**P, R](self, function: Callable[P, Awaitable[R]], /) -> AsyncCachedValue[P, R]:
         """Make function a value: its signature gives the key, its body never runs."""
         ...
 

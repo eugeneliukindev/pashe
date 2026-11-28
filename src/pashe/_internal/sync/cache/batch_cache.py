@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pashe._internal.sync.cache.storage import Storage
     from pashe.hooks import Hook
 
-type BatchFunction[K: Hashable, V] = Callable[[list[K]], Mapping[K, V]]
+type BatchFunction[K: Hashable, R] = Callable[[list[K]], Mapping[K, R]]
 
 
 @final
@@ -38,7 +38,7 @@ class _Pending[K: Hashable]:
 
 
 @final
-class BatchCache[K: Hashable, V]:
+class BatchCache[K: Hashable, R]:
     # The cache of one batch function: reads every item at once, loads the missing ones in one call.
     __slots__ = ("_entry_format", "_hooks", "_load_limit", "_policy", "_reporter", "_storage")
 
@@ -60,8 +60,8 @@ class BatchCache[K: Hashable, V]:
         self._load_limit = LoadLimit(policy.stampede.max_loads)
 
     def get_or_load_many(  # noqa: WPS231 - the read of every item, then one load of the missing ones
-        self, keys_and_tags: Mapping[K, KeyAndTags], load: BatchFunction[K, V]
-    ) -> dict[K, V]:
+        self, keys_and_tags: Mapping[K, KeyAndTags], load: BatchFunction[K, R]
+    ) -> dict[K, R]:
         lookups = self._storage.lookup_many(list(keys_and_tags.values()))
         no_cache = in_no_cache()  # no entry answers: every item loads, and is kept for the calls after it
         batch: list[_Pending[K]] = []
@@ -88,7 +88,7 @@ class BatchCache[K: Hashable, V]:
     def _load(  # noqa: WPS231 - one call of the function, then what it gave each item
         self,
         missing: list[_Pending[K]],
-        load: BatchFunction[K, V],
+        load: BatchFunction[K, R],
     ) -> list[tuple[Lookup, Stored]]:
         """Load the missing items in one call and answer them with what it returned.
 

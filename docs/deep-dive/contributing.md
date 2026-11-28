@@ -83,6 +83,23 @@ Docstrings and examples cover what pashe users can reach: the public modules, th
 `__all__` and the methods of those classes. Inside `_internal`, a reason the code can't show goes
 into a comment.
 
+## Type parameters
+
+One letter means one thing everywhere, so you can read a signature without looking up what its
+letters stand for. Pick the letter for what the type means, not for where it appears:
+
+| Letter | What it is | Such as |
+| --- | --- | --- |
+| `**P` | the parameters of the decorated function | `CachedFunction[**P, R]` |
+| `R` | what the function returns, a result; in a batch, the result of one item | `CachedFunction[**P, R]`, `CachedBatchFunction[K, R]` |
+| `K` | an item of a batch, a key of the dict it returns; always `K: Hashable` | `CachedBatchFunction[K, R]` |
+| `B` | a backend, bound by `Backend` or `AsyncBackend` | `Fallback[B]`, `NearCacheBackend[B]`, `InvalidationBus[B]` |
+| `S`, `**Q` | only in `__get__`: the instance a method binds to, and the parameters left after it, as `P` is the class's | `__get__[S, **Q]` |
+| `T` | any type the code passes along and knows nothing of | `Codec.decode[T]` |
+
+There's no `V`: "value" is what `@cache.value` keeps, as the [glossary](../glossary.md) says. A new
+type parameter takes a letter from this table, or adds a row to it first.
+
 ## Tests
 
 The tests drive the public API and check what a user sees, not how pashe does it. Each test is

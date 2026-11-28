@@ -20,11 +20,11 @@ if TYPE_CHECKING:
     from pashe._internal.cache.policy import Policy
     from pashe.hooks import Hook
 
-type AsyncLoad[V] = Callable[[], Awaitable[V]]  # a call of the cached function with its arguments, run on a miss
+type AsyncLoad[R] = Callable[[], Awaitable[R]]  # a call of the cached function with its arguments, run on a miss
 
 
 @final
-class AsyncFunctionCache[V]:
+class AsyncFunctionCache[R]:
     # The cache of one function: answers from what its storage finds, or loads and keeps. Its
     # policy decides, its format encodes, and it tells the hooks of what it works around.
     __slots__ = (
@@ -71,8 +71,8 @@ class AsyncFunctionCache[V]:
         self,
         key: str,
         tags: tuple[str, ...],
-        load: AsyncLoad[V],
-    ) -> V:
+        load: AsyncLoad[R],
+    ) -> R:
         call = Call(key, tags, self._changes, Stopwatch())
         try:
             if in_no_cache():  # it shares no answer: another call may answer from the backend
@@ -95,8 +95,8 @@ class AsyncFunctionCache[V]:
         self,
         key: str,
         tags: tuple[str, ...],
-        load: AsyncLoad[V],
-    ) -> V:
+        load: AsyncLoad[R],
+    ) -> R:
         call = Call(key, tags, self._changes, Stopwatch())
         lookup = await self._storage.lookup(key, tags)
         result = await self._run(call, load, has_stale_answer=False)
@@ -105,7 +105,7 @@ class AsyncFunctionCache[V]:
             await self._storage.replace(lookup, stored)
         return result
 
-    async def get(self, key: str, tags: tuple[str, ...]) -> V | None:
+    async def get(self, key: str, tags: tuple[str, ...]) -> R | None:
         """The fresh result alone, loading nothing: a failing backend raises, as there is no load to answer with."""
         if in_no_cache():
             self._reporter.report(key, CacheStatus.MISS)
@@ -120,7 +120,7 @@ class AsyncFunctionCache[V]:
         self,
         key: str,
         tags: tuple[str, ...],
-        result: V,
+        result: R,
     ) -> None:
         self._changes += 1  # before the write: a load that ends after it must not overwrite it
         await self._storage.set(key, tags, self._entry_format.encode(result, key=key))
@@ -129,13 +129,13 @@ class AsyncFunctionCache[V]:
         self._changes += 1  # before the delete, as in set
         return await self._storage.delete(key)
 
-    def _result(self, key: str, answer: Answer) -> V:
+    def _result(self, key: str, answer: Answer) -> R:
         self._reporter.report(key, answer.status, load_seconds=answer.load_seconds, stale_at=answer.stale_at)
         if answer.status is CacheStatus.NOT_FOUND:
             raise NotFoundError(key)  # kept by an earlier call, as Negative says
         return answer.result  # type: ignore[return-value]  # decoded as the return type
 
-    async def _serve(self, call: Call, load: AsyncLoad[V]) -> Answer:
+    async def _serve(self, call: Call, load: AsyncLoad[R]) -> Answer:
         lookup = await self._storage.lookup(call.key, call.tags)
         stored = self._entry_format.decode(lookup)
         answer = self._policy.answer_for(stored, hit=CacheStatus.FALLBACK if lookup.from_fallback else CacheStatus.HIT)
@@ -156,10 +156,10 @@ class AsyncFunctionCache[V]:
     async def _run(
         self,
         call: Call,
-        load: AsyncLoad[V],
+        load: AsyncLoad[R],
         *,
         has_stale_answer: bool,
-    ) -> V:
+    ) -> R:
         """A stale result that can answer skips a full limit of loads."""
         async with self._load_limit.slot(wait=not has_stale_answer):
             with call.stopwatch:
@@ -169,7 +169,7 @@ class AsyncFunctionCache[V]:
         self,
         call: Call,
         lookup: Lookup,
-        load: AsyncLoad[V],
+        load: AsyncLoad[R],
         *,
         has_stale_answer: bool = False,
     ) -> Answer:
@@ -203,7 +203,7 @@ class AsyncFunctionCache[V]:
         self,
         call: Call,
         lookup: Lookup,
-        load: AsyncLoad[V],
+        load: AsyncLoad[R],
     ) -> Answer:
         try:
             lease = await self._load_locks.take_load(call.key, self._policy.stampede.lock_for)
@@ -231,7 +231,7 @@ class AsyncFunctionCache[V]:
         self,
         call: Call,
         lookup: Lookup,
-        load: AsyncLoad[V],
+        load: AsyncLoad[R],
         *,
         stored: Stored,
     ) -> Answer:

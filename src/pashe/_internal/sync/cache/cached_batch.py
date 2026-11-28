@@ -15,13 +15,13 @@ if TYPE_CHECKING:
 class CachedBatchFunctionDecorator(Protocol):
     """What ``@cache.batch(...)`` returns: a decorator that caches every item of a batch function on its own."""
 
-    def __call__[K: Hashable, V](self, function: BatchFunction[K, V], /) -> CachedBatchFunction[K, V]:
+    def __call__[K: Hashable, R](self, function: BatchFunction[K, R], /) -> CachedBatchFunction[K, R]:
         """Cache the items function loads: it takes a list of items and returns a dict of those it found."""
         ...
 
 
 @final
-class CachedBatchFunction[K: Hashable, V]:
+class CachedBatchFunction[K: Hashable, R]:
     """A function of a batch, ``f(items) -> {item: value}``, whose results are cached per item.
 
     A call reads every item in one backend call and calls the function once with the missing ones.
@@ -41,9 +41,9 @@ class CachedBatchFunction[K: Hashable, V]:
 
     def __init__(
         self,
-        function: BatchFunction[K, V],
+        function: BatchFunction[K, R],
         keys: ItemKeys,
-        batch_cache: BatchCache[K, V],
+        batch_cache: BatchCache[K, R],
     ) -> None:
         """Made by the batch decorator of a cache, not by hand.
 
@@ -58,7 +58,7 @@ class CachedBatchFunction[K: Hashable, V]:
 
         functools.update_wrapper(self, function)
 
-    def __call__(self, items: Iterable[K], /) -> dict[K, V]:
+    def __call__(self, items: Iterable[K], /) -> dict[K, R]:
         """Return the results of items: cached, or loaded in one call of the function.
 
         Args:

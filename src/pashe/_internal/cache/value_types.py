@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 _SHAPE_BYTES: Final = 8
-_MAPPING_ARGUMENTS: Final = 2  # dict[K, V]
+_MAPPING_ARGUMENTS: Final = 2  # dict[K, R]
 
 
 def return_type(function: Callable[..., object]) -> object:
@@ -31,14 +31,14 @@ def return_type(function: Callable[..., object]) -> object:
 
 
 def batch_value_type(function: Callable[..., object]) -> object:
-    """A batch stores every value of the dict it returns on its own, so the codec rebuilds V of dict[K, V]."""
+    """A batch stores each result of the dict it returns on its own, so the codec rebuilds R of dict[K, R]."""
     form = return_type(function)
     if form is Any:
         return Any
 
     origin = get_origin(form) or form
     if not (isinstance(origin, type) and issubclass(origin, Mapping)):
-        msg = f"{_name(function)} must return dict[K, V], not {_name(form)}"
+        msg = f"{_name(function)} must return dict[K, R], not {_name(form)}"
         raise InvalidOptionsError(msg)
 
     arguments = get_args(form)

@@ -13,13 +13,13 @@ if TYPE_CHECKING:
 class AsyncCachedBatchFunctionDecorator(Protocol):
     """What ``@cache.batch(...)`` returns: a decorator that caches every item of a batch function on its own."""
 
-    def __call__[K: Hashable, V](self, function: AsyncBatchFunction[K, V], /) -> AsyncCachedBatchFunction[K, V]:
+    def __call__[K: Hashable, R](self, function: AsyncBatchFunction[K, R], /) -> AsyncCachedBatchFunction[K, R]:
         """Cache the items function loads: it takes a list of items and returns a dict of those it found."""
         ...
 
 
 @final
-class AsyncCachedBatchFunction[K: Hashable, V]:
+class AsyncCachedBatchFunction[K: Hashable, R]:
     """A function of a batch, ``f(items) -> {item: value}``, whose results are cached per item.
 
     A call reads every item in one backend call and calls the function once with the missing ones.
@@ -39,9 +39,9 @@ class AsyncCachedBatchFunction[K: Hashable, V]:
 
     def __init__(
         self,
-        function: AsyncBatchFunction[K, V],
+        function: AsyncBatchFunction[K, R],
         keys: ItemKeys,
-        batch_cache: AsyncBatchCache[K, V],
+        batch_cache: AsyncBatchCache[K, R],
     ) -> None:
         """Made by the batch decorator of a cache, not by hand.
 
@@ -56,7 +56,7 @@ class AsyncCachedBatchFunction[K: Hashable, V]:
 
         functools.update_wrapper(self, function)
 
-    async def __call__(self, items: Iterable[K], /) -> dict[K, V]:
+    async def __call__(self, items: Iterable[K], /) -> dict[K, R]:
         """Return the results of items: cached, or loaded in one call of the function.
 
         Args:

@@ -1393,7 +1393,7 @@ def test_a_batch_that_does_not_return_a_dict_is_refused_at_the_decorator() -> No
     def by_ids(ids: list[int]) -> list[int]:
         return ids
 
-    with pytest.raises(InvalidOptionsError, match=r"by_ids must return dict\[K, V\], not list\[int\]"):
+    with pytest.raises(InvalidOptionsError, match=r"by_ids must return dict\[K, R\], not list\[int\]"):
         Cache(MemoryBackend()).batch(ttl=60)(by_ids)  # type: ignore[arg-type]  # the misfit it tests
 
 

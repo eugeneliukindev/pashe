@@ -45,7 +45,7 @@ def listen_failure(error: Exception) -> Failure:
     return Failure(Operation.LISTEN, "", error)
 
 
-def listening_connection[C](connection_class: type[C], settings: Mapping[str, object]) -> C:
+def listening_connection[T](connection_class: type[T], settings: Mapping[str, object]) -> T:
     kept = {name: value for name, value in settings.items() if not name.startswith(_RESP3_ONLY)}
     return connection_class(**kept | {"protocol": 2, "socket_timeout": None})
 

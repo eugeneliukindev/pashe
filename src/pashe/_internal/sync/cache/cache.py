@@ -292,7 +292,7 @@ class Cache:
         stampede: Stampede = Stampede(),
         store: Store = Store(),
     ) -> CachedBatchFunctionDecorator:
-        """Cache the results of a batch function ``f(items: list[K]) -> dict[K, V]`` per item.
+        """Cache the results of a batch function ``f(items: list[K]) -> dict[K, R]`` per item.
 
         A call reads every item in one backend call and calls the function once with the missing
         ones; items it leaves out are absent from the result and not stored.
@@ -339,7 +339,7 @@ class Cache:
         key_template = parse_key(key, key_secret=self._key_secret)
         tag_templates = parse_tags(tags, key_secret=self._key_secret)
 
-        def decorator[K: Hashable, V](function: BatchFunction[K, V], /) -> CachedBatchFunction[K, V]:
+        def decorator[K: Hashable, R](function: BatchFunction[K, R], /) -> CachedBatchFunction[K, R]:
             validate_sync(function, "cache", self)
             value_type = batch_value_type(function)
             self._codec.validate(value_type)  # as for a cached function, of the type of an item
@@ -348,7 +348,7 @@ class Cache:
                 policy, value_type, codec=self._codec, compressor=self._compressor, hooks=self._hooks
             )
             keys = ItemKeys(function, key_template, tag_templates)
-            batch_cache = BatchCache[K, V](
+            batch_cache = BatchCache[K, R](
                 policy,
                 storage=self._storage,
                 entry_format=entry_format,

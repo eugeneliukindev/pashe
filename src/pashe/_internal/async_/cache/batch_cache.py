@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pashe._internal.cache.policy import Policy
     from pashe.hooks import Hook
 
-type AsyncBatchFunction[K: Hashable, V] = Callable[[list[K]], Awaitable[Mapping[K, V]]]
+type AsyncBatchFunction[K: Hashable, R] = Callable[[list[K]], Awaitable[Mapping[K, R]]]
 
 
 @final
@@ -36,7 +36,7 @@ class _Pending[K: Hashable]:
 
 
 @final
-class AsyncBatchCache[K: Hashable, V]:
+class AsyncBatchCache[K: Hashable, R]:
     # The cache of one batch function: reads every item at once, loads the missing ones in one call.
     __slots__ = ("_entry_format", "_hooks", "_load_limit", "_policy", "_reporter", "_storage")
 
@@ -58,8 +58,8 @@ class AsyncBatchCache[K: Hashable, V]:
         self._load_limit = AsyncLoadLimit(policy.stampede.max_loads)
 
     async def get_or_load_many(  # noqa: WPS231 - the read of every item, then one load of the missing ones
-        self, keys_and_tags: Mapping[K, KeyAndTags], load: AsyncBatchFunction[K, V]
-    ) -> dict[K, V]:
+        self, keys_and_tags: Mapping[K, KeyAndTags], load: AsyncBatchFunction[K, R]
+    ) -> dict[K, R]:
         lookups = await self._storage.lookup_many(list(keys_and_tags.values()))
         no_cache = in_no_cache()  # no entry answers: every item loads, and is kept for the calls after it
         batch: list[_Pending[K]] = []
@@ -86,7 +86,7 @@ class AsyncBatchCache[K: Hashable, V]:
     async def _load(  # noqa: WPS231 - one call of the function, then what it gave each item
         self,
         missing: list[_Pending[K]],
-        load: AsyncBatchFunction[K, V],
+        load: AsyncBatchFunction[K, R],
     ) -> list[tuple[Lookup, Stored]]:
         """Load the missing items in one call and answer them with what it returned.
 
