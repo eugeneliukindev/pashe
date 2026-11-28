@@ -1,0 +1,649 @@
+[project]
+name = "pashe"
+version = "0.1.0"
+description = "Caching for Python services: stale results, stampede protection, tags, locks and rate limits"
+readme = "README.md"
+requires-python = ">=3.12,<3.16"  # each new Python is added once the tests pass on it
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Eugene Liukin", email = "eugeneliukin.dev@gmail.com" }]
+maintainers = [{ name = "Eugene Liukin", email = "eugeneliukin.dev@gmail.com" }]
+keywords = [
+    "asgi",
+    "async",
+    "cache",
+    "caching",
+    "distributed-lock",
+    "fastapi",
+    "rate-limit",
+    "redis",
+    "stampede",
+    "valkey",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: AsyncIO",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Database",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Documentation = "https://eugeneliukindev.github.io/pashe/"
+Homepage = "https://eugeneliukindev.github.io/pashe/"
+Issues = "https://github.com/eugeneliukindev/pashe/issues"
+Repository = "https://github.com/eugeneliukindev/pashe"
+
+[project.optional-dependencies]
+all = ["pashe[fastapi,msgspec,opentelemetry,orjson,prometheus,pydantic,redis,sentry,zstd]"]
+fastapi = ["fastapi>=0.124.0,<1"]
+msgspec = [  # a floor for each Python: the first release with wheels for it
+    "msgspec>=0.19.0,<1; python_version < '3.14'",
+    "msgspec>=0.20.0,<1; python_version == '3.14'",
+    "msgspec>=0.22.0,<1; python_version >= '3.15'",
+]
+opentelemetry = ["opentelemetry-api>=1.30.0,<2"]  # the API only: the application sets up the SDK
+orjson = [  # as msgspec
+    "orjson>=3.11.0,<4; python_version < '3.14'",
+    "orjson>=3.12.0,<4; python_version >= '3.14'",
+]
+prometheus = ["prometheus-client>=0.22.0,<1"]
+pydantic = [  # as msgspec: of pydantic-core, which each pins
+    "pydantic>=2.11.0,<3; python_version < '3.14'",
+    "pydantic>=2.12.0,<3; python_version == '3.14'",
+    "pydantic>=2.14.0,<3; python_version >= '3.15'",
+]
+redis = ["redis>=5.3.0,<9"]
+sentry = ["sentry-sdk>=2.20.0,<4"]
+zstd = ["backports.zstd>=1.0.0,<2; python_version < '3.14'"]
+
+[dependency-groups]
+dev = [
+    "pashe[all]",  # every extra, so tests and mypy see every module
+    "prek>=0.5.11,<0.6",
+    "unasyncd[ruff]>=0.10.1,<0.11",
+    { include-group = "fmt" },
+    { include-group = "lint" },
+    { include-group = "test" },
+    { include-group = "typing" },
+]
+docs = [
+    "griffe-inherited-docstrings>=1.1.4,<2",
+    "mkdocstrings-python>=2.0.11,<3",
+    "zensical>=0.1.3,<0.2",
+]
+fmt = [
+    "ruff>=0.17.6,<0.18",
+    "tombi>=1.11.3,<2",
+]
+lint = [
+    "actionlint-py>=1.7.12.25,<2",
+    "check-jsonschema>=0.39.0,<0.40",
+    "codespell>=2.4.3,<3",
+    "deptry>=0.25.1,<0.26",
+    "flake8>=7.5.0,<8",
+    "flake8-pyproject>=1.2.4,<2",
+    "import-linter>=2.5.2,<2.6",  # 2.6 pins grimp 3.13, which has no wheels for 3.15; 2.7 needs rich 14, unasyncd pins 13.6
+    "pydoclint>=0.12.0,<0.13",
+    "rumdl>=0.3.6,<0.4",
+    "slotscheck>=0.21.0,<0.22",
+    "typos>=1.52.2,<2",
+    "vale>=3.28.1.0,<4",
+    "wemake-python-styleguide>=1.9.0,<2",
+    "zizmor>=1.33.1,<2",
+]
+test = [
+    "aiosqlite>=0.22.1,<0.23",
+    "covdefaults>=2.3.0,<3",
+    "httpx>=0.28.1,<0.29",
+    "hypothesis>=6.170.17,<7",
+    "litestar>=2.25.0,<3",  # the tests of RateLimitMiddleware under Litestar
+    "nox==2026.10.20",  # the runner of the environments of lowest and highest, as CI and every machine run it
+    "opentelemetry-sdk>=1.30.0,<2",  # reads what the opentelemetry extra records; of the floor of the API, which it pins
+    "pyleak>=0.2.0,<0.3",
+    "pytest>=9.2.0,<10",
+    "pytest-asyncio>=1.5.0,<2",
+    "pytest-benchmark>=5.3.1,<6",
+    "pytest-cov>=7.1.0,<8",
+    "pytest-deadfixtures>=4.0.0,<5",
+    "pytest-flakefinder>=1.1.0,<2",
+    "pytest-mock>=3.17.0,<4",
+    "pytest-randomly>=5.1.0,<6",
+    "pytest-timeout>=2.4.0,<3",
+    "pytest-xdist>=3.8.0,<4",
+    "strict-no-cover>=0.1.1,<0.2",
+    "testcontainers>=4.15.0,<5",  # its extra redis wants redis-py 7: pashe[all] brings the one of the floor
+]
+typing = [
+    "mypy>=2.4.1,<3",
+    "pyrefly>=1.5.0,<2",
+    "pyright>=1.1.414,<2",
+]
+
+[build-system]
+requires = ["uv-build>=0.13.9,<0.14"]
+build-backend = "uv_build"
+
+[tool.codespell]
+skip = ["*.lock", ".venv", "__pycache__", ".mypy_cache", ".ruff_cache", "site", "coverage"]
+
+[tool.coverage.run]
+plugins = ["covdefaults"]  # branch coverage, the usual exclusions, and the report of what is missed
+source = ["pashe"]
+data_file = "coverage/.coverage"  # everything coverage writes lives in coverage/
+
+[tool.coverage.report]
+fail_under = 91  # covdefaults asks for 100; the run is at 91.65 and the bar may only go up
+exclude_also = ["@abstractmethod"]
+
+[tool.coverage.html]
+directory = "coverage/html"
+title = "pashe coverage"
+
+[tool.coverage.xml]
+output = "coverage/coverage.xml"
+
+[tool.deptry]
+known_first_party = ["pashe"]
+
+[tool.deptry.package_module_name_map]
+"backports.zstd" = "backports"
+
+[tool.deptry.per_rule_ignores]
+DEP002 = ["pashe"]  # the all extra names the others through pashe itself
+DEP003 = ["pydantic_core"]  # pydantic pins it to its own version: the pydantic extra brings it
+
+# flake8 runs wemake-python-styleguide and the plugins ruff has no rules for; ruff does the rest.
+[tool.flake8]
+select = ["WPS", "E99"]
+doctests = true
+max-line-complexity = 21
+# Words of the domain: what an entry stores, how a call was answered, the items of a batch.
+allowed-domain-names = ["value", "values", "data", "result", "item", "items"]
+ignore = [
+    "WPS615",  # get_many and set_many are operations of a cache, not accessors of a field
+    "WPS111",  # type parameters are single letters by Python convention: T, P, R, K, V
+    "WPS501",  # try/finally is how Python releases what a block holds
+    "WPS410",  # __all__ names the public API of a module, for star imports and dir()
+]
+max-arguments = 16  # the public API takes its options as keyword arguments, as decorators do
+max-methods = 32
+max-imports = 16
+max-module-members = 11  # a module of small functions, such as the math of rate limits
+# A function is as long as one step it takes: split only to fit a count, it makes the reader jump.
+max-local-variables = 9
+max-awaits = 8
+max-try-body-length = 2
+per-file-ignores = [
+    "*/__init__.py: WPS412",
+    "src/pashe/__init__.py: WPS412",  # the root package re-exports what most users import
+    # the facade wires every part of a cache and of each cached function together, each method names the arguments it checks, such as
+    # "ttl", and the defaults of the groups of options, such as Stale(), are frozen, safe to share
+    "src/pashe/_internal/async_/cache/cache.py: WPS201, WPS203, WPS226, WPS404",
+    "src/pashe/_internal/async_/backends/near.py: WPS404",  # AsyncNoOpBus() as the default of bus has no state, safe to share
+    # NoOpBreaker() as the default of breaker has no state, safe to share
+    "src/pashe/_internal/async_/backends/redis/backend.py: WPS404",
+    "src/pashe/_internal/async_/backends/redis/buses.py: WPS404",
+    # each turn of a CAS loop reads the token the next write takes: one await after another
+    "src/pashe/_internal/async_/backends/memcached/backend.py: WPS404, WPS476",
+    "src/pashe/_internal/async_/cache/function_cache.py: WPS201",  # get-or-load decides with every part a cached call is made of
+    "src/pashe/_internal/async_/limiter.py: WPS201",  # it checks what it is given, counts in both windows, and decorates
+    "src/pashe/_internal/async_/locks/locks.py: WPS201",  # it checks what it is given, warns of one process, takes locks, and decorates
+    "src/pashe/errors.py: WPS202",  # every error of pashe in the one module users import them from
+    "src/pashe/_internal/checks.py: WPS202",  # every check of what users give in one module: one rule, one place
+    "src/pashe/_internal/cache/keys.py: WPS202",  # every rule of what a key is made of in one module
+    "src/pashe/asgi.py: WPS201, WPS226",  # both middlewares of ASGI and the types of its specification
+    "src/pashe/ratelimit.py: WPS226",  # every window and its helpers name the "calls" they allow  # an ASGI message is a dict keyed by "type", "headers", "status" and "body"
+]
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "src/pashe/_internal/sync",  # generated; `just lint` names the modules written by hand
+]
+
+# The dependencies between the parts of pashe run one way; `just lint` checks them.
+[tool.importlinter]
+root_package = "pashe"
+include_external_packages = true
+exclude_type_checking_imports = true  # an annotation does not run the module it names
+
+[[tool.importlinter.contracts]]
+name = "Integrations over the facades over the engine over the public types"
+type = "layers"
+layers = [
+    "pashe.contrib",
+    "pashe.asgi | pashe.backends | pashe.invalidation | pashe.locks | pashe.wsgi",
+    "pashe._internal.sqlite",  # both sides of one backend: the async one runs the sync one in threads
+    # the engine, apart from its checks, which the public types below take too
+    "pashe._internal.async_ : pashe._internal.sync : pashe._internal.breakers : pashe._internal.cache : pashe._internal.hooks : pashe._internal.limits : pashe._internal.locks : pashe._internal.memcached : pashe._internal.redis : pashe._internal.web",
+    "pashe.codecs | pashe.compressors | pashe.hooks | pashe.options | pashe.ratelimit",
+    "pashe._internal.checks",
+    "pashe.errors",
+]
+
+[[tool.importlinter.contracts]]
+name = "The sides know nothing of each other"
+type = "independence"
+modules = ["pashe._internal.async_", "pashe._internal.sync"]
+
+[[tool.importlinter.contracts]]
+name = "On each side the cache over the locks and the limiter over the backends over the tasks"
+type = "layers"
+containers = ["pashe._internal.async_", "pashe._internal.sync"]
+layers = ["cache", "locks | limiter", "backends", "(tasks)", "(threads)"]  # tasks.py is threads.py on the sync side
+
+[[tool.importlinter.contracts]]
+name = "Each extra stands alone"
+type = "independence"
+modules = [
+    "pashe.contrib.fastapi",
+    "pashe.contrib.msgspec",
+    "pashe.contrib.opentelemetry",
+    "pashe.contrib.orjson",
+    "pashe.contrib.prometheus",
+    "pashe.contrib.pydantic",
+    "pashe.contrib.redis",
+    "pashe.contrib.sentry",
+    "pashe.contrib.zstd",
+]
+
+[[tool.importlinter.contracts]]
+name = "The core needs no extra"
+type = "forbidden"
+source_modules = [
+    "pashe.asgi",
+    "pashe.backends",
+    "pashe.codecs",
+    "pashe.compressors",
+    "pashe.errors",
+    "pashe.hooks",
+    "pashe.invalidation",
+    "pashe.locks",
+    "pashe.options",
+    "pashe.ratelimit",
+    "pashe.wsgi",
+]
+forbidden_modules = [
+    "backports",
+    "fastapi",
+    "msgspec",
+    "opentelemetry",
+    "orjson",
+    "prometheus_client",
+    "pydantic",
+    "pydantic_core",
+    "redis",
+    "sentry_sdk",
+    "starlette",
+    "litestar",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+extra_checks = true
+strict_equality_for_none = true
+warn_unreachable = true
+disallow_any_unimported = true
+pretty = true
+enable_error_code = [
+    "deprecated",
+    "exhaustive-match",
+    "explicit-override",
+    "ignore-without-code",
+    "mutable-override",
+    "possibly-undefined",
+    "redundant-expr",
+    "redundant-self",
+    "truthy-bool",
+    "truthy-iterable",
+    "unimported-reveal",
+    "unused-awaitable",
+]
+
+[[tool.mypy.overrides]]
+module = ["backports.*"]  # backports.zstd installs only before Python 3.14
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["xdist.*"]  # annotated, though it ships no py.typed
+follow_untyped_imports = true
+
+# Docstrings in Google style must agree with the signatures they document.
+[tool.pydoclint]
+style = "google"
+exclude = '_internal/sync/(?!threads\.py|locks/lock\.py|backends/redis/listeners\.py)'  # generated from async_, checked there; these three are written by hand
+arg-type-hints-in-docstring = false  # the annotations say the types
+check-return-types = false
+check-yield-types = false
+skip-checking-short-docstrings = true  # a one-line docstring documents nothing it could get wrong
+skip-checking-raises = true  # Raises lists what a caller sees, raised deeper as often as here
+allow-init-docstring = true  # the Args of a constructor are in __init__
+
+[tool.pyrefly]
+project-includes = ["src", "tests", "benchmarks", "docs/examples", "noxfile.py"]
+search-path = [
+    "src",
+    ".",
+    "docs"
+]  # the root for tests.harness, and docs for the examples, as pytest puts them on the path
+min-severity = "warn"
+preset = "strict"
+
+[tool.pyrefly.errors]
+implicit-any-attribute = false
+implicit-any-empty-container = false
+implicit-any-lambda = false
+unused-ignore = true
+
+# The Python of the environment, while mypy checks the lowest one, 3.12: both ends of the range are seen.
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+include = ["src", "tests", "benchmarks", "docs/examples", "noxfile.py"]
+extraPaths = ["docs"]  # as pytest puts the examples of the docs on the path
+# The tests in standard mode: mypy checks them strictly, and strict here flags every value of the
+# untyped redis-py and every lambda.
+typeCheckingMode = "standard"
+strict = ["src"]
+
+[tool.pytest]
+# importlib keeps the tests off the path, so they cannot import each other; their helpers are on it
+addopts = [
+    "--import-mode=importlib",
+    "-ra",
+    "--durations=5",
+    "--benchmark-disable"
+]  # a benchmark runs once as a test; just bench measures
+doctest_optionflags = ["ELLIPSIS"]  # an example shows a digest as "..."
+# a warning is a bug the tests found; a memory backend stands for the shared server in most of them,
+# as testing.md shows users, and the tests of OneProcessWarning catch it with pytest.warns
+filterwarnings = ["error", "ignore::pashe.errors.OneProcessWarning"]
+markers = [
+    "memcached: takes the memcached of the run, started in Docker",
+    "no_leaks: pyleak fails the test on a task it leaves running or a loop it blocks",
+    "redis: takes the Redis server or cluster of the run, started in Docker",
+]
+pythonpath = [".", "docs"]  # the harness of the tests as tests.harness, and the examples of the docs as a package
+strict = true
+testpaths = ["benchmarks", "tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+timeout = "20"  # a hung test fails instead of holding the run
+timeout_func_only = true  # the fixtures that start Redis in Docker take longer on a busy machine
+
+[tool.ruff]
+required-version = ">=0.17.6"
+target-version = "py312"
+line-length = 120
+src = ["src"]
+
+[tool.ruff.format]
+line-ending = "lf"
+docstring-code-format = true
+# A page holds its examples as --8<-- references, which are not Python; the files of docs/examples
+# are formatted as code.
+exclude = ["docs/**/*.md"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "COM812",  # conflicts with the formatter
+    "CPY001",
+    "D1",  # docstrings only where a user of the API looks: the public classes, functions and modules
+    "E501",
+    "TRY003",
+]
+external = ["WPS"]
+future-annotations = true
+extend-safe-fixes = [
+    "TC001",
+    "TC002",
+    "TC003"
+]  # every module has future annotations: moving an annotation-only import is safe
+typing-extensions = false
+
+[tool.ruff.lint.per-file-ignores]
+# validate of a bus is optional, as that of a codec is: a bus that listens to any shared backend leaves it
+"src/pashe/_internal/*/backends/near.py" = ["B027"]
+# The helpers of tests drive both sides of one call, so they take and return Any.
+"tests/**" = ["ANN401", "D", "INP001", "PLR0917", "PLR2004", "S101", "S105", "S106"]
+# The benchmarks, which run once as tests: they check what they measured.
+"benchmarks/**" = ["D", "PLR0917", "S101", "S106"]
+# The tests of the examples of the docs, as the tests of pashe.
+"docs/examples/**/test_*.py" = ["ANN401", "D", "PLR2004", "S101", "S105"]
+# The examples of the testing guide are tests of yours.
+"docs/examples/testing/*.py" = ["S101"]
+"docs/examples/codecs/*.py" = ["S101"]  # main checks what each codec gives back, past the part a page shows
+# An example imports as a reader would write it, with no TYPE_CHECKING block.
+"docs/examples/**/*.py" = ["TC001", "TC002", "TC003"]
+# Types the options take, as pydantic.types; imports inside pashe are absolute, so it shadows nothing.
+
+[tool.ruff.lint.flake8-bugbear]
+# The groups of options are frozen: one made as a default is safe to share.
+extend-immutable-calls = [
+    "pashe._internal.breakers.NoOpBreaker",
+    "pashe._internal.async_.backends.near.AsyncNoOpBus",
+    "pashe._internal.sync.backends.near.NoOpBus",
+    "pashe.codecs.JsonCodec",
+    "pashe.compressors.NoOpCompressor",
+    "pashe.options.Negative",
+    "pashe.options.Stale",
+    "pashe.options.Stampede",
+    "pashe.options.Store"
+]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"  # a full import says which side a module is of
+
+[tool.ruff.lint.isort]
+known-first-party = ["pashe"]
+# The examples of the docs import what their page leaves out from each other: last, under the
+# imports a page shows.
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder", "docs-examples"]
+sections = { docs-examples = ["examples"] }
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# The public API takes its options as keyword arguments, as decorators do.
+[tool.ruff.lint.pylint]
+max-args = 16
+max-positional-args = 3
+max-public-methods = 32
+
+[tool.rumdl]
+flavor = "mkdocs"  # tabs, admonitions and snippets of the docs are not indented code
+line-length = 120  # as ruff: prose wraps before it
+# the anchors of the reference are made by mkdocstrings at build time, which rumdl does not see;
+# the strict build checks the links
+disable = ["MD051"]
+
+[tool.rumdl.per-file-ignores]
+"README.md" = ["MD033", "MD041"]  # a centered head of HTML, as GitHub renders it
+"docs/index.md" = ["MD025", "MD057"]  # the hero has the title; llms.txt is made at build time
+"docs/reference/**" = ["MD066"]  # a filter such as "!^_[^_]" of mkdocstrings reads as a footnote
+
+[tool.rumdl.MD013]
+tables = false  # a row is one line, however long
+code-blocks = false  # a console line is as long as it is
+
+[tool.rumdl.MD033]
+allowed-elements = [
+    "a",
+    "b",
+    "br",
+    "div",
+    "img",
+    "p",
+    "span"
+]  # the head of the README, the cards of the home page, the marks of the benchmarks
+
+[tool.slotscheck]
+strict-imports = true
+require-subclass = true
+
+[tool.tombi]
+toml-version = "v1.0.0"
+
+[tool.tombi.format.rules]
+indent-width = 4
+line-width = 120
+
+[tool.typos.files]
+extend-exclude = [".venv", "*.lock", "__pycache__"]
+
+# The sync side is generated from the async one: run unasyncd after changing pashe._internal.async_.
+# Every import is absolute: a name of the async side is renamed below, bare and by its full name.
+[tool.unasyncd]
+cache = false  # regeneration takes a moment; a cache of it went stale when a generated file was edited
+add_editors_note = true
+transform_docstrings = true  # an example of the async side reads as the sync one in the generated code
+ruff_fix = true  # drops the imports of the async side that the renames left behind
+ruff_format = true
+
+# Every module of the async side but those written by hand for each side, tasks.py (threads.py on the
+# sync side), locks/lock.py, backends/redis/listeners.py and backends/memcached/connections.py: they do what
+# asyncio and threads do their own ways. A new module of the async side goes here.
+[tool.unasyncd.files]
+"src/pashe/_internal/async_/__init__.py" = "src/pashe/_internal/sync/__init__.py"
+"src/pashe/_internal/async_/backends/__init__.py" = "src/pashe/_internal/sync/backends/__init__.py"
+"src/pashe/_internal/async_/backends/redis/__init__.py" = "src/pashe/_internal/sync/backends/redis/__init__.py"
+"src/pashe/_internal/async_/cache/__init__.py" = "src/pashe/_internal/sync/cache/__init__.py"
+"src/pashe/_internal/async_/locks/__init__.py" = "src/pashe/_internal/sync/locks/__init__.py"
+"src/pashe/_internal/async_/backends/backend.py" = "src/pashe/_internal/sync/backends/backend.py"
+"src/pashe/_internal/async_/cache/batch_cache.py" = "src/pashe/_internal/sync/cache/batch_cache.py"
+"src/pashe/_internal/async_/cache/cache.py" = "src/pashe/_internal/sync/cache/cache.py"
+"src/pashe/_internal/async_/cache/cached.py" = "src/pashe/_internal/sync/cache/cached.py"
+"src/pashe/_internal/async_/cache/cached_batch.py" = "src/pashe/_internal/sync/cache/cached_batch.py"
+"src/pashe/_internal/async_/cache/storage.py" = "src/pashe/_internal/sync/cache/storage.py"
+"src/pashe/_internal/async_/limiter.py" = "src/pashe/_internal/sync/limiter.py"
+"src/pashe/_internal/async_/cache/function_cache.py" = "src/pashe/_internal/sync/cache/function_cache.py"
+"src/pashe/_internal/async_/cache/reload.py" = "src/pashe/_internal/sync/cache/reload.py"
+"src/pashe/_internal/async_/locks/locking.py" = "src/pashe/_internal/sync/locks/locking.py"
+"src/pashe/_internal/async_/locks/locks.py" = "src/pashe/_internal/sync/locks/locks.py"
+"src/pashe/_internal/async_/backends/memory.py" = "src/pashe/_internal/sync/backends/memory.py"
+"src/pashe/_internal/async_/backends/near.py" = "src/pashe/_internal/sync/backends/near.py"
+"src/pashe/_internal/async_/backends/prefixed.py" = "src/pashe/_internal/sync/backends/prefixed.py"
+"src/pashe/_internal/async_/backends/redis/backend.py" = "src/pashe/_internal/sync/backends/redis/backend.py"
+"src/pashe/_internal/async_/backends/redis/buses.py" = "src/pashe/_internal/sync/backends/redis/buses.py"
+"src/pashe/_internal/async_/backends/memcached/__init__.py" = "src/pashe/_internal/sync/backends/memcached/__init__.py"
+"src/pashe/_internal/async_/backends/memcached/backend.py" = "src/pashe/_internal/sync/backends/memcached/backend.py"
+
+[tool.unasyncd.add_replacements]
+# A sibling has a name of its own on each side, as the public classes do: unasyncd renames it bare
+# and by its full name, and ruff drops the import of the async one, which is then unused.
+AsyncBatchCache = "BatchCache"
+"pashe._internal.async_.cache.batch_cache.AsyncBatchCache" = "pashe._internal.sync.cache.batch_cache.BatchCache"
+AsyncCachedFunctionDecorator = "CachedFunctionDecorator"
+"pashe._internal.async_.cache.cached.AsyncCachedFunctionDecorator" = "pashe._internal.sync.cache.cached.CachedFunctionDecorator"
+AsyncCachedBatchFunctionDecorator = "CachedBatchFunctionDecorator"
+"pashe._internal.async_.cache.cached_batch.AsyncCachedBatchFunctionDecorator" = "pashe._internal.sync.cache.cached_batch.CachedBatchFunctionDecorator"
+AsyncLoad = "Load"
+"pashe._internal.async_.cache.function_cache.AsyncLoad" = "pashe._internal.sync.cache.function_cache.Load"
+AsyncRateLimiter = "RateLimiter"
+"pashe._internal.async_.limiter.AsyncRateLimiter" = "pashe._internal.sync.limiter.RateLimiter"
+AsyncFunctionCache = "FunctionCache"
+"pashe._internal.async_.cache.function_cache.AsyncFunctionCache" = "pashe._internal.sync.cache.function_cache.FunctionCache"
+AsyncStorage = "Storage"
+"pashe._internal.async_.cache.storage.AsyncStorage" = "pashe._internal.sync.cache.storage.Storage"
+AsyncLease = "Lease"
+"pashe._internal.async_.locks.locking.AsyncLease" = "pashe._internal.sync.locks.locking.Lease"
+adisconnect_cluster_pools = "disconnect_cluster_pools"
+"pashe._internal.redis.clients.adisconnect_cluster_pools" = "pashe._internal.redis.clients.disconnect_cluster_pools"
+atake = "take"
+"pashe._internal.async_.locks.locking.atake" = "pashe._internal.sync.locks.locking.take"
+atry_take = "try_take"
+"pashe._internal.async_.locks.locking.atry_take" = "pashe._internal.sync.locks.locking.try_take"
+AsyncReload = "Reload"
+"pashe._internal.async_.cache.reload.AsyncReload" = "pashe._internal.sync.cache.reload.Reload"
+AsyncLoadAndStore = "LoadAndStore"
+"pashe._internal.async_.cache.reload.AsyncLoadAndStore" = "pashe._internal.sync.cache.reload.LoadAndStore"
+AsyncPrefixedBackend = "PrefixedBackend"
+"pashe._internal.async_.backends.prefixed.AsyncPrefixedBackend" = "pashe._internal.sync.backends.prefixed.PrefixedBackend"
+AsyncPubSubListener = "PubSubListener"
+"pashe._internal.async_.backends.redis.listeners.AsyncPubSubListener" = "pashe._internal.sync.backends.redis.listeners.PubSubListener"
+AsyncTrackingListener = "TrackingListener"
+"pashe._internal.async_.backends.redis.listeners.AsyncTrackingListener" = "pashe._internal.sync.backends.redis.listeners.TrackingListener"
+AsyncLoadLocks = "LoadLocks"
+AsyncLocks = "Locks"
+"pashe._internal.async_.locks.locks.AsyncLocks" = "pashe._internal.sync.locks.locks.Locks"
+AsyncDecorator = "Decorator"
+"pashe._internal.async_.tasks.AsyncDecorator" = "pashe._internal.sync.threads.Decorator"
+"pashe._internal.async_.locks.locking.AsyncLoadLocks" = "pashe._internal.sync.locks.locking.LoadLocks"
+AsyncBackgroundTasks = "BackgroundTasks"
+"pashe._internal.async_.tasks.AsyncBackgroundTasks" = "pashe._internal.sync.threads.BackgroundTasks"
+AsyncSharedLoads = "SharedLoads"
+"pashe._internal.async_.tasks.AsyncSharedLoads" = "pashe._internal.sync.threads.SharedLoads"
+AsyncLoadLimit = "LoadLimit"
+"pashe._internal.async_.tasks.AsyncLoadLimit" = "pashe._internal.sync.threads.LoadLimit"
+ashield = "shield"
+"pashe._internal.async_.tasks.ashield" = "pashe._internal.sync.threads.shield"
+validate_async = "validate_sync"
+"pashe._internal.async_.tasks.validate_async" = "pashe._internal.sync.threads.validate_sync"
+AbstractAsyncContextManager = "AbstractContextManager"
+AsyncLock = "Lock"
+"pashe._internal.async_.locks.lock.AsyncLock" = "pashe._internal.sync.locks.lock.Lock"
+aclose = "close"
+AsyncBackend = "Backend"
+"pashe._internal.async_.backends.backend.AsyncBackend" = "pashe._internal.sync.backends.backend.Backend"
+AsyncMemoryBackend = "MemoryBackend"
+"pashe._internal.async_.backends.memory.AsyncMemoryBackend" = "pashe._internal.sync.backends.memory.MemoryBackend"
+AsyncInvalidationBus = "InvalidationBus"
+"pashe._internal.async_.backends.near.AsyncInvalidationBus" = "pashe._internal.sync.backends.near.InvalidationBus"
+AsyncNoOpBus = "NoOpBus"
+"pashe._internal.async_.backends.near.AsyncNoOpBus" = "pashe._internal.sync.backends.near.NoOpBus"
+AsyncInvalidationHandler = "InvalidationHandler"
+"pashe._internal.async_.backends.near.AsyncInvalidationHandler" = "pashe._internal.sync.backends.near.InvalidationHandler"
+AsyncNearCacheBackend = "NearCacheBackend"
+"pashe._internal.async_.backends.near.AsyncNearCacheBackend" = "pashe._internal.sync.backends.near.NearCacheBackend"
+AsyncMemcachedBackend = "MemcachedBackend"
+"pashe._internal.async_.backends.memcached.backend.AsyncMemcachedBackend" = "pashe._internal.sync.backends.memcached.backend.MemcachedBackend"
+AsyncMemcachedConnections = "MemcachedConnections"
+"pashe._internal.async_.backends.memcached.connections.AsyncMemcachedConnections" = "pashe._internal.sync.backends.memcached.connections.MemcachedConnections"
+AsyncRedisBackend = "RedisBackend"
+"pashe._internal.async_.backends.redis.backend.AsyncRedisBackend" = "pashe._internal.sync.backends.redis.backend.RedisBackend"
+AsyncRedisPubSubBus = "RedisPubSubBus"
+AsyncRedisTrackingBus = "RedisTrackingBus"
+"asyncio.wait" = "concurrent.futures.wait"
+"asyncio.Task" = "concurrent.futures.Future"
+"asyncio.timeout" = "contextlib.nullcontext"  # a thread cannot be interrupted: the block runs out
+AsyncCachedFunction = "CachedFunction"
+"pashe._internal.async_.cache.cached.AsyncCachedFunction" = "pashe._internal.sync.cache.cached.CachedFunction"
+AsyncCachedValue = "CachedValue"
+"pashe._internal.async_.cache.cached.AsyncCachedValue" = "pashe._internal.sync.cache.cached.CachedValue"
+AsyncCachedValueDecorator = "CachedValueDecorator"
+"pashe._internal.async_.cache.cached.AsyncCachedValueDecorator" = "pashe._internal.sync.cache.cached.CachedValueDecorator"
+AsyncCachedBatchFunction = "CachedBatchFunction"
+"pashe._internal.async_.cache.cached_batch.AsyncCachedBatchFunction" = "pashe._internal.sync.cache.cached_batch.CachedBatchFunction"
+AsyncBatchFunction = "BatchFunction"
+"pashe._internal.async_.cache.batch_cache.AsyncBatchFunction" = "pashe._internal.sync.cache.batch_cache.BatchFunction"
+AsyncCache = "Cache"
+"pashe._internal.async_.cache.cache.AsyncCache" = "pashe._internal.sync.cache.cache.Cache"
+
+# The client of redis-py only in the modules that take one; elsewhere a Redis is not a name to rename.
+[tool.unasyncd.per_file_add_replacements."src/pashe/_internal/async_/backends/redis/backend.py"]
+"redis.asyncio.Redis" = "redis.Redis"
+"redis.asyncio.cluster.RedisCluster" = "redis.cluster.RedisCluster"
+
+[tool.unasyncd.per_file_add_replacements."src/pashe/_internal/async_/backends/redis/buses.py"]
+"redis.asyncio.Redis" = "redis.Redis"
+"redis.asyncio.cluster.RedisCluster" = "redis.cluster.RedisCluster"
+
+[tool.uv]
+add-bounds = "major"  # uv add writes an upper bound, the next major version

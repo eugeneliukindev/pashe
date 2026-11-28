@@ -1,0 +1,286 @@
+from __future__ import annotations
+
+import functools
+import math
+import time
+import warnings
+from typing import TYPE_CHECKING, Final, assert_never, final, override
+
+from pashe._internal.async_.backends.backend import AsyncBackend
+from pashe._internal.async_.backends.prefixed import AsyncPrefixedBackend
+from pashe._internal.async_.tasks import validate_async
+from pashe._internal.cache.keys import CallKeys, KeyPrefix, KeyTemplate, key_name, parse_key
+from pashe._internal.checks import FUNCTION, parse_secret, validate_type
+from pashe._internal.hooks import Hooks
+from pashe._internal.limits import LIMIT, parse_cost
+from pashe.errors import BackendError, OneProcessWarning, RateLimitedError, WrongTypeError
+from pashe.hooks import Failure, Operation, RateLimitDecision
+from pashe.ratelimit import FixedWindow, Limit, RateLimitState, SlidingWindow
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+    from pashe._internal.async_.tasks import AsyncDecorator
+    from pashe.hooks import Hook
+
+_WINDOWS_KEPT: Final = 2  # a sliding limit reads the current and the previous fixed window
+_ROUNDING: Final = 1e-9  # calls: the weighted count of a sliding window is a float
+_PAST_THE_EDGE: Final = 4  # steps of the float of the clock: what now % per may be off by
+
+
+@final
+class AsyncRateLimiter:
+    """Counts calls per key in a backend, for every process over it, and refuses those over a limit.
+
+    The counters live under prefix, apart from the entries of a cache over the same backend and
+    prefix. It closes nothing: the backend belongs to whoever made it.
+
+    Examples:
+        >>> from pashe import AsyncRateLimiter
+        >>> from pashe.backends import AsyncMemoryBackend
+        >>> from pashe.ratelimit import SlidingWindow
+        >>> limiter = AsyncRateLimiter(AsyncMemoryBackend(), prefix="app:")
+        >>> state = await limiter.count("ip:203.0.113.7", SlidingWindow.per_minute(100))
+        >>> state.remaining
+        99
+    """
+
+    __slots__ = ("_backend", "_clock", "_hooks", "_key_secret")
+
+    def __init__(
+        self,
+        backend: AsyncBackend,
+        /,
+        *,
+        prefix: str = "",
+        hooks: list[Hook] | tuple[Hook, ...] = (),
+        key_secret: str | bytes | None = None,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        """Create the rate limiter of backend.
+
+        Args:
+            backend: where the counters live.
+            prefix: put in front of every counter, as a cache puts its own in front of its keys.
+            hooks: what the limiter tells about itself: each Hook gets every decision, and the
+                errors of the backend it lets calls through.
+            key_secret: the secret of ``{name:hmac}`` in the key templates of limited.
+            clock: wall-clock seconds, for tests.
+
+        Raises:
+            TypeError: an argument is not of the type its annotation names.
+            InvalidOptionsError: key_secret is shorter than 16 bytes.
+        """
+        validate_type("backend", backend, AsyncBackend)
+        validate_type("prefix", prefix, str)
+        validate_type("clock", clock, FUNCTION)
+        if not backend.shared_by_processes:
+            msg = (
+                "the counts live in this process alone, so each worker lets the whole limit through: "
+                "use a shared backend, or silence OneProcessWarning if the service runs one process"
+            )
+            warnings.warn(msg, OneProcessWarning, stacklevel=2)
+
+        self._backend = AsyncPrefixedBackend(backend, prefix)
+        self._hooks = Hooks(hooks)
+        self._key_secret = None if key_secret is None else parse_secret("key_secret", key_secret)
+        self._clock = clock
+
+    async def count(
+        self,
+        key: str,
+        limit: Limit,
+        /,
+        *,
+        cost: int = 1,
+        fail_open: bool = True,
+    ) -> RateLimitState | None:
+        """Count a call for key, and return what is left of the limit.
+
+        Call it before the work it guards. A failing backend lets the call through uncounted,
+        returns None and goes to on_error.
+
+        Args:
+            key: what the limit counts, such as ``f"ip:{ip}"``.
+            limit: the limit, such as ``SlidingWindow.per_minute(100)``.
+            cost: how many calls this one counts as, such as 5 for a heavy request.
+            fail_open: let a call through when the backend fails; off, raise BackendError instead,
+                for limits that guard against abuse.
+
+        Returns:
+            What is left of the limit after this call; None if the backend failed and the call
+            went through uncounted.
+
+        Raises:
+            RateLimitedError: the key is over limit; retry_after says for how long.
+            BackendError: the backend failed and fail_open is off.
+            WrongTypeError: a counter of the limit holds what is not an integer, such as a value
+                another program wrote under its key: fail_open lets through an outage, not that.
+            InvalidOptionsError: cost is not from 1 to the calls of the limit.
+
+        Examples:
+            >>> from pashe import AsyncRateLimiter
+            >>> from pashe.backends import AsyncMemoryBackend
+            >>> from pashe.ratelimit import FixedWindow
+            >>> limiter = AsyncRateLimiter(AsyncMemoryBackend())
+            >>> state = await limiter.count("login:ada@example.com", FixedWindow(calls=5, per=60), cost=2)
+            >>> state.remaining
+            3
+        """
+        validate_type("key", key, str)
+        validate_type("limit", limit, LIMIT)
+        cost = parse_cost(limit, cost)
+        validate_type("fail_open", fail_open, bool)
+
+        try:
+            match limit:
+                case SlidingWindow():
+                    state = await self._count_sliding(key, limit, cost)
+                case FixedWindow():
+                    state = await self._count_fixed(key, limit, cost)
+                case _:
+                    assert_never(limit)
+        except RateLimitedError:
+            self._hooks.on_rate_limit(RateLimitDecision(key, allowed=False))
+            raise
+        except BackendError as error:
+            if not fail_open:
+                raise
+            self._hooks.on_error(Failure(Operation.RATE_LIMIT, key, error))
+            return None
+        self._hooks.on_rate_limit(RateLimitDecision(key, allowed=True))
+        return state
+
+    def limited(self, limit: Limit, /, *, key: str | None = None) -> AsyncDecorator:
+        """Count every call of a function with count before it runs.
+
+        Args:
+            limit: the limit, such as ``SlidingWindow.per_minute(10)``.
+            key: a str.format template over the arguments, such as ``"export:{user_id}"``; by
+                default one limit for the function.
+
+        Returns:
+            A decorator for a function of the side of the limiter; the function raises
+            RateLimitedError over the limit.
+
+        Raises:
+            TypeError: an argument is not of the type its annotation names.
+
+        Examples:
+            >>> from pashe import AsyncRateLimiter
+            >>> from pashe.backends import AsyncMemoryBackend
+            >>> from pashe.ratelimit import SlidingWindow
+            >>> limiter = AsyncRateLimiter(AsyncMemoryBackend())
+            >>> @limiter.limited(SlidingWindow.per_minute(10), key="export:{user_id}")
+            ... async def export(user_id: int) -> int:
+            ...     return user_id
+            >>> await export(1)
+            1
+        """
+        validate_type("limit", limit, LIMIT)
+        key_template = parse_key(key, key_secret=self._key_secret)
+
+        def decorator[**P, R](function: Callable[P, Awaitable[R]], /) -> Callable[P, Awaitable[R]]:
+            validate_async(function, "decorate", self)
+            keys = CallKeys(function, key_template or KeyTemplate(key_name(function), key_secret=self._key_secret), ())
+
+            @functools.wraps(function)
+            async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+                await self.count(keys.key(args, kwargs), limit)  # over the limit it raises RateLimitedError
+                return await function(*args, **kwargs)
+
+            return wrapper
+
+        return decorator
+
+    @override
+    def __repr__(self) -> str:
+        """Show the backend and the prefix of the limiter."""
+        backend, prefix = self._backend.backend, self._backend.prefix
+        return f"{type(self).__name__}({backend!r}, prefix={prefix!r})"
+
+    async def _count_sliding(
+        self,
+        key: str,
+        limit: SlidingWindow,
+        cost: int,
+    ) -> RateLimitState:
+        """Count with counters of fixed windows.
+
+        The current one counts in full, the previous one by how much of it the sliding
+        window still overlaps.
+        """
+        now = self._clock()
+        window = int(now // limit.per)
+        previous_window = window - 1
+        elapsed = now % limit.per
+
+        counters = f"{KeyPrefix.SLIDING_WINDOW}{limit.calls}/{float(limit.per)!r}:{key}"  # 60 and 60.0: one counter
+        current_key = f"{counters}:{window}"
+
+        current = await self._backend.incr(current_key, cost, ttl=_WINDOWS_KEPT * limit.per)
+        previous = _parse_count(await self._backend.get(f"{counters}:{previous_window}"))
+        used = previous * (1 - elapsed / limit.per) + current
+
+        if used > limit.calls + _ROUNDING:  # at the edge retry_after gave, rounding must not refuse
+            # refused calls are not counted; a counter evicted meanwhile comes back with its ttl, not forever
+            try:
+                await self._backend.incr(current_key, -cost, ttl=_WINDOWS_KEPT * limit.per)
+            except BackendError as error:  # refused all the same: the counter is too high until the window ends
+                self._hooks.on_error(Failure(Operation.RATE_LIMIT, key, error))
+            raise RateLimitedError(_retry_after(limit, previous=previous, before=current - cost, now=now, cost=cost))
+        return RateLimitState(limit.calls, max(0, math.floor(limit.calls - used)), limit.per - elapsed)
+
+    async def _count_fixed(
+        self,
+        key: str,
+        limit: FixedWindow,
+        cost: int,
+    ) -> RateLimitState:
+        counter = (
+            f"{KeyPrefix.FIXED_WINDOW}{limit.calls}/{float(limit.per)!r}/{float(limit.ban_seconds)!r}:{key}"  # as above
+        )
+        calls = await self._backend.incr(counter, cost, ttl=limit.per)
+
+        if calls - cost <= limit.calls < calls:  # the first call over the limit starts the ban
+            await self._backend.expire(counter, limit.ban_seconds)
+            raise RateLimitedError(limit.ban_seconds)
+
+        left = await self._backend.ttl(counter)
+        if left is not None and math.isinf(left):
+            left = None  # no expiry: the full span is left
+        if calls > limit.calls:
+            raise RateLimitedError(limit.ban_seconds if left is None else left)
+        return RateLimitState(limit.calls, max(0, limit.calls - calls), limit.per if left is None else left)
+
+
+def _parse_count(raw: bytes | None) -> int:
+    try:
+        return 0 if raw is None else int(raw)
+    except ValueError as error:  # as incr of a backend raises for the counter of the current window
+        msg = "a rate counter is not an integer"
+        raise WrongTypeError(msg) from error
+
+
+def _retry_after(
+    limit: SlidingWindow,
+    *,
+    previous: int,
+    before: int,
+    now: float,
+    cost: int,
+) -> float:
+    """How long until the weighted calls leave room for this one.
+
+    The current window must end first if it alone is too full, else the previous one
+    must slide out far enough. A few steps of the float of now more, so a call after
+    the wait lands past the edge, not on it.
+    """
+    room = limit.calls - cost
+    elapsed = now % limit.per
+    past_the_edge = _PAST_THE_EDGE * math.ulp(now)
+
+    if before > room:
+        return limit.per - elapsed + max(0, limit.per * (1 - room / before)) + past_the_edge
+    share = (room - before) / previous  # how much of the previous window may still overlap
+    return max(0, limit.per * (1 - share) - elapsed) + past_the_edge

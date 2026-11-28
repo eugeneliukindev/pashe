@@ -1,0 +1,10 @@
+# The characters of a plain keyboard: a hyphen, straight quotes, three dots.
+extends: existence
+message: "Write a character of the keyboard, not '%s'."
+level: error
+nonword: true
+tokens:
+  - "—"
+  - "–"
+  - "[“”‘’]"
+  - "…"

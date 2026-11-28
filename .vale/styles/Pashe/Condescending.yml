@@ -1,0 +1,10 @@
+# A step that "simply" works and did not work for the reader reads as their fault.
+extends: existence
+message: "Drop '%s': it tells the reader the step is easy."
+level: error
+ignorecase: true
+tokens:
+  - simply
+  - just
+  - obviously
+  - easily

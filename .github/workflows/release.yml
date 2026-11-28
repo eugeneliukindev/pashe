@@ -1,0 +1,64 @@
+name: Release
+
+# The only way to PyPI: publishing a release on GitHub, with a tag such as v1.2.3. The version in
+# pyproject.toml must match the tag, every check must pass, and only then the build is published.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: The tag matches the version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false  # nothing pushes back to the repository
+      - uses: astral-sh/setup-uv@v10.4.0
+      - name: Install just
+        run: uv tool install rust-just
+      - name: Compare the tag with pyproject.toml
+        env:
+          TAG: ${{ github.event.release.tag_name }}  # through the environment: a tag is text anyone may push
+        run: just version-matches "$TAG"
+
+  tests:
+    name: Every check
+    uses: ./.github/workflows/test.yml  # zizmor: ignore[self-repository] - actionlint knows only this form of a call to a workflow here
+
+  build:
+    name: Build the distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false  # nothing pushes back to the repository
+      - uses: astral-sh/setup-uv@v10.4.0
+      - name: Install just
+        run: uv tool install rust-just
+      - name: Build the sdist and the wheel, check them and import the wheel
+        run: just build
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: distributions
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: [version, tests, build]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/pashe/
+    permissions:
+      id-token: write  # trusted publishing: PyPI trusts this workflow, no token is stored
+    steps:
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: distributions
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@v1.14.3

@@ -1,0 +1,6 @@
+# An action is pinned to its exact version, a tag that is not moved, rather than to a commit hash.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "*": ref-pin

@@ -1,0 +1,162 @@
+default_install_hook_types = ["pre-commit"]
+default_stages = ["pre-commit"]
+
+[[repos]]
+repo = "builtin"
+hooks = [
+    { id = "check-merge-conflict" },
+    { id = "check-added-large-files", exclude = "^uv\\.lock$" },  # the lock is generated, and outgrows the limit by itself
+    { id = "check-case-conflict" },
+    { id = "check-yaml" },
+    { id = "detect-private-key" },
+    { id = "end-of-file-fixer" },
+    { id = "trailing-whitespace" },
+    { id = "mixed-line-ending" },
+]
+
+[[repos]]
+repo = "local"
+hooks = [
+    # Regenerates src/pashe/_internal/sync and fails when it changed: unasyncd --check exits 0 even then.
+    {
+        id = "unasyncd",
+        name = "unasyncd",
+        language = "system",
+        entry = "just unasyncd",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "ruff",
+        name = "ruff",
+        language = "system",
+        entry = "just ruff",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "flake8",
+        name = "wemake-python-styleguide",
+        language = "system",
+        entry = "just flake8",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "mypy",
+        name = "mypy",
+        language = "system",
+        entry = "just mypy",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "pyright",
+        name = "pyright",
+        language = "system",
+        entry = "just pyright",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "pyrefly",
+        name = "pyrefly",
+        language = "system",
+        entry = "just pyrefly",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "import-linter",
+        name = "import-linter",
+        language = "system",
+        entry = "just import-linter",
+        types = ["python"],
+        pass_filenames = false
+    },
+    {
+        id = "deptry",
+        name = "deptry",
+        language = "system",
+        entry = "just deptry",
+        files = "^(src/|pyproject\\.toml$)",
+        pass_filenames = false
+    },
+    {
+        id = "codespell",
+        name = "codespell",
+        language = "system",
+        entry = "just codespell",
+        pass_filenames = false
+    },
+    {
+        id = "rumdl",
+        name = "rumdl",
+        language = "system",
+        entry = "just rumdl",
+        files = "\\.md$",
+        pass_filenames = false
+    },
+    {
+        id = "vale",
+        name = "vale",
+        language = "system",
+        entry = "just vale",
+        files = "\\.md$",
+        pass_filenames = false
+    },
+    {
+        id = "actionlint",
+        name = "actionlint",
+        language = "system",
+        entry = "just actionlint",
+        files = "^\\.github/workflows/",
+        pass_filenames = false
+    },
+    {
+        id = "zizmor",
+        name = "zizmor",
+        language = "system",
+        entry = "just zizmor",
+        files = "^\\.github/",
+        pass_filenames = false
+    },
+    {
+        id = "check-github-workflows",
+        name = "check the schema of the workflows",
+        language = "system",
+        entry = "just workflows",
+        files = "^\\.github/workflows/.*\\.yml$",
+        pass_filenames = false
+    },
+    {
+        id = "format-justfile",
+        name = "just --fmt",
+        language = "system",
+        entry = "just justfile",
+        files = "^justfile$",
+        pass_filenames = false
+    },
+    {
+        id = "slotscheck",
+        name = "slotscheck",
+        language = "system",
+        entry = "just slotscheck",
+        types = ["python"],
+        pass_filenames = false
+    },
+    { id = "typos", name = "typos", language = "system", entry = "just typos", pass_filenames = false },
+    {
+        id = "tombi",
+        name = "tombi",
+        language = "system",
+        entry = "just tombi",
+        types = ["toml"],
+        pass_filenames = false
+    },
+]
+
+# Should be the last: an exclude that matches no file is a mistake.
+[[repos]]
+repo = "meta"
+hooks = [{ id = "check-useless-excludes" }]
