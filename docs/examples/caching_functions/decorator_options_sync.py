@@ -1,12 +1,14 @@
 # --8<-- [start:show]
+import tempfile
 from datetime import timedelta
+from pathlib import Path
 from typing import TypedDict
 
 from pashe import Cache
-from pashe.backends import MemoryBackend
+from pashe.backends import SQLiteBackend
 from pashe.options import Negative, Stale, Stampede, Store
 
-cache = Cache(MemoryBackend())
+cache = Cache(SQLiteBackend(Path(tempfile.gettempdir()) / "my-app-cache.db"))  # lock_for takes a shared backend
 
 
 class User(TypedDict):

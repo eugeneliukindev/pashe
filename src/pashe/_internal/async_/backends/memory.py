@@ -77,6 +77,11 @@ class AsyncMemoryBackend(AsyncBackend):
         self._entries: OrderedDict[str, _Entry] = OrderedDict()  # the last is the most recently used
         self._used = 0  # bytes of all keys and values
 
+    @property
+    @override
+    def shared_by_processes(self) -> bool:
+        return False
+
     @override
     async def get(self, key: str, /) -> bytes | None:
         with self._lock:

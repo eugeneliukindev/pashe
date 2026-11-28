@@ -9,6 +9,7 @@ import functools
 import importlib.util
 import inspect
 import pathlib
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final, overload, override
 
@@ -33,7 +34,7 @@ from pashe.backends import (
 )
 from pashe.codecs import JsonCodec
 from pashe.contrib.redis import AsyncRedisBackend, RedisBackend
-from pashe.errors import BackendError
+from pashe.errors import BackendError, OneProcessWarning
 from pashe.hooks import Hook
 from pashe.invalidation import InvalidationBus
 from pashe.locks import AsyncLock, Lock
@@ -91,7 +92,7 @@ class RecordingHook(Hook):
         self.failures.append(failure)
 
 
-class MemoryBus(InvalidationBus):
+class MemoryBus(InvalidationBus[Backend]):
     """A bus in memory: every listener of the wire hears every message, the sender too, as with Redis."""
 
     def __init__(self) -> None:
@@ -103,7 +104,7 @@ class MemoryBus(InvalidationBus):
             on_invalidate(None if keys is None else list(keys))
 
     @override
-    def listen(self, on_invalidate: InvalidationHandler, /) -> Callable[[], None]:
+    def listen(self, shared: Backend, on_invalidate: InvalidationHandler, /) -> Callable[[], None]:
         self.listeners.append(on_invalidate)
         return lambda: self.listeners.remove(on_invalidate)
 
@@ -270,11 +271,16 @@ class Side:
             return AsyncMemcachedBackend(host, port=port)
         return MemcachedBackend(host, port=port)
 
-    def near(self) -> NearCacheBackend | AsyncNearCacheBackend:
-        """Return a near cache of the side, with a memory backend as the near store and another as the shared one."""
-        if self.is_async:
-            return AsyncNearCacheBackend(AsyncMemoryBackend(), AsyncMemoryBackend())
-        return NearCacheBackend(MemoryBackend(), MemoryBackend())
+    def near(self) -> NearCacheBackend[MemoryBackend] | AsyncNearCacheBackend[AsyncMemoryBackend]:
+        """Return a near cache of the side, with a memory backend as the near store and another as the shared one.
+
+        The shared memory stands for a shared server here, so the OneProcessWarning it gives is left out.
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", OneProcessWarning)
+            if self.is_async:
+                return AsyncNearCacheBackend(AsyncMemoryBackend(), AsyncMemoryBackend())
+            return NearCacheBackend(MemoryBackend(), MemoryBackend())
 
     def prefixed(self, backend: EitherBackend, prefix: str) -> PrefixedBackend | AsyncPrefixedBackend:
         """Return backend with every key under prefix. A backend of the other side is a TypeError."""

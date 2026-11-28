@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import time
+import warnings
 from typing import TYPE_CHECKING, Self, final, override
 
 from pashe._internal.async_.backends.backend import AsyncBackend
@@ -31,7 +32,7 @@ from pashe._internal.checks import FUNCTION, parse_secret, validate_item_types, 
 from pashe._internal.hooks import Hooks
 from pashe.codecs import Codec, JsonCodec
 from pashe.compressors import Compressor, NoOpCompressor
-from pashe.errors import BackendError
+from pashe.errors import BackendError, InvalidOptionsError, OneProcessWarning
 from pashe.hooks import Failure, Operation
 from pashe.options import Fallback, Negative, Stale, Stampede, Store
 
@@ -115,7 +116,7 @@ class AsyncCache:
 
         Raises:
             TypeError: an argument is not of the type its annotation names.
-            InvalidOptionsError: key_secret is shorter than 16 bytes.
+            InvalidOptionsError: key_secret is shorter than 16 bytes, or Fallback.backend is backend.
 
         Examples:
             >>> from pashe import AsyncCache
@@ -140,6 +141,9 @@ class AsyncCache:
         validate_type("fallback", fallback, Fallback | None)  # pyrefly: ignore[implicit-any-type-argument] - isinstance takes it bare
         if fallback is not None:
             validate_type("Fallback.backend", fallback.backend, AsyncBackend)
+            if fallback.backend is backend:
+                msg = "Fallback.backend is the backend of the cache: it fails with it, so give it one of its own"
+                raise InvalidOptionsError(msg)
         validate_type("compressor", compressor, Compressor)
         validate_type("clock", clock, FUNCTION)
 
@@ -221,6 +225,12 @@ class AsyncCache:
         )
         key_template = parse_key(key, key_secret=self._key_secret)
         tag_templates = parse_tags(tags, key_secret=self._key_secret)
+        if stampede.lock_for and not self._backend.shared_by_processes:
+            msg = (
+                "Stampede.lock_for locks a load across processes, but the backend lives in this process "
+                "alone, where share_loads already shares it: drop lock_for, or use a shared backend"
+            )
+            warnings.warn(msg, OneProcessWarning, stacklevel=2)
 
         def decorator[**P, R](function: Callable[P, Awaitable[R]], /) -> AsyncCachedFunction[P, R]:
             return AsyncCachedFunction(

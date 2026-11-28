@@ -1,12 +1,16 @@
 # --8<-- [start:show]
+import tempfile
 from datetime import timedelta
+from pathlib import Path
 from typing import TypedDict
 
 from pashe import AsyncCache
-from pashe.backends import AsyncMemoryBackend
+from pashe.backends import AsyncSQLiteBackend
 from pashe.options import Negative, Stale, Stampede, Store
 
-cache = AsyncCache(AsyncMemoryBackend())
+cache = AsyncCache(
+    AsyncSQLiteBackend(Path(tempfile.gettempdir()) / "my-app-cache.db")
+)  # lock_for takes a shared backend
 
 
 class User(TypedDict):

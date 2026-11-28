@@ -27,6 +27,11 @@ class PrefixedBackend(Backend):
     def prefix(self) -> str:
         return self._prefix
 
+    @property
+    @override
+    def shared_by_processes(self) -> bool:
+        return self._backend.shared_by_processes
+
     def full_key(self, key: str) -> str:
         return self._prefix + key
 

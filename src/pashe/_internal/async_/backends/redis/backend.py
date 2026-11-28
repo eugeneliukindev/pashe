@@ -87,6 +87,11 @@ class AsyncRedisBackend(AsyncBackend):
         self._expire_if_equals = client.register_script(EXPIRE_IF_EQUALS)
         self._incr_with_ttl = client.register_script(INCR_WITH_TTL)
 
+    @property
+    def client(self) -> redis.asyncio.Redis | redis.asyncio.cluster.RedisCluster:
+        """The redis-py client the backend talks through, and closes."""
+        return self._client
+
     @override
     async def get(self, key: str, /) -> bytes | None:
         with self._breaker.guarding(), translated_errors():

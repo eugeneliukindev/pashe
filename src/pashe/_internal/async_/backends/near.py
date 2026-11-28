@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import threading
+import warnings
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Final, final, override
 
@@ -10,7 +11,7 @@ from pashe._internal.async_.backends.backend import AsyncBackend
 from pashe._internal.async_.backends.memory import AsyncMemoryBackend
 from pashe._internal.checks import parse_seconds, validate_type
 from pashe._internal.hooks import Hooks
-from pashe.errors import BackendError, ValueTooLargeError
+from pashe.errors import BackendError, OneProcessWarning, ValueTooLargeError
 from pashe.hooks import Failure, Hook, NearRead, Operation
 
 if TYPE_CHECKING:
@@ -25,18 +26,22 @@ type AsyncInvalidationHandler = Callable[[list[str] | None], Awaitable[None]]
 """What a bus calls with the keys others changed; None means every key."""
 
 
-class AsyncInvalidationBus(ABC):
+class AsyncInvalidationBus[B: AsyncBackend](ABC):
     """Carries "these keys changed" between near caches; only key names travel.
+
+    B is the shared backend the bus can listen to: AsyncBackend for one that carries its own
+    messages, such as over pub/sub, or a narrower one, such as AsyncRedisBackend for Redis tracking.
 
     Examples:
         A bus of your own implements publish and listen:
 
+        >>> from pashe.backends import AsyncBackend
         >>> from pashe.invalidation import AsyncInvalidationBus
-        >>> class Quiet(AsyncInvalidationBus):
+        >>> class Quiet(AsyncInvalidationBus[AsyncBackend]):  # it listens over any shared backend
         ...     async def publish(self, keys, /):
         ...         pass
         ...
-        ...     def listen(self, on_invalidate, /):
+        ...     def listen(self, shared, on_invalidate, /):
         ...         async def stop():
         ...             pass
         ...
@@ -44,6 +49,19 @@ class AsyncInvalidationBus(ABC):
     """
 
     __slots__ = ()
+
+    def validate(self, shared: B, /) -> None:
+        """Refuse a shared backend the bus can't listen to; any one by default.
+
+        A near cache calls it as it is created, so a bus that hears the writes of shared itself,
+        as Redis tracking does, refuses one it can't hear before the first read.
+
+        Args:
+            shared: the backend the near cache keeps its entries in.
+
+        Raises:
+            InvalidOptionsError: the bus can't listen to shared.
+        """
 
     @abstractmethod
     async def publish(self, keys: Sequence[str] | None, /) -> None:
@@ -58,12 +76,19 @@ class AsyncInvalidationBus(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def listen(self, on_invalidate: AsyncInvalidationHandler, /) -> Callable[[], Awaitable[None]]:
-        """Call on_invalidate with the keys others publish, until the returned function is called.
+    def listen(
+        self,
+        shared: B,
+        on_invalidate: AsyncInvalidationHandler,
+        /,
+    ) -> Callable[[], Awaitable[None]]:
+        """Call on_invalidate with the keys others changed, until the returned function is called.
 
         The sync side listens in a thread of its own, the async side in a task of the running loop.
 
         Args:
+            shared: the backend the near cache keeps its entries in, which validate took; a bus that
+                carries its own messages leaves it.
             on_invalidate: receives the keys others changed; None whenever messages may have been lost,
                 such as after a reconnect, so every copy goes.
 
@@ -74,7 +99,7 @@ class AsyncInvalidationBus(ABC):
 
 
 @final
-class AsyncNoOpBus(AsyncInvalidationBus):
+class AsyncNoOpBus(AsyncInvalidationBus[AsyncBackend]):
     """Tells no one: what a near cache has unless it is given a bus.
 
     The copies of the other near caches then live out their local_ttl after a write.
@@ -95,10 +120,16 @@ class AsyncNoOpBus(AsyncInvalidationBus):
         """
 
     @override
-    def listen(self, on_invalidate: AsyncInvalidationHandler, /) -> Callable[[], Awaitable[None]]:
+    def listen(
+        self,
+        shared: AsyncBackend,
+        on_invalidate: AsyncInvalidationHandler,
+        /,
+    ) -> Callable[[], Awaitable[None]]:
         """Hear nothing: on_invalidate is never called.
 
         Args:
+            shared: the backend of the near cache, which nothing tells about.
             on_invalidate: what would receive the keys others changed.
 
         Returns:
@@ -108,7 +139,7 @@ class AsyncNoOpBus(AsyncInvalidationBus):
 
 
 @final
-class AsyncNearCacheBackend(AsyncBackend):
+class AsyncNearCacheBackend[B: AsyncBackend](AsyncBackend):
     """Reads through local, then shared: a small cache in memory in front of a shared one.
 
     Another near cache keeps answering with its copy of a key this one changed for up to local_ttl,
@@ -133,11 +164,11 @@ class AsyncNearCacheBackend(AsyncBackend):
     def __init__(
         self,
         local: AsyncMemoryBackend,
-        shared: AsyncBackend,
+        shared: B,
         /,
         *,
         local_ttl: Duration = 5,
-        bus: AsyncInvalidationBus = AsyncNoOpBus(),
+        bus: AsyncInvalidationBus[B] = AsyncNoOpBus(),
         hooks: list[Hook] | tuple[Hook, ...] = (),
     ) -> None:
         """Create a near cache.
@@ -153,12 +184,19 @@ class AsyncNearCacheBackend(AsyncBackend):
 
         Raises:
             TypeError: an argument is not of the type its annotation names.
-            InvalidOptionsError: local_ttl is not positive.
+            InvalidOptionsError: local_ttl is not positive, or bus can't listen to shared.
         """
         validate_type("local", local, AsyncMemoryBackend)
         validate_type("shared", shared, AsyncBackend)
         local_ttl = parse_seconds("local_ttl", local_ttl, "how long a copy is kept", positive=True)
         validate_type("bus", bus, AsyncInvalidationBus)
+        bus.validate(shared)
+        if not shared.shared_by_processes:
+            msg = (
+                f"a near cache keeps copies of shared in this process, but {type(shared).__name__} lives "
+                "in this process too: the copies add nothing, so use it alone, or a shared backend"
+            )
+            warnings.warn(msg, OneProcessWarning, stacklevel=2)
 
         self._local = local
         self._shared = shared
@@ -170,6 +208,11 @@ class AsyncNearCacheBackend(AsyncBackend):
         self._listen_lock = threading.Lock()  # one listener, also when threads read at once
         self._stop: Callable[[], Awaitable[None]] | None = None
         self._publish_failed = False  # a drop did not reach the other near caches
+
+    @property
+    @override
+    def shared_by_processes(self) -> bool:
+        return self._shared.shared_by_processes
 
     @override
     async def get(self, key: str, /) -> bytes | None:
@@ -298,7 +341,7 @@ class AsyncNearCacheBackend(AsyncBackend):
             return  # listening already, as on every read but the first
         with self._listen_lock:
             if self._stop is None:
-                self._stop = self._bus.listen(self._on_invalidation)
+                self._stop = self._bus.listen(self._shared, self._on_invalidation)
 
     async def _keep_copy(
         self,

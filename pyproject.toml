@@ -416,6 +416,8 @@ extend-safe-fixes = [
 typing-extensions = false
 
 [tool.ruff.lint.per-file-ignores]
+# validate of a bus is optional, as that of a codec is: a bus that listens to any shared backend leaves it
+"src/pashe/_internal/*/backends/near.py" = ["B027"]
 # The helpers of tests drive both sides of one call, so they take and return Any.
 "tests/**" = ["ANN401", "D", "INP001", "PLR0917", "PLR2004", "S101", "S105", "S106"]
 # The benchmarks, which run once as tests: they check what they measured.

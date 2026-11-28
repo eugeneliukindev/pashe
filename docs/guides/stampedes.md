@@ -61,13 +61,13 @@ load for all of them.
 
 === "Sync"
 
-    ```python hl_lines="14"
+    ```python hl_lines="17"
     --8<-- "stampedes/lock_for_sync.py:show"
     ```
 
 === "Async"
 
-    ```python hl_lines="14"
+    ```python hl_lines="17"
     --8<-- "stampedes/lock_for_async.py:show"
     ```
 

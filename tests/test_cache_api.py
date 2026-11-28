@@ -560,6 +560,7 @@ def test_a_call_over_the_limit_is_refused_when_taking_back_its_count_fails() -> 
     ]
 
 
+@pytest.mark.filterwarnings("ignore::pashe.errors.OneProcessWarning")  # a memory backend stands for the shared server
 def test_a_hook_of_on_call_and_on_error_alone_hears_rate_limits_and_near_reads() -> None:
     hook = RecordingHook()  # leaves on_rate_limit, on_near_read and on_near_flush as Hook has them
     limiter = RateLimiter(NearCacheBackend(MemoryBackend(), MemoryBackend(), hooks=[hook]), hooks=[hook])

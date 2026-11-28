@@ -139,9 +139,12 @@ redis-py 8 on. With an older redis-py, `AsyncRedisPubSubBus` refuses it with
 
 ### Every write, whoever made it
 
-What if other services or people write the same keys? Then let Redis itself report every write
-under a [`prefix`][pashe.contrib.redis.RedisTrackingBus(prefix)], whoever made it. pashe publishes
-nothing. `AsyncRedisTrackingBus` is the async side.
+What if other services or people write the same keys, or a worker that caches without a near
+cache? Then let Redis itself report every write under a
+[`prefix`][pashe.contrib.redis.RedisTrackingBus(prefix)], whoever made it. pashe publishes nothing.
+The bus listens to the near cache's shared backend itself, so it hears the Redis your entries live
+in, and the near cache refuses a shared backend that isn't Redis as you create it.
+`AsyncRedisTrackingBus` is the async side.
 
 === "Sync"
 
@@ -181,6 +184,9 @@ their copies within `local_ttl` at the latest.
 
 Using another transport, such as NATS or Kafka? Subclass
 [`InvalidationBus`][pashe.invalidation.InvalidationBus], or `AsyncInvalidationBus`, from
-`pashe.invalidation`, and pass it as `bus=`. It reaches wherever your transport does. You write two
-methods: [`publish`][pashe.invalidation.InvalidationBus.publish] and
-[`listen`][pashe.invalidation.InvalidationBus.listen].
+`pashe.invalidation`, and pass it as `bus=`. Its type parameter is the shared backend it can listen
+to: `InvalidationBus[Backend]` for any, as most transports carry their own messages. It reaches
+wherever your transport does. You write two methods: [`publish`][pashe.invalidation.InvalidationBus.publish] and
+[`listen`][pashe.invalidation.InvalidationBus.listen]. Can your bus hear only some shared backends?
+Then also override [`validate`][pashe.invalidation.InvalidationBus.validate], and the near cache refuses
+the others as you create it.

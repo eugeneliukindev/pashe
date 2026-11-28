@@ -7,7 +7,7 @@
 # The sync side keeps the import of redis.asyncio, which it does not use; ruff checks unused imports.
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, final, override
+from typing import TYPE_CHECKING, cast, final, override
 
 import redis
 
@@ -21,7 +21,9 @@ from pashe._internal.checks import validate_type
 from pashe._internal.hooks import Hooks
 from pashe._internal.redis.clients import translated_errors
 from pashe._internal.redis.messages import encode_message
+from pashe._internal.sync.backends.backend import Backend
 from pashe._internal.sync.backends.near import InvalidationBus
+from pashe._internal.sync.backends.redis.backend import RedisBackend
 from pashe._internal.sync.backends.redis.listeners import PubSubListener, TrackingListener
 from pashe.errors import InvalidOptionsError
 
@@ -33,7 +35,7 @@ if TYPE_CHECKING:
 
 
 @final
-class RedisPubSubBus(InvalidationBus):
+class RedisPubSubBus(InvalidationBus[Backend]):
     """A near cache bus over Redis pub/sub: every near cache on the channel hears every change.
 
     It works with Redis, Valkey and a Redis Cluster; the client of a cluster needs pub/sub, which
@@ -85,51 +87,69 @@ class RedisPubSubBus(InvalidationBus):
             self._client.publish(self._channel, encode_message(keys))
 
     @override
-    def listen(self, on_invalidate: InvalidationHandler, /) -> Callable[[], None]:
+    def listen(
+        self,
+        shared: Backend,
+        on_invalidate: InvalidationHandler,
+        /,
+    ) -> Callable[[], None]:
         return PubSubListener(self._client, self._channel, on_invalidate, hooks=self._hooks).stop
 
 
 @final
-class RedisTrackingBus(InvalidationBus):
+class RedisTrackingBus(InvalidationBus[RedisBackend]):
     """A near cache bus where Redis itself says which keys changed: CLIENT TRACKING in broadcasting mode.
 
     Redis tells about every write under prefix by any client, pashe or not, so publish has
     nothing to send. It costs the server no memory, and every near cache hears every write under
-    prefix: give the prefix of the cache. It needs Redis or Valkey 6 or later on one node; on a
-    Redis Cluster each node tracks only its own keys. The bus listens on a connection of its own
+    prefix: give the prefix of the cache. It listens to the shared backend of its near cache, which
+    must be an RedisBackend over Redis or Valkey 6 or later on one node: on a Redis Cluster each
+    node tracks only its own keys. The bus listens on a connection of its own
     that speaks RESP2: tracking redirects its messages to that same connection, which subscribes
     to the channel Redis sends them to.
     """
 
-    __slots__ = ("_client", "_hooks", "_prefix")
+    __slots__ = ("_hooks", "_prefix")
 
     def __init__(
         self,
-        client: redis.Redis,
-        /,
         *,
         prefix: str = "",
         hooks: list[Hook] | tuple[Hook, ...] = (),
     ) -> None:
-        """Create a bus over client, which it does not close.
+        """Create a bus that hears the writes to the Redis its near cache keeps its entries in.
 
         Args:
-            client: the client of the backend, or another one of the same Redis, of one node.
             prefix: the prefix of the cache: only writes of keys under it reach the near caches.
             hooks: what the bus tells, through on_error, of an error while it listens other than a lost
                 connection, such as of a hook of the near cache; give it the hooks of the cache to see it.
 
         Raises:
-            TypeError: an argument is not of the type its annotation names, or client is not of
-                one node, such as of a Redis Cluster: a node of a cluster tracks only its own keys,
-                so take RedisPubSubBus there.
+            TypeError: an argument is not of the type its annotation names.
         """
-        validate_type("client", client, redis.Redis)
         validate_type("prefix", prefix, str)
 
-        self._client = client
         self._prefix = prefix
         self._hooks = Hooks(hooks)
+
+    @override
+    def validate(self, shared: RedisBackend, /) -> None:
+        """Refuse shared unless it is an RedisBackend of one node, whose writes Redis tracks.
+
+        The type says so to a type checker; this says so to every caller.
+
+        Args:
+            shared: the backend the near cache keeps its entries in.
+
+        Raises:
+            TypeError: shared is not an RedisBackend, such as a memory backend or one of your own
+                around Redis; take RedisPubSubBus there, which publishes the writes of pashe.
+            InvalidOptionsError: shared is over a Redis Cluster, whose nodes track only their own keys.
+        """
+        validate_type("shared", shared, RedisBackend)  # a pub/sub bus takes any other shared
+        if not isinstance(shared.client, redis.Redis):
+            msg = "a tracking bus hears one Redis node, but shared is over a Redis Cluster: use a pub/sub bus"
+            raise InvalidOptionsError(msg)
 
     @override
     def publish(self, keys: Sequence[str] | None, /) -> None:
@@ -140,5 +160,11 @@ class RedisTrackingBus(InvalidationBus):
         """
 
     @override
-    def listen(self, on_invalidate: InvalidationHandler, /) -> Callable[[], None]:
-        return TrackingListener(self._client, self._prefix, on_invalidate, hooks=self._hooks).stop
+    def listen(
+        self,
+        shared: RedisBackend,
+        on_invalidate: InvalidationHandler,
+        /,
+    ) -> Callable[[], None]:
+        client = cast(redis.Redis, shared.client)  # noqa: TC006 - bare, so unasyncd renames it; validate refused a cluster
+        return TrackingListener(client, self._prefix, on_invalidate, hooks=self._hooks).stop

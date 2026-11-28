@@ -1,11 +1,13 @@
 # --8<-- [start:show]
+import tempfile
+from pathlib import Path
 from typing import TypedDict
 
 from pashe import AsyncCache
-from pashe.backends import AsyncMemoryBackend
+from pashe.backends import AsyncSQLiteBackend
 from pashe.options import Stampede
 
-cache = AsyncCache(AsyncMemoryBackend())
+cache = AsyncCache(AsyncSQLiteBackend(Path(tempfile.gettempdir()) / "my-app-cache.db"))  # every process of the machine
 
 
 class Report(TypedDict):

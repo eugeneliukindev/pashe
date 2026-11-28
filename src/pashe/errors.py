@@ -1,4 +1,4 @@
-"""Errors pashe raises."""
+"""Errors pashe raises, and the warnings it gives."""
 
 from typing import override
 
@@ -11,6 +11,7 @@ __all__ = [
     "LockTimeoutError",
     "MissingExtraError",
     "NotFoundError",
+    "OneProcessWarning",
     "OverloadedError",
     "PasheError",
     "RateLimitedError",
@@ -279,3 +280,12 @@ class MissingExtraError(PasheError, ModuleNotFoundError):
     @override
     def __str__(self) -> str:
         return f'{self.module} needs the {self.extra} extra: pip install "pashe[{self.extra}]" or uv add "pashe[{self.extra}]"'
+
+
+class OneProcessWarning(UserWarning):
+    """An option that shares across processes, over a backend that lives in one process.
+
+    It works, but adds nothing there, such as ``Stampede.lock_for`` over a MemoryBackend, where
+    ``share_loads`` already shares the load. Tests that swap the shared backend for memory can
+    silence it alone: ``filterwarnings = ["ignore::pashe.errors.OneProcessWarning"]``.
+    """

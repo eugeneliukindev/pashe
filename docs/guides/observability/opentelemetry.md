@@ -7,13 +7,13 @@ the current span.
 
 === "Sync"
 
-    ```python hl_lines="6 7"
+    ```python hl_lines="9 11"
     --8<-- "observability/opentelemetry_sync.py:show"
     ```
 
 === "Async"
 
-    ```python hl_lines="6 7"
+    ```python hl_lines="9 11"
     --8<-- "observability/opentelemetry_async.py:show"
     ```
 

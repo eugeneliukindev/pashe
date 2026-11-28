@@ -8,6 +8,7 @@ import functools
 import logging
 import threading
 import time
+import warnings
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, override
@@ -16,10 +17,10 @@ import pytest
 
 import pashe
 from pashe import AsyncCache, AsyncRateLimiter, Cache
-from pashe.backends import AsyncMemoryBackend, MemoryBackend
+from pashe.backends import AsyncMemoryBackend, MemoryBackend, SQLiteBackend
 from pashe.compressors import Compressor, GzipCompressor
 from pashe.contrib.msgspec import MsgspecJsonCodec
-from pashe.errors import BackendError, InvalidOptionsError, NotFoundError
+from pashe.errors import BackendError, InvalidOptionsError, NotFoundError, OneProcessWarning
 from pashe.hooks import CacheStatus, LoggingHook, Operation
 from pashe.options import Fallback, Negative, Stale, Stampede, Store
 from pashe.ratelimit import SlidingWindow
@@ -38,6 +39,7 @@ from tests.harness.helpers import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
+    from pathlib import Path
 
     from pashe import AsyncCachedFunction, AsyncCachedValue, CachedFunction, CachedValue
     from pashe.codecs import Codec
@@ -750,6 +752,9 @@ async def test_a_waiter_loads_when_the_caller_it_waited_for_is_cancelled(new_pro
     assert await get_user(1) == 2
 
 
+@pytest.mark.filterwarnings(
+    "ignore::pashe.errors.OneProcessWarning"
+)  # lock_for over memory, on purpose: the processes are its callers
 async def test_lock_for_loads_once_for_all_processes() -> None:
     backend = AsyncMemoryBackend()
     loads = 0
@@ -1569,6 +1574,39 @@ def test_an_entry_of_the_format_before_is_a_miss() -> None:
 def test_options_that_cannot_work_together_are_refused(make: Callable[[], object], message: str) -> None:
     with pytest.raises(InvalidOptionsError, match=message):
         make()
+
+
+def test_a_lock_across_processes_over_a_memory_backend_warns(side: Side) -> None:
+    cache = side.new_cache()
+
+    with pytest.warns(OneProcessWarning, match="share_loads already shares it"):
+        cache(ttl=60, stampede=Stampede(lock_for=5))
+
+
+def test_a_lock_across_processes_over_sqlite_in_memory_warns() -> None:
+    cache = Cache(SQLiteBackend(":memory:"))  # a database of this connection alone
+
+    with pytest.warns(OneProcessWarning, match="the backend lives in this process"):
+        cache(ttl=60, stampede=Stampede(lock_for=5))
+
+    cache.close()
+
+
+def test_a_fallback_over_the_backend_of_the_cache_is_refused() -> None:
+    backend = MemoryBackend()
+
+    with pytest.raises(InvalidOptionsError, match="it fails with it"):
+        Cache(backend, fallback=Fallback(backend))
+
+
+def test_a_lock_across_processes_over_a_shared_backend_is_taken_as_it_is(tmp_path: Path) -> None:
+    cache = Cache(SQLiteBackend(tmp_path / "cache.db"))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # any warning fails the test
+        cache(ttl=60, stampede=Stampede(lock_for=5))
+
+    cache.close()
 
 
 def _as_untyped(value: object) -> Any:

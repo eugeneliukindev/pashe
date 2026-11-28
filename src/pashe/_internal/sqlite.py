@@ -81,7 +81,7 @@ class SQLiteBackend(Backend):
         >>> cache.close()
     """
 
-    __slots__ = ("_clock", "_connection", "_lock")
+    __slots__ = ("_clock", "_connection", "_lock", "_shared_by_processes")
 
     def __init__(self, path: str | os.PathLike[str], /, *, clock: Callable[[], float] = time.time) -> None:
         """Open the file, creating it and its table if absent.
@@ -99,6 +99,8 @@ class SQLiteBackend(Backend):
         validate_type("clock", clock, FUNCTION)
 
         self._clock = clock
+        # ":memory:" and "" open a database of this connection alone, which no other process sees
+        self._shared_by_processes = os.fspath(path) not in {":memory:", ""}
 
         self._lock = threading.Lock()  # one connection for every thread: a transaction at a time
         with _translated_errors():
@@ -110,6 +112,11 @@ class SQLiteBackend(Backend):
             except BaseException:
                 self._connection.close()
                 raise
+
+    @property
+    @override
+    def shared_by_processes(self) -> bool:
+        return self._shared_by_processes
 
     @override
     def get_many(self, keys: Sequence[str], /) -> list[bytes | None]:
@@ -243,6 +250,11 @@ class AsyncSQLiteBackend(AsyncBackend):
             BackendError: the file cannot be opened or written.
         """
         self._sync = SQLiteBackend(path, clock=clock)
+
+    @property
+    @override
+    def shared_by_processes(self) -> bool:
+        return self._sync.shared_by_processes
 
     @override
     async def get_many(self, keys: Sequence[str], /) -> list[bytes | None]:

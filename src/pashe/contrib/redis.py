@@ -24,16 +24,16 @@ Examples:
     ...     AsyncRedisBackend(redis.asyncio.Redis.from_url("redis://localhost:6379/0", socket_timeout=1))
     ... )
 
-    A near cache in front of Redis: the backend and its bus share one client.
+    A near cache in front of Redis: the bus hears the writes to the Redis of its backend.
 
     >>> from pashe.backends import MemoryBackend, NearCacheBackend
     >>> from pashe.contrib.redis import RedisTrackingBus
-    >>> client = Redis.from_url("redis://localhost:6379/0", socket_timeout=1)
+    >>> shared = RedisBackend(Redis.from_url("redis://localhost:6379/0", socket_timeout=1))
     >>> backend = NearCacheBackend(
     ...     MemoryBackend(max_entries=1000),
-    ...     RedisBackend(client),
+    ...     shared,
     ...     local_ttl=5,
-    ...     bus=RedisTrackingBus(client, prefix="app:"),
+    ...     bus=RedisTrackingBus(prefix="app:"),
     ... )
 """
 

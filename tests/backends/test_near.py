@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import warnings
 from typing import TYPE_CHECKING, override
 
 import pytest
@@ -14,7 +15,16 @@ from redis.cluster import RedisCluster
 from pashe import Cache
 from pashe._internal.redis.listening import tracking_command
 from pashe._internal.redis.messages import read_invalidation
-from pashe.backends import AsyncMemoryBackend, AsyncNearCacheBackend, MemoryBackend, NearCacheBackend
+from pashe.backends import (
+    AsyncMemcachedBackend,
+    AsyncMemoryBackend,
+    AsyncNearCacheBackend,
+    Backend,
+    MemcachedBackend,
+    MemoryBackend,
+    NearCacheBackend,
+    SQLiteBackend,
+)
 from pashe.contrib.redis import (
     AsyncRedisBackend,
     AsyncRedisPubSubBus,
@@ -23,7 +33,7 @@ from pashe.contrib.redis import (
     RedisPubSubBus,
     RedisTrackingBus,
 )
-from pashe.errors import BackendError, InvalidOptionsError
+from pashe.errors import BackendError, InvalidOptionsError, OneProcessWarning
 from pashe.hooks import Hook, Operation
 from pashe.invalidation import InvalidationBus
 from pashe.options import Fallback
@@ -31,9 +41,13 @@ from tests.harness.helpers import MemoryBus, RecordingHook
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
+    from pathlib import Path
 
     from pashe.hooks import Failure
     from pashe.invalidation import InvalidationHandler
+
+# A memory backend stands for the shared server here, as two near caches over one stand for two processes
+pytestmark = pytest.mark.filterwarnings("ignore::pashe.errors.OneProcessWarning")
 
 _WAIT = 5.0  # seconds a message may take through Redis
 # the async RedisCluster of redis-py has pub/sub from version 8, which the lowest versions run without
@@ -171,7 +185,7 @@ async def test_an_async_pub_sub_bus_listens_over_a_cluster_it_has_not_used_yet(
     async def on_invalidate(keys: list[str] | None) -> None:
         heard.append(keys)
 
-    stop = bus.listen(on_invalidate)  # before any command of the client
+    stop = bus.listen(AsyncMemoryBackend(), on_invalidate)  # before any command of the client; pub/sub leaves shared
 
     async with asyncio.timeout(_WAIT):
         while ["k"] not in heard:
@@ -189,17 +203,48 @@ def test_a_pub_sub_bus_refuses_an_async_cluster_without_pub_sub(monkeypatch: pyt
         AsyncRedisPubSubBus(client)
 
 
-def test_a_tracking_bus_refuses_a_cluster(redis_cluster_url: str) -> None:
-    client = RedisCluster.from_url(
-        redis_cluster_url, socket_timeout=1
-    )  # connects to the nodes already, unlike the async one
+def test_a_near_cache_over_a_backend_of_this_process_warns() -> None:
+    with pytest.warns(OneProcessWarning, match="the copies add nothing"):
+        NearCacheBackend(MemoryBackend(), MemoryBackend())
 
-    with pytest.raises(TypeError, match="client must be Redis, not RedisCluster"):
-        RedisTrackingBus(client)  # type: ignore[arg-type]  # as a caller without types
-    client.close()
-    client.disconnect_connection_pools()  # type: ignore[no-untyped-call]  # redis-py leaves the sockets of its nodes open on close
-    with pytest.raises(TypeError, match="client must be Redis, not RedisCluster"):
-        AsyncRedisTrackingBus(redis.asyncio.RedisCluster.from_url(redis_cluster_url, socket_timeout=1))  # type: ignore[arg-type]  # as above
+
+def test_a_near_cache_over_a_backend_other_processes_see_is_taken_as_it_is(tmp_path: Path) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # any warning fails the test
+        near = NearCacheBackend(MemoryBackend(), SQLiteBackend(tmp_path / "cache.db"))
+
+    assert near.shared_by_processes
+    near.close()
+
+
+@pytest.mark.parametrize("make", [MemoryBackend, lambda: SQLiteBackend(":memory:")], ids=["memory", "sqlite in memory"])
+def test_a_backend_of_this_process_says_so(make: Callable[[], Backend]) -> None:
+    backend = make()
+
+    assert not backend.shared_by_processes
+    backend.close()
+
+
+def test_a_backend_over_a_server_is_seen_by_other_processes() -> None:
+    assert MemcachedBackend("localhost").shared_by_processes  # connects at its first call, never here
+
+
+def test_a_tracking_bus_refuses_a_backend_that_never_writes_to_redis() -> None:
+    with pytest.raises(TypeError, match="shared must be RedisBackend, not MemcachedBackend"):
+        NearCacheBackend(MemoryBackend(), MemcachedBackend(), bus=RedisTrackingBus())  # type: ignore[misc]  # as a caller without types
+    with pytest.raises(TypeError, match="shared must be AsyncRedisBackend, not AsyncMemcachedBackend"):
+        AsyncNearCacheBackend(AsyncMemoryBackend(), AsyncMemcachedBackend(), bus=AsyncRedisTrackingBus())  # type: ignore[misc]  # as above
+
+
+def test_a_near_cache_refuses_a_tracking_bus_over_a_cluster(redis_cluster_url: str) -> None:
+    backend = RedisBackend(RedisCluster.from_url(redis_cluster_url, socket_timeout=1))  # connects to the nodes already
+
+    with pytest.raises(InvalidOptionsError, match="over a Redis Cluster"):
+        NearCacheBackend(MemoryBackend(), backend, bus=RedisTrackingBus())
+    backend.close()
+    async_backend = AsyncRedisBackend(redis.asyncio.RedisCluster.from_url(redis_cluster_url, socket_timeout=1))
+    with pytest.raises(InvalidOptionsError, match="over a Redis Cluster"):
+        AsyncNearCacheBackend(AsyncMemoryBackend(), async_backend, bus=AsyncRedisTrackingBus())
 
 
 @pytest.fixture
@@ -218,8 +263,8 @@ def tracking_prefix(redis_url: str) -> str:
 def test_redis_tracking_bus_drops_copies_of_any_write(redis_url: str, tracking_prefix: str) -> None:
     clients = [Redis.from_url(redis_url, socket_timeout=1) for _ in range(2)]
     first, second = (
-        NearCacheBackend(MemoryBackend(), RedisBackend(client), bus=RedisTrackingBus(client, prefix=tracking_prefix))
-        for client in clients
+        NearCacheBackend(MemoryBackend(), shared, bus=RedisTrackingBus(prefix=tracking_prefix))
+        for shared in (RedisBackend(client) for client in clients)
     )
     key = f"{tracking_prefix}k"
     first.set(key, b"1")
@@ -237,10 +282,8 @@ def test_redis_tracking_bus_drops_copies_of_any_write(redis_url: str, tracking_p
 async def test_async_redis_tracking_bus_drops_copies_of_any_write(redis_url: str, tracking_prefix: str) -> None:
     clients = [redis.asyncio.Redis.from_url(redis_url, socket_timeout=1) for _ in range(2)]
     first, second = (
-        AsyncNearCacheBackend(
-            AsyncMemoryBackend(), AsyncRedisBackend(client), bus=AsyncRedisTrackingBus(client, prefix=tracking_prefix)
-        )
-        for client in clients
+        AsyncNearCacheBackend(AsyncMemoryBackend(), shared, bus=AsyncRedisTrackingBus(prefix=tracking_prefix))
+        for shared in (AsyncRedisBackend(client) for client in clients)
     )
     key = f"{tracking_prefix}k"
     await first.set(key, b"1")
@@ -366,7 +409,7 @@ def test_near_caches_that_share_a_pub_sub_bus_hear_every_write_of_each_other(red
     bus = RedisPubSubBus(client, channel=key_prefix)
     heard_mine: list[list[str] | None] = []
     heard_theirs: list[list[str] | None] = []
-    stops = [bus.listen(heard_mine.append), bus.listen(heard_theirs.append)]
+    stops = [bus.listen(MemoryBackend(), heard.append) for heard in (heard_mine, heard_theirs)]  # pub/sub leaves shared
 
     bus.publish(["k"])
     deadline = time.monotonic() + _WAIT
@@ -380,7 +423,7 @@ def test_near_caches_that_share_a_pub_sub_bus_hear_every_write_of_each_other(red
     client.close()
 
 
-class _Flaky(InvalidationBus):
+class _Flaky(InvalidationBus[Backend]):
     """A bus whose next publish fails while down is set; it keeps what went through."""
 
     def __init__(self) -> None:
@@ -395,7 +438,7 @@ class _Flaky(InvalidationBus):
         self.sent.append(None if keys is None else list(keys))
 
     @override
-    def listen(self, on_invalidate: InvalidationHandler, /) -> Callable[[], None]:
+    def listen(self, shared: Backend, on_invalidate: InvalidationHandler, /) -> Callable[[], None]:
         return lambda: None
 
 

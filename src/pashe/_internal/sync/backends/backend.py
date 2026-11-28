@@ -272,6 +272,20 @@ class Backend(ABC):
         """
         raise NotImplementedError
 
+    @property
+    def shared_by_processes(self) -> bool:
+        """Whether other processes see what this backend keeps; True unless it lives in this one.
+
+        A cache warns with OneProcessWarning of an option that shares across processes over a
+        backend that says False, such as Stampede.lock_for over memory.
+
+        Examples:
+            >>> from pashe.backends import MemoryBackend
+            >>> MemoryBackend().shared_by_processes
+            False
+        """
+        return True
+
     @abstractmethod
     def ping(self) -> None:
         """Check that the backend is reachable.
