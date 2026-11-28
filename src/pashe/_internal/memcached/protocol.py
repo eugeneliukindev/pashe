@@ -20,6 +20,9 @@ _DIGEST_MARK: Final = b"\x00"
 _DIGEST_BYTES: Final = 32
 _RELATIVE_TTL_LIMIT: Final = 2_592_000  # 30 days: memcached reads a longer TTL as a Unix time
 _NO_EXPIRY: Final = b"-1"  # what the t flag returns for an item with no TTL
+# The clock of memcached ticks once a second, so an item of T1 may expire the moment after it is
+# stored: a TTL goes one second longer, and the t flag reads one second shorter
+_TICK: Final = 1
 
 NO_OP: Final = b"mn\r\n"
 
@@ -39,9 +42,9 @@ class Answer:
 
     @property
     def seconds_left(self) -> float:
-        """What the t flag returns: the seconds left, math.inf for an item with no TTL."""
+        """The seconds left of the TTL pashe asked for, which the t flag reads; math.inf for none."""
         left = self.flags[b"t"]
-        return math.inf if left == _NO_EXPIRY else float(left)
+        return math.inf if left == _NO_EXPIRY else float(max(0, int(left) - _TICK))
 
 
 def get(key: str, flags: bytes) -> bytes:
@@ -64,15 +67,15 @@ def delete(key: str, flags: bytes = b"") -> bytes:
 
 
 def ttl_flag(ttl: float | None, now: float) -> bytes:
-    """The T flag for ttl seconds from now, rounded up to whole ones; None never expires.
+    """The T flag for at least ttl seconds from now, in whole ones and one tick more; None never expires.
 
     Past 30 days memcached reads the number as a Unix time, so such a TTL goes as one.
     """
     if ttl is None:
         return b"T0"
-    seconds = max(1, math.ceil(ttl))  # T0 would never expire
+    seconds = math.ceil(ttl) + _TICK
     if seconds > _RELATIVE_TTL_LIMIT:
-        return b"T%d" % math.ceil(now + ttl)
+        return b"T%d" % (math.ceil(now + ttl) + _TICK)
     return b"T%d" % seconds
 
 

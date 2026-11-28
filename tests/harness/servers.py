@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Final, Literal, get_args
 import pytest
 from testcontainers.community.redis import RedisContainer
 from testcontainers.core.container import DockerContainer
-from testcontainers.core.wait_strategies import ExecWaitStrategy, PortWaitStrategy
+from testcontainers.core.wait_strategies import ExecWaitStrategy
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -106,7 +106,10 @@ def memcached_address(pytestconfig: pytest.Config) -> Iterator[tuple[str, int]]:
     memcached = (
         DockerContainer(pytestconfig.option.memcached_image)
         .with_exposed_ports(_MEMCACHED_PORT)
-        .waiting_for(PortWaitStrategy(_MEMCACHED_PORT))
+        # memcached itself answers, inside the container: the port of the host opens before it does
+        .waiting_for(
+            ExecWaitStrategy(["sh", "-c", f"printf 'mn\\r\\n' | nc -w 1 127.0.0.1 {_MEMCACHED_PORT} | grep -q MN"])
+        )
     )
     with memcached as container:
         yield container.get_container_host_ip(), container.get_exposed_port(_MEMCACHED_PORT)
